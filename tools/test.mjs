@@ -52,7 +52,7 @@ walks.forEach(([name, , want], k) => {
 });
 
 // Solids and loose things: [name, page function body (dev, P = Math.PI in scope; it returns a value), test of that value in node]. Each starts from a teleport.
-const PIT = 'dev.go(-31.6, 30.6, P / 2); dev.key("KeyW", true); dev.key("ShiftLeft", true); dev.key("Space", true); for (let i = 0; i < 100; i++) { dev.step(1); if (i === 2) dev.key("Space", false); if (i === 30) { dev.key("KeyW", false); dev.key("ShiftLeft", false); } }'; // run and jump off the block beside the pit
+const PIT = 'dev.go(-31.6, 30.45, P / 2); dev.key("KeyW", true); dev.key("ShiftLeft", true); dev.key("Space", true); for (let i = 0; i < 100; i++) { dev.step(1); if (i === 2) dev.key("Space", false); if (i === 30) { dev.key("KeyW", false); dev.key("ShiftLeft", false); } }'; // run down the slide into the pit and jump off its end (the block it stood on became the slide)
 const near = (a, b, e = .05) => Math.abs(a - b) <= e;
 const solids = [
   ['jump onto the mall bench: standing on its seat', 'return dev.go(-18, 33.9, P, ["KeyW", "Space"], .35)', s => near(s.y, .45, .02) && !s.air && near(s.z, 34.6, .2)],
