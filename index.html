@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>dreamcore</title>
+<link rel="icon" href="data:,">
 <style>
   html, body { margin: 0; height: 100%; background: #000; overflow: hidden }
   canvas { display: block }
@@ -1018,8 +1019,8 @@ console.assert(floorH(0, -12) === -1.2 && floorH(0, -6.2) === -.3 && floorH(15, 
 
 const clock = new THREE.Clock(), vel = new THREE.Vector2(), UP = new THREE.Vector3(0, 1, 0);
 let stride = 0, foot = 0, feet = floorH(camera.position.x, camera.position.z), vy = 0, air = false, grip = false, drop = 0, simT = 0; // feet: height of the player's soles
-const frame = () => {
-  const dt = Math.min(clock.getDelta(), .05), p = camera.position, k = c => keys[c] ? 1 : 0, ease = Math.min(1, dt * 8);
+const frame = dt => { // one game frame of dt seconds: the loop below passes the real time, dev.step() a fixed one
+  const p = camera.position, k = c => keys[c] ? 1 : 0, ease = Math.min(1, dt * 8);
   uTime.value += dt;
   const fov = k('KeyC') ? 22 : 72; // hold C to zoom in
   if (Math.abs(camera.fov - fov) > .05) { camera.fov += (fov - camera.fov) * Math.min(1, dt * 12); camera.updateProjectionMatrix(); }
@@ -1072,21 +1073,27 @@ const frame = () => {
   rings.forEach((r, i) => { r.position.y = WY + .05 + .012 * Math.sin(uTime.value * 1.1 + i * 2); r.rotation.z = .03 * Math.sin(uTime.value * .7 + i); });
   composer.render(dt);
 };
-renderer.setAnimationLoop(frame);
+renderer.setAnimationLoop(() => { const dt = Math.min(clock.getDelta(), .05); if (window.dev?.hold) return; frame(dt); if (window.dev) dev.ready = true; });
 
-// ---------- test harness: with ?dev in the address, tools/play.mjs drives the game through window.dev ----------
+// ---------- test harness: with ?dev in the address, tools/test.mjs and tools/shots.mjs drive the game through window.dev ----------
 if (new URLSearchParams(location.search).has('dev')) {
-  o.style.display = 'none';
-  let now = performance.now(); performance.now = () => now; // the game's clock only moves when a test steps it, so tests don't depend on frame rate
-  const key = (c, on) => dispatchEvent(new KeyboardEvent(on ? 'keydown' : 'keyup', { code: c }));
+  o.style.display = 'none'; // no start overlay, so no click, so no audio
+  const r2 = v => +v.toFixed(2);
   renderer.info.autoReset = false; // so info() counts every pass of a frame, not just the last
-  window.dev = { ready: true, THREE, renderer, scene, camera, zones, colliders, emitters, floorH,
-    step(n = 1, dt = 1 / 60) { for (let i = 0; i < n; i++) { now += dt * 1000; frame(); } },
-    state: () => ({ x: +camera.position.x.toFixed(2), y: +feet.toFixed(2), z: +camera.position.z.toFixed(2), zone: zone.id, sky: skyNow }),
-    go(x, z, yaw = 0, pitch = 0, secs = 4) { camera.position.x = x; camera.position.z = z; camera.rotation.set(pitch, yaw, 0, 'YXZ'); this.step(secs * 20, .05); return this.state(); }, // stand there until eyes and lamps have adapted
-    hold(keys, secs) { for (const c of keys) key(c, 1); this.step(Math.round(secs * 60)); for (const c of keys) key(c, 0); this.step(6); return this.state(); }, // e.g. hold(['KeyW', 'ShiftLeft'], 2)
+  window.dev = { ready: false, hold: false, THREE, renderer, scene, camera, zones, colliders, emitters, floorH, uTime,
+    step(n = 1, dt = 1 / 60) { for (let i = 0; i < n; i++) frame(dt); }, // deterministic: only the caller's dt moves the game
+    state: () => ({ x: r2(camera.position.x), y: r2(feet), z: r2(camera.position.z), zone: zone.id, sky: skyNow, air }),
+    key: (code, down) => dispatchEvent(new KeyboardEvent(down ? 'keydown' : 'keyup', { code })),
+    go(x, z, yaw = 0, keys = [], secs = 0, pitch = 0) { // teleport, settle, hold the keys for secs, let go, report where you ended up
+      this.hold = true;
+      camera.position.x = x; camera.position.z = z; camera.rotation.set(pitch, yaw, 0, 'YXZ');
+      feet = floorH(x, z); vy = 0; vel.set(0, 0); air = grip = false;
+      this.step(12, .05);
+      for (const c of keys) this.key(c, true); this.step(Math.round(secs * 20), .05); for (const c of keys) this.key(c, false);
+      this.step(6, .05); return this.state();
+    },
     cost(n = 60) { const gl = renderer.getContext(), px = new Uint8Array(4), t = Date.now(); // real milliseconds per frame, reading a pixel back so the GPU has to finish
-      for (let i = 0; i < n; i++) { now += 1000 / 60; frame(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); } return +((Date.now() - t) / n).toFixed(2); },
+      for (let i = 0; i < n; i++) { frame(1 / 60); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); } return +((Date.now() - t) / n).toFixed(2); },
     info() { renderer.info.reset(); this.step(1); return { ...renderer.info.render, ...renderer.info.memory, programs: renderer.info.programs.length }; }, // draw calls and triangles for one whole frame
   };
 }
