@@ -71,6 +71,7 @@ const place = (x, z, yaw, pitch) => { // teleport: stand at (x, z) facing that w
   camera.position.x = x; camera.position.z = z; camera.rotation.set(pitch, yaw, 0, 'YXZ');
   feet = floorH(x, z); vy = 0; vel.set(0, 0); air = grip = false;
 };
+const eye = { lift: 0 }; // metres added to the eye height; only dev.lift (?dev) changes it
 const frame = dt => { // one game frame of dt seconds: the loop below passes the real time, dev.step() a fixed one
   const p = camera.position, k = c => keys[c] ? 1 : 0, ease = Math.min(1, dt * 8);
   uTime.value += dt;
@@ -107,7 +108,7 @@ const frame = dt => { // one game frame of dt seconds: the loop below passes the
   const splash = pool && was > WY && feet <= WY; // the moment the feet break the surface
   if (splash) drop = .35;
   if (!air) stride += vel.length() * dt;
-  p.y = feet + 1.62 + Math.sin(stride * 3.4) * .018 * Math.min(1, vel.length());
+  p.y = feet + 1.62 + eye.lift + Math.sin(stride * 3.4) * .018 * Math.min(1, vel.length());
   const f = Math.floor(stride * 3.4 / Math.PI); // one footfall per half bob cycle, one on landing, one on entering water
   if (sfx && ((f !== foot && !air && vel.length() > .5) || landed || splash)) sfx.step(pool ? ground < 0 ? 'water' : 'tile' : zone.step || 'carpet');
   foot = f;
@@ -139,4 +140,4 @@ const frame = dt => { // one game frame of dt seconds: the loop below passes the
 
 const looseCost = { ms: 0 }; // what the loose things cost the last frame, in ms
 
-export { o, zone, feet, air, frame, place, looseCost };
+export { eye, o, zone, feet, air, frame, place, looseCost };

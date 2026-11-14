@@ -24,7 +24,7 @@ const shoot = v => new Promise(done => {
     '--eval', `(async () => { const c = dev.renderer.domElement, size = () => c.width === ${W} && c.height === ${H} && innerWidth === ${W} && innerHeight === ${H};
       for (let i = 0; i < 100 && !size(); i++) await new Promise(r => setTimeout(r, 50));
       await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-      dev.hold = true; dev.uTime.value = 0; dev.step(90, 1 / 60);
+      dev.hold = true; dev.lift = ${+v.lift || 0}; dev.uTime.value = 0; dev.step(90, 1 / 60);
       ${v.eval ? `await (async () => { ${v.eval} })(); dev.step(3, 1 / 60);` : ''}
       await new Promise(r => requestAnimationFrame(r));
       if (!size()) throw new Error('canvas is ' + c.width + 'x' + c.height + ', window ' + innerWidth + 'x' + innerHeight); return true; })()`], { stdio: ['ignore', 'pipe', 'pipe'] });

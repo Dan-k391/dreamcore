@@ -18,6 +18,7 @@ All tools are dependency-free (Node 22; the two image tools use Python 3 with Pi
 - `dev.state()` returns `{x, y, z, zone, sky, air}` (y = feet height).
 - `dev.key(code, down)` presses a key by `KeyboardEvent.code`.
 - `dev.go(x, z, yaw, keys = [], secs = 0, pitch = 0)`: teleport, settle, hold the keys for `secs`, release, return `state()`.
+- `dev.lift`: metres added to the eye height (default 0; exists only with `?dev`).
 - `dev.bodies()` lists the loose bodies and rings.
 - Also `camera`, `scene`, `renderer`, `zones`, `cost()`, `info()`, `lib` (the texture bake's cost), `texMem()` (material texture memory).
 
@@ -41,7 +42,7 @@ One repeatable photo per viewpoint. It freezes time, resets the shader clock and
 
 - Default list: `tools/views.json`, `[{name, hash}]`.
 - `--views file.json`: your own list, same shape, plus an optional `eval` string per view: JavaScript run after the view is set up and before the photo (hold a key, change the fov).
-- An `eval` cannot move the camera's height: the steps that follow re-derive the camera from the player. To photograph from a height, stand the player on something, or use `browse.mjs` with `dev.hold` and set the camera after the last step.
+- `lift` per view: metres added to the eye height for the photo (e.g. `1` from above, `-1.2` near the floor). Sets `dev.lift`; do not set the camera by hand, it is re-derived from the player every step.
 - `--size WxH`: default 1280x720. Use a smaller size when the question is layout, not texture.
 
 ## `tools/compare.py`
@@ -58,5 +59,5 @@ A contact sheet: the images in a grid, each labelled with its file name.
 
 ## Other
 
-- `tools/perf.mjs` (arrives with the frame-rate work): median frame time, draw calls, triangles, programs, textures and load time per view.
+- `node tools/perf.mjs [--port 8200]`: for every view in `tools/views.json` at the default size, median frame time (ms), draw calls, triangles, programs, textures, load time to `dev.ready` (ms) and zone/sky; ends with the median load over all pages.
 - Screenshots go under `screenshots/` (ignored by git). The lead's stage photos and the audit photos live there too.

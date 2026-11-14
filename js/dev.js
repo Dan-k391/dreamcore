@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { renderer, scene, camera, uTime, zones } from './core.js';
 import { colliders, emitters, floorH } from './build.js';
 import { skyNow } from './sky.js';
-import { o, zone, feet, air, frame, place, looseCost } from './player.js';
+import { eye, o, zone, feet, air, frame, place, looseCost } from './player.js';
 import { groups, floaters } from './physics.js';
 import { composer } from './post.js';
 import { libStats } from './tex.js';
@@ -15,6 +15,7 @@ if (new URLSearchParams(location.search).has('dev')) {
   renderer.info.autoReset = false; // so info() counts every pass of a frame, not just the last
   window.dev = { _ready: false, readyAt: 0, hold: false, // readyAt: ms from page start to the first frame drawn (tools/perf.mjs)
     get ready() { return this._ready; }, set ready(v) { if (v && !this._ready) this.readyAt = Math.round(performance.now()); this._ready = v; }, THREE, renderer, scene, camera, zones, colliders, emitters, floorH, uTime,
+    get lift() { return eye.lift; }, set lift(v) { eye.lift = v; }, // metres added to the eye height
     step(n = 1, dt = 1 / 60) { for (let i = 0; i < n; i++) frame(dt); }, // deterministic: only the caller's dt moves the game
     state: () => ({ x: r2(camera.position.x), y: r2(feet), z: r2(camera.position.z), zone: zone.id, sky: skyNow, air }),
     key: (code, down) => dispatchEvent(new KeyboardEvent(down ? 'keydown' : 'keyup', { code })),
