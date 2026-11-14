@@ -1,28 +1,31 @@
 // Photograph every viewpoint in tools/views.json: one 1280x720 PNG per view, named <view>.png, via tools/browse.mjs.
-//   node tools/shots.mjs <outDir> [--port 8200] [--only name,name]
+//   node tools/shots.mjs <outDir> [--port 8200] [--only name,name] [--views file.json] [--size WxH]
+// --views: another list, same shape [{name, hash}] plus an optional "eval": JavaScript run in the page after the view is set up, before the photo.
 // Each view loads ?dev#x,z,yaw,pitch, freezes the clock (dev.hold), resets shader time and runs the same 90 frames at 1/60 s,
 // so two runs of the same code give the same picture up to film grain and GPU noise.
 import { spawn } from 'node:child_process';
 import { mkdirSync, readFileSync } from 'node:fs';
 import { inflateSync } from 'node:zlib';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const argv = process.argv.slice(2), arg = (k, d) => { const i = argv.indexOf('--' + k); return i < 0 ? d : argv[i + 1]; };
-const out = argv[0], port = arg('port', '8200'), only = arg('only')?.split(',');
-if (!out || out.startsWith('--')) { console.error('usage: node tools/shots.mjs <outDir> [--port 8200] [--only name,name]'); process.exit(2); }
-const views = JSON.parse(readFileSync(new URL('./views.json', import.meta.url), 'utf8')).filter(v => !only || only.includes(v.name));
+const out = argv[0], port = arg('port', '8200'), only = arg('only')?.split(','), [W, H] = arg('size', '1280x720').split('x').map(Number);
+if (!(W > 0 && H > 0)) { console.error('--size must be WxH'); process.exit(2); }
+if (!out || out.startsWith('--')) { console.error('usage: node tools/shots.mjs <outDir> [--port 8200] [--only name,name] [--views file.json] [--size WxH]'); process.exit(2); }
+const views = JSON.parse(readFileSync(arg('views') ? resolve(arg('views')) : new URL('./views.json', import.meta.url), 'utf8')).filter(v => !only || only.includes(v.name));
 if (only && views.length !== only.length) { console.error('unknown view in --only'); process.exit(2); }
 mkdirSync(out, { recursive: true });
 
 const browse = fileURLToPath(new URL('./browse.mjs', import.meta.url));
 const shoot = v => new Promise(done => {
-  const p = spawn(process.execPath, [browse, '--url', `http://127.0.0.1:${port}/?dev#${v.hash}`, '--shot', join(out, v.name + '.png'),
+  const p = spawn(process.execPath, [browse, '--url', `http://127.0.0.1:${port}/?dev#${v.hash}`, '--shot', join(out, v.name + '.png'), '--size', `${W}x${H}`,
     // the headless window can reach its final size late: wait until the page and canvas are 1280x720, draw, and fail (then retry) if it changed meanwhile
-    '--eval', `(async () => { const c = dev.renderer.domElement, size = () => c.width === 1280 && c.height === 720 && innerWidth === 1280 && innerHeight === 720;
+    '--eval', `(async () => { const c = dev.renderer.domElement, size = () => c.width === ${W} && c.height === ${H} && innerWidth === ${W} && innerHeight === ${H};
       for (let i = 0; i < 100 && !size(); i++) await new Promise(r => setTimeout(r, 50));
       await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
       dev.hold = true; dev.uTime.value = 0; dev.step(90, 1 / 60);
+      ${v.eval ? `await (async () => { ${v.eval} })(); dev.step(3, 1 / 60);` : ''}
       await new Promise(r => requestAnimationFrame(r));
       if (!size()) throw new Error('canvas is ' + c.width + 'x' + c.height + ', window ' + innerWidth + 'x' + innerHeight); return true; })()`], { stdio: ['ignore', 'pipe', 'pipe'] });
   let log = ''; p.stdout.on('data', d => log += d); p.stderr.on('data', d => log += d);
@@ -36,7 +39,7 @@ const shoot = v => new Promise(done => {
 function wrapped(file) {
   const b = readFileSync(file), w = b.readUInt32BE(16), h = b.readUInt32BE(20), bpp = { 2: 3, 6: 4 }[b[25]];
   if (b[24] !== 8 || !bpp || b[28]) return `unexpected PNG format in ${file}`;
-  if (w !== 1280 || h !== 720) return `picture is ${w}x${h}`;
+  if (w !== W || h !== H) return `picture is ${w}x${h}`;
   const idat = []; for (let o = 8; o < b.length; o += 12 + b.readUInt32BE(o)) if (b.toString('latin1', o + 4, o + 8) === 'IDAT') idat.push(b.subarray(o + 8, o + 8 + b.readUInt32BE(o)));
   const z = inflateSync(Buffer.concat(idat)), row = w * bpp, px = Buffer.alloc(row * h); // undo the PNG row filters
   for (let y = 0; y < h; y++) { const f = z[y * (row + 1)], s = y * (row + 1) + 1, d = y * row;

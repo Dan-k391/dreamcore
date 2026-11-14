@@ -1,6 +1,6 @@
 // Regression suite: loads the game with and without ?dev through tools/browse.mjs, walks the routes between places with dev.go
 // and checks where you end up. One line per check; exit code 1 if any fails.
-//   node tools/test.mjs [--port 8200]
+//   node tools/test.mjs [--port 8200] [--all]   (default prints only failed checks and a final count; --all prints every line)
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
@@ -10,8 +10,9 @@ const run = (url, expr, ...opt) => { // -> {result, errors}; browse.mjs exits 1 
   try { return JSON.parse(execFileSync(process.execPath, [browse, '--url', url, '--eval', expr, ...opt], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })); }
   catch (e) { try { return JSON.parse(e.stdout); } catch { return { result: null, errors: [String(e.stderr || e.message)] }; } }
 };
-let fails = 0;
-const check = (name, ok, detail = '') => { if (!ok) fails++; console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}${detail ? '  ' + detail : ''}`); };
+let fails = 0, passes = 0;
+const all = argv.includes('--all');
+const check = (name, ok, detail = '') => { if (ok) passes++; else fails++; if (all || !ok) console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}${detail ? '  ' + detail : ''}`); };
 
 // [name, go(x, z, yaw, keys, secs), expected end state]. Positions within .35; y is the height of the feet.
 const R = "['KeyW','ShiftLeft']", P = Math.PI;
@@ -86,5 +87,5 @@ const prod = run(base, `await new Promise(ok => { const t = setInterval(() => /c
 check('production loads without console errors', !prod.errors.length, prod.errors.join(' | ').slice(0, 600));
 check('production has no window.dev', prod.result?.dev === 'undefined', JSON.stringify(prod.result));
 check('production shows the start overlay', prod.result?.overlay === true);
-console.log(fails ? `${fails} failed` : 'all passed');
+console.log(`${passes} passed, ${fails} failed`);
 process.exit(fails ? 1 : 0);
