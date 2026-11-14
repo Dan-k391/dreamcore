@@ -1,3 +1,16 @@
 [
- { "name": "metalwork-plot", "hash": "-676,-685,0,-0.2", "lift": 1.2 }
+ {"name": "metalwork-plot", "hash": "-676,-685,0,-0.2", "lift": 1.2},
+ {"name": "door-3m", "hash": "-676.5,-692.6,0.33,-0.08"},
+ {"name": "door-05m-handle", "hash": "-677.4,-694.7,-0.30,-0.04", "lift": -0.5, "eval": "dev.key('KeyC', true)"},
+ {"name": "door-05m-closer", "hash": "-677.9,-696.3,3.14159,0.4", "lift": 0.3, "eval": "dev.key('KeyC', true)"},
+ {"name": "frame-3m", "hash": "-675.3,-692.5,-0.1,-0.08"},
+ {"name": "frame-05m-hinge", "hash": "-675.2,-696.5,2.83,0", "lift": -0.45, "eval": "dev.key('KeyC', true)"},
+ {"name": "bollard-3m", "hash": "-680.2,-690.8,0.27,-0.25"},
+ {"name": "bollard-05m-cap", "hash": "-680.4,-693.1,0,-0.95", "eval": "dev.key('KeyC', true)"},
+ {"name": "railing-3m", "hash": "-670.5,-692.2,0.38,-0.2"},
+ {"name": "railing-05m-base", "hash": "-672.75,-693.1,0.56,-0.9", "lift": -1.0, "eval": "dev.key('KeyC', true)"},
+ {"name": "ladder-3m", "hash": "-669.5,-691.3,0.5,-0.15"},
+ {"name": "ladder-05m-tread", "hash": "-670.85,-693.45,0.27,-0.25", "lift": -0.8, "eval": "dev.key('KeyC', true)"},
+ {"name": "drain-3m", "hash": "-676.2,-690.6,0,-0.55"},
+ {"name": "drain-05m", "hash": "-676.1,-692.95,0.2,-1.1", "lift": -1.0, "eval": "dev.key('KeyC', true)"}
 ]

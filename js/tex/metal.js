@@ -45,7 +45,7 @@ set('brushed', .5, 256, 1024, .23, 0, `
   float g4 = vn(uv * vec2(16., 330.), vec2(16., 330.), 7), pass = vn(uv * vec2(2., 12.), vec2(2., 12.), 9); // passes of the belt
   float sc = scratches(uv, 4., .2, .35, 23); // a few later scuffs across the grain
   c = vec3(.7, .7, .71) * (.95 + .05 * g2 + .03 * pass); m = 1. ; t = 1.;
-  r = .2 + .09 * (g1 - .5) + .07 * (g2 - .5) + .04 * (pass - .5) + .06 * sc; h = .12 * g1 + .05 * g2 + .02 * g3 + .07 * g4 - .01 * sc;`);
+  r = .27 + .09 * (g1 - .5) + .07 * (g2 - .5) + .04 * (pass - .5) + .06 * sc; h = .12 * g1 + .05 * g2 + .02 * g3 + .07 * g4 - .01 * sc;`);
 set('galvanised', .5, 512, 1024, .32, 0, `
   // hot-dip spangle: zinc crystals 5-20 mm, each grown out from a nucleus in six feathered arms, each a slightly different plane and gloss
   float K = 40., cm = SZ * 1000. / K; vec2 q = uv * K + .5 * (vec2(fbm(uv * 80., vec2(80), 3, 21), fbm(uv * 80., vec2(80), 3, 23)) - .5);
@@ -84,13 +84,13 @@ set('paintedSteel', 1, 1024, 1024, .32, .3, `
   c = vec3(.8) * (.98 + .03 * peel) * (.95 + .07 * (2. * fbm(uv * 2., vec2(2), 6, 17) - 1.)); r = .3 + .05 * peel; h = .02 * peel; t = 1.; m = 0.;
   float chp = 0., core = 0., run = 0., K = 14.; vec2 p = uv * K + .3 * vec2(gn(uv * 40., vec2(40), 13), gn(uv * 40., vec2(40), 15)), i = floor(p);
   for (int y = -2; y <= uOne; y++) for (int x = -1; x <= uOne; x++) { vec2 o = vec2(x, y), id = mod(i + o, vec2(K)); vec4 hh = hr(id, 5);
-    if (hh.x > .04 + .26 * ss(.5, .72, vn((id + .5) / K * 3., vec2(3), 19))) continue; // more of them where it gets knocked
+    if (hh.x > .003 + .05 * ss(.6, .85, vn((id + .5) / K * 3., vec2(3), 19))) continue; // rare, and gathered where it gets knocked
     vec2 dd = (p - i - o - .2 - .6 * hh.yz) * 1000. / K; float rd = 3. + 9. * hh.w * hh.w, l = length(dd);
     chp = max(chp, 1. - ss(rd - .8, rd, l)); core = max(core, (1. - ss(rd * .55 - .8, rd * .55, l)) * step(.35, hh.z));
-    float dn = -dd.y - rd * .5, L = 15. + 50. * hf(id, 7); // rust runs down from it
-    if (dn < 0. || dn > L || hh.z < .35) continue;
+    float dn = -dd.y - rd * .5, L = 5. + 55. * hf(id, 7) * hf(id, 8); // rust runs down from it
+    if (dn < 0. || dn > L || hh.z < .6) continue;
     run = max(run, step(0., dn) * (1. - ss(.4, 1., abs(dd.x) / (rd * .55 * (1. - .6 * sat(dn / L)) + .5))) * (1. - sat(dn / L)) * (.5 + .5 * vn(vec2(dd.x / 1.5, dn / 6.), vec2(4096), 9)) * step(.35, hh.z)); }
-  float scr = scratches(uv, 3., .25, .01 + .06 * zone, 41); // through the top coat: lighter scuffs, not the primer
+  float scr = scratches(uv, 3., .25, .012, 41) * ss(.7, .9, vn(uv * 3., vec2(3), 19)); // only where it gets knocked // through the top coat: lighter scuffs, not the primer
   c = mix(c, vec3(.3, .14, .07), run * .55); t *= 1. - run * .55; r = mix(r, .55, run * .5);
   c = mix(c, vec3(.36, .36, .35), scr * .7); t *= 1. - scr * .7; r = mix(r, .55, scr); h -= .02 * scr;
   float prim = chp - core;
