@@ -1073,6 +1073,23 @@ const frame = () => {
   composer.render(dt);
 };
 renderer.setAnimationLoop(frame);
+
+// ---------- test harness: with ?dev in the address, tools/play.mjs drives the game through window.dev ----------
+if (new URLSearchParams(location.search).has('dev')) {
+  o.style.display = 'none';
+  let now = performance.now(); performance.now = () => now; // the game's clock only moves when a test steps it, so tests don't depend on frame rate
+  const key = (c, on) => dispatchEvent(new KeyboardEvent(on ? 'keydown' : 'keyup', { code: c }));
+  renderer.info.autoReset = false; // so info() counts every pass of a frame, not just the last
+  window.dev = { ready: true, THREE, renderer, scene, camera, zones, colliders, emitters, floorH,
+    step(n = 1, dt = 1 / 60) { for (let i = 0; i < n; i++) { now += dt * 1000; frame(); } },
+    state: () => ({ x: +camera.position.x.toFixed(2), y: +feet.toFixed(2), z: +camera.position.z.toFixed(2), zone: zone.id, sky: skyNow }),
+    go(x, z, yaw = 0, pitch = 0, secs = 4) { camera.position.x = x; camera.position.z = z; camera.rotation.set(pitch, yaw, 0, 'YXZ'); this.step(secs * 20, .05); return this.state(); }, // stand there until eyes and lamps have adapted
+    hold(keys, secs) { for (const c of keys) key(c, 1); this.step(Math.round(secs * 60)); for (const c of keys) key(c, 0); this.step(6); return this.state(); }, // e.g. hold(['KeyW', 'ShiftLeft'], 2)
+    cost(n = 60) { const gl = renderer.getContext(), px = new Uint8Array(4), t = Date.now(); // real milliseconds per frame, reading a pixel back so the GPU has to finish
+      for (let i = 0; i < n; i++) { now += 1000 / 60; frame(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); } return +((Date.now() - t) / n).toFixed(2); },
+    info() { renderer.info.reset(); this.step(1); return { ...renderer.info.render, ...renderer.info.memory, programs: renderer.info.programs.length }; }, // draw calls and triangles for one whole frame
+  };
+}
 </script>
 </body>
 </html>
