@@ -18,6 +18,7 @@ All tools are dependency-free (Node 22; the two image tools use Python 3 with Pi
 - `dev.state()` returns `{x, y, z, zone, sky, air}` (y = feet height).
 - `dev.key(code, down)` presses a key by `KeyboardEvent.code`.
 - `dev.go(x, z, yaw, keys = [], secs = 0, pitch = 0)`: teleport, settle, hold the keys for `secs`, release, return `state()`.
+- `dev.reset(x, z, yaw = 0, pitch = 0)`: put everything a walk leaves behind back to a fresh load's start at (x, z): keys, `lift`, fov, shader clock, sky, shared lamps and shadows, waves, loose bodies and rings, eye adaptation. A `eval` that changes some other state of its own must put it back itself.
 - `dev.lift`: metres added to the eye height (default 0; exists only with `?dev`).
 - `dev.bodies()` lists the loose bodies and rings.
 - Also `camera`, `scene`, `renderer`, `zones`, `cost()`, `info()`, `lib` (the texture bake's cost), `texMem()` (material texture memory).
@@ -36,9 +37,12 @@ The regression suite: the page loads with and without `?dev` with no console err
 
 ## `tools/shots.mjs`
 
-`node tools/shots.mjs <outDir> [--port 8200] [--only name,name] [--views file.json] [--size WxH]`
+`node tools/shots.mjs <outDir> [--port 8200] [--only name,name] [--views file.json] [--size WxH] [--fresh]`
 
 One repeatable photo per viewpoint. It freezes time, resets the shader clock and runs 90 frames, so the same code differs run to run by well under 1/255 on average.
+
+- Default: ONE browser and ONE page load for all views (24 views in about a minute). Each view starts with `dev.reset(x, z, yaw, pitch)`, so a photo does not depend on the views before it (checked: single load vs `--fresh` max 0.36 / mean 0.14, two single runs and a reversed order max 0.4).
+- `--fresh`: a new browser and page load per view (three at a time), the old behaviour, the reference and the fallback.
 
 - Default list: `tools/views.json`, `[{name, hash}]`.
 - `--views file.json`: your own list, same shape, plus an optional `eval` string per view: JavaScript run after the view is set up and before the photo (hold a key, change the fov).

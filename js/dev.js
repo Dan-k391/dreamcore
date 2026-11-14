@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { renderer, scene, camera, uTime, zones } from './core.js';
 import { colliders, emitters, floorH } from './build.js';
 import { skyNow } from './sky.js';
-import { eye, o, zone, feet, air, frame, place, looseCost } from './player.js';
+import { eye, o, zone, feet, air, frame, place, looseCost, resetAll } from './player.js';
 import { groups, floaters } from './physics.js';
 import { composer } from './post.js';
 import { libStats } from './tex.js';
@@ -17,6 +17,7 @@ if (new URLSearchParams(location.search).has('dev')) {
     get ready() { return this._ready; }, set ready(v) { if (v && !this._ready) this.readyAt = Math.round(performance.now()); this._ready = v; }, THREE, renderer, scene, camera, zones, colliders, emitters, floorH, uTime,
     get lift() { return eye.lift; }, set lift(v) { eye.lift = v; }, // metres added to the eye height
     step(n = 1, dt = 1 / 60) { for (let i = 0; i < n; i++) frame(dt); }, // deterministic: only the caller's dt moves the game
+    reset(x, z, yaw = 0, pitch = 0) { this.hold = true; resetAll(x, z, yaw, pitch); }, // a fresh load's starting state at (x, z): lift, fov, keys, clock, sky, lamps, waves, loose bodies, eye adaptation
     state: () => ({ x: r2(camera.position.x), y: r2(feet), z: r2(camera.position.z), zone: zone.id, sky: skyNow, air }),
     key: (code, down) => dispatchEvent(new KeyboardEvent(down ? 'keydown' : 'keyup', { code })),
     go(x, z, yaw = 0, keys = [], secs = 0, pitch = 0) { // teleport, settle, hold the keys for secs, let go, report where you ended up

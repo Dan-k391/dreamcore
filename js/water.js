@@ -155,4 +155,10 @@ function ripple(w, drops) { // one 60Hz step of a pool's waves, with up to DROPS
   if (w.twin.used) w.twin.step(drops.slice(0, DROPS)); // only a pool with something floating on it (physics.js marks them) needs the copy
 }
 
-export { ponds, ripple };
+function resetWater() { // ?dev only (dev.reset): every pool flat and still, as at load, on the GPU and in the CPU's copy
+  const t = renderer.getRenderTarget(), c = renderer.getClearColor(new THREE.Color()), a = renderer.getClearAlpha(); renderer.setClearColor(0, 0);
+  for (const w of ponds) { for (const r of w.sim) { renderer.setRenderTarget(r); renderer.clear(); } w.twin.h.fill(0); w.twin.u.fill(0); w.twin.v.fill(0); }
+  renderer.setRenderTarget(t); renderer.setClearColor(c, a);
+}
+
+export { ponds, ripple, resetWater };

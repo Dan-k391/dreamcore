@@ -2,12 +2,12 @@
 import * as THREE from 'three';
 import { renderer, camera, uTime, V, WY, zones, inR } from './core.js';
 import { colliders, emitters, warps, ladders, floorH, clear, out, near } from './build.js';
-import { setSky } from './sky.js';
-import { ponds, ripple } from './water.js';
-import { relight, zone0 } from './lights.js';
+import { setSky, sun } from './sky.js';
+import { ponds, ripple, resetWater } from './water.js';
+import { relight, zone0, lights } from './lights.js';
 import { composer, look, atmos, bloom, film } from './post.js';
 import { sfx, startAudio } from './audio.js';
-import { wakes, stepLoose, drawLoose } from './physics.js';
+import { wakes, stepLoose, drawLoose, resetLoose } from './physics.js';
 
 // ---------- walking ----------
 const canvas = renderer.domElement, o = document.getElementById('o'), keys = {}, eu = new THREE.Euler(0, 0, 0, 'YXZ');
@@ -140,4 +140,15 @@ const frame = dt => { // one game frame of dt seconds: the loop below passes the
 
 const looseCost = { ms: 0 }; // what the loose things cost the last frame, in ms
 
-export { eye, o, zone, feet, air, frame, place, looseCost };
+// ?dev only (dev.reset): everything a walk leaves behind put back to what a fresh load at (x, z) would start with, so one page can take many photos
+function resetAll(x, z, yaw, pitch) {
+  for (const c in keys) keys[c] = 0; eye.lift = 0; uTime.value = 0; camera.fov = 72; camera.updateProjectionMatrix();
+  place(x, z, yaw, pitch); stride = foot = vy = drop = simT = hitP = fallP = 0; grip = splashP = false; vel.set(0, 0);
+  zone = Object.values(zones).find(q => inR(x, z, ...q.box)) || zones.bA; // as lights.js picks zone0
+  resetWater(); resetLoose();
+  setSky(zone.sky || 'day'); relight(camera.position, zone, 1); relight(camera.position, zone, 1);
+  for (const l of lights) l.shadow.needsUpdate = true; sun.shadow.needsUpdate = renderer.shadowMap.needsUpdate = true; // the loose things moved: every shadow is drawn again
+  Object.assign(look, { exp: zone.exp, shaft: 0, sat: zone.sat, bloom: zone.bloom }); look.fog.copy(zone.fog); look.tint.copy(zone.tint);
+}
+
+export { eye, o, zone, feet, air, frame, place, looseCost, resetAll };

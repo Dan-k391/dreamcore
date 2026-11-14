@@ -254,4 +254,13 @@ function drawLoose(zone) { // once a frame, after the steps: meshes, and the sha
   const took = ms + performance.now() - t0; ms = 0; return took;
 }
 
-export { groups, floaters, wakes, stepLoose, drawLoose };
+// ?dev only: dev.reset() puts the loose things back as they were when the level finished loading (tools/shots.mjs, one load for many photos)
+const snap = new URLSearchParams(location.search).has('dev') ? { g: groups.map(g => Object.fromEntries(Object.entries(g).filter(([k, v]) => k !== 'hi' && (ArrayBuffer.isView(v) || typeof v === 'number' || typeof v === 'boolean')).map(([k, v]) => [k, ArrayBuffer.isView(v) ? v.slice() : v]))),
+  f: floaters.map(f => ({ ...f, shade: f.shade.slice() })) } : null; // 'hi' (which balls the fine mesh draws) is kept: it matches the instance matrices, and fine() re-derives it
+function resetLoose() {
+  groups.forEach((g, i) => { for (const [k, v] of Object.entries(snap.g[i])) if (ArrayBuffer.isView(v)) g[k].set(v); else g[k] = v; g.dirty = true; g.drawn = false; g.moved = 1; draw(g, 1); }); // moved: the lamps' shadows are drawn again
+  floaters.forEach((f, i) => Object.assign(f, snap.f[i], { shade: snap.f[i].shade.slice() }));
+  wakes.length = 0;
+}
+
+export { groups, floaters, wakes, stepLoose, drawLoose, resetLoose };
