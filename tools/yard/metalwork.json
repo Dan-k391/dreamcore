@@ -23,6 +23,11 @@
  {"name": "sign-05m-back", "hash": "-678.1,-693.9,3.14159,0.45", "lift": 0.1, "eval": "dev.key('KeyC', true)"},
  {"name": "bin-3m", "hash": "-678.4,-691.3,0.22,-0.3"},
  {"name": "bin-05m", "hash": "-679.05,-693.35,0,-0.65", "lift": -0.45, "eval": "dev.key('KeyC', true)"},
+ {"name": "door2-3m", "hash": "-678.4,-695.9,0,-0.12"},
+ {"name": "door2-05m-meeting", "hash": "-678.4,-698.55,0,-0.15", "lift": -0.5, "eval": "dev.key('KeyC', true)"},
+ {"name": "shopfront-3m", "hash": "-681,-692.2,0,0.02", "lift": 0.1},
+ {"name": "shopfront-05m-pull", "hash": "-680.0,-695.15,0.05,-0.1", "lift": -0.4, "eval": "dev.key('KeyC', true)"},
+ {"name": "shopfront-05m-transom", "hash": "-681.6,-694.85,0.25,0.15", "lift": 0.6, "eval": "dev.key('KeyC', true)"},
  {"name": "paint-swing-05m", "hash": "-645.6,-695.2,0.25,-0.1", "lift": -0.5, "eval": "dev.key('KeyC', true)"},
  {"name": "galv-guard-05m", "hash": "-629.5,-696.25,0.42,-0.15", "lift": -0.9, "eval": "dev.key('KeyC', true)"}
 ]
