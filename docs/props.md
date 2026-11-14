@@ -41,91 +41,87 @@ Moved here from `js/build.js`, signatures unchanged: `lamp` and `post` (lights),
 
 Plot z is -700..-692 for every group. Views files: `tools/yard/<group>.json` for `node tools/shots.mjs <out> --views tools/yard/<group>.json`; each starts with the whole plot (from 1.2 m higher, `lift`); add a close view (arm's length) and a far view (about 6 m) per object. `tools/yard/structure.json` has the wheel stop's as the example.
 
-## Inventory
+## Kit functions
 
-Where an object of each kind is built today (line ranges as of this commit). "Notes" are the audit's findings: `grep -n "<name>" screenshots/audit/notes/round2-{1,2,3,4}.txt`.
+Every function takes the zone `z` first; "(x, y, zc, ry, o)" below means `z, x, y, zc, ry = 0, o = {}`. A run of points is `pts` = `[[x, y, z], ...]`. Each kit also exports `yard(plot)`; lights, metalwork and play export `cost`, structure `tally`. Options listed are the main ones: read the comment above the function for the rest.
 
 ### lights (`js/props/lights.js`)
 
-| Object | Built today |
-|---|---|
-| Recessed troffer 600 x 1200, lit and dead | `lamp()` lights.js:8-11 (box of `lampOn`/`lampOff` + emitter); called backrooms.js:26-27 (bA, one dead), 34 (bB), 42 (bC); softplay.js:33; yard.js (hall lighting) |
-| Troffer 600 x 600 | arcade.js:15 (`glow` box + emitter); vault.js:24 (`glow` + `fixture`); gallery.js:24 (`glow` + `fixture`, ceiling lights) |
-| Surface LED batten / tube | parking.js:16 (`neon` strip + `lit`); gallery.js:20-23 (wall strip lights, `glow` + `fixture`) |
-| Opal ceiling panel | hotel.js:18 (`glow` square + `lit`); vault.js:23 (light wells, `glow` + emitter) |
-| Hotel wall sconce | hotel.js:16 (a `glow` block by each door) |
-| Crook-neck park street lamp | `post()` lights.js:12-17; called field.js:28 (5, `frost` globe, unlit), terrace.js:26 (lookout) |
-| Car-park mast lamp | carpark.js:17 (9 x `post()`, power 520) |
-| Globe lamp on a post | field.js:28 and terrace.js:26 (`post()` globes) |
-| Small wall / step light | carpark.js:16 (strip over the passage door); the passage floor markers `passage()` build.js:62 (`aisle`) |
-| Neon tube sign on standoffs + transformer lead | mall.js:21 (shop signs, `neon` blocks); `sign()` / `label()` mat.js:195-209 (EXIT, P2 plates: hotel.js:19, parking.js:17, vault.js:18) |
-| Underwater pool light | none yet (pool hall, gallery, night hall, vault pools) |
-| Also: backlit panels | carpark.js:23 (bus-shelter panel), 25 (vending fronts); mall.js:19 (lit empty shops); mall.js:25 (skylight); cinema.js:18 (screen) |
-| Also: glow behind windows (not a fitting) | nighthall.js:21-22, vault.js:21 (`glow` slabs behind pill windows) |
+| Function | Arguments | Builds |
+|---|---|---|
+| `troffer` | (x, y, zc, ry, o: w, l, on, power, seed) | recessed ceiling panel (600 x 1200 default) with its light; y is the ceiling underside |
+| `lamp` | (z, x, zc, h, on, power) | old helper: a `troffer` on the 60 cm grid |
+| `batten` | (x, y, zc, ry, o: l, on, power) | surface T8 tube in a pressed-steel channel with lampholders and clips |
+| `opalPanel` | (x, y, zc, ry, o: w, l, on, power) | surface opal diffuser panel in a mitred aluminium frame |
+| `streetLamp` | (x, y, zc, ry, o: metal, glass, on, power, reach, globe) | crook-neck cast-iron park lamp, or a globe on top |
+| `post` | (mat, globe, x, y, zc, ax, az, power, zone) | old helper: a `streetLamp` reaching (ax, az) |
+| `globeLamp` | (x, y, zc, ry, o) | `streetLamp` with a globe on top |
+| `mastLamp` | (x, y, zc, ry, o: h, heads, on, power, reach) | tall car-park mast on a base plate with LED lanterns on an arm |
+| `sconce` | (x, y, zc, ry, o: on, power) | wall light: swan-neck arm and etched glass tulip |
+| `stepLight` | (x, y, zc, ry, o: on, power) | small cast brick light with a louvred eyelid, for steps and passages |
+| `poolLight` | (x, y, zc, ry, o: on, power, d) | underwater niche light with a fluted lens |
+| `neonSign` | (x, y, zc, ry, o) | neon tube sign on standoffs with its transformer lead |
 
 ### metalwork (`js/props/metalwork.js`)
 
-| Object | Built today |
-|---|---|
-| Door in frame (handle, hinges, closer, kick plate); frame without leaf | `doorway()` metalwork.js:7-12; called field.js:45 (red, blue), terrace.js:22 (blue); hotel doors hotel.js:15 (wood slab + brass handle and plate); bare doorways with no frame: backrooms.js:20, 40-41, parking.js:11-12, poolhall.js:22-23, gallery.js:18, nighthall.js:19, vault.js:19, mall.js:13-14 |
-| Pool ladder with treads and wall anchors | `ladder()` metalwork.js:13-17; called poolhall.js:32 (chrome), nighthall.js:28 |
-| Tubular handrail / railing run | gallery.js:25-28 (pool handrails, boxes); mall.js:23 (upper gallery rail) |
-| Roller shutter (guides, bottom bar) | mall.js:20 (stacked slabs) |
-| Steel bollard | none yet |
-| Floor drain grate | none yet (pool decks) |
-| Wall vent grille | none yet |
-| Pipe run with brackets and flanges | none yet |
-| Sign post with blank plate | none yet |
-| Wire-mesh waste bin | none yet |
-| Also: bus shelter (posts, roof, glass) | carpark.js:20-23 |
-| Also: vending machine | carpark.js:24-26 |
-| Also: shopfront (mullions, glass door) | mall.js:16-24 (open shops are only a lit panel) |
+| Function | Arguments | Builds |
+|---|---|---|
+| `door` | (x, y, zc, ry, o: open, leaf, frame, color) | door in a frame with handle, hinges, closer and kick plate; `leaf: false` is the frame alone |
+| `doorway` | (mat, leaf, x, y, z, ry, open) | old call: a `door` tinted like the two materials |
+| `poolLadder` | (x, y, zc, ry, o) | stainless pool ladder with ribbed treads, rails clamped, bumpers on the wall |
+| `ladder` | (x, zc, mat) | old call: a `poolLadder` on a pool's east edge |
+| `railing` | (pts, o) | tubular handrail: continuous top rail, posts on base plates, mid rail |
+| `bollard` | (x, y, zc, ry, o) | painted steel tube bollard with domed cap and base plate |
+| `drain` | (x, y, zc, ry, o: l, w) | slot-grate linear drain in an angle frame, flush with the floor |
+| `shutter` | (x, y, zc, ry, o: w, h, open, color, hood) | roller shutter with guides, bottom bar and coil box |
+| `vent` | (x, y, zc, ry, o: w, h) | wall vent grille with raked blades over a dark duct |
+| `pipeRun` | (pts, o: off, to) | pipe along points with flanges, and clamps on drop rods to the wall |
+| `signPost` | (x, y, zc, ry, o: w, ph, top, color) | post with a blank aluminium plate on channel rails and band clamps |
+| `bin` | (x, y, zc, ry, o: color) | round wire-mesh litter basket on three legs |
 
 ### garden (`js/props/garden.js`)
 
-| Object | Built today |
-|---|---|
-| Park bench (slats on cast ends, bolted) | field.js:46-50; terrace.js:27 (lookout bench); carpark.js:22 (bus-shelter seat) |
-| Backless mall bench | mall.js:30 |
-| Round planter with soil and a palm | mall.js:26-31 (planter box, soil, 10-sided trunk, 9 flat leaf boxes) |
-| Smaller potted plant | none yet |
-| Poolside timber lounger | none yet |
-| Picnic table | none yet |
-| Low timber fence / rail | none yet |
-| Also: cinema seat (cushion and back) | cinema.js:15-16 |
+| Function | Arguments | Builds |
+|---|---|---|
+| `parkBench` | (x, y, zc, ry, o: length, iron) | timber slat bench on cast-iron ends, bolted |
+| `mallBench` | (x, y, zc, ry, o) | backless hardwood-batten bench on tube steel frames (1.8 x 0.42 m) |
+| `palmPlanter` | (x, y, zc, ry, o) | terrazzo round planter with mulch and a palm |
+| `pottedPlant` | (x, y, zc, ry, o) | moulded pot with mulch and three palm canes |
+| `lounger` | (x, y, zc, ry, o) | poolside timber lounger with a raised slatted back |
+| `picnicTable` | (x, y, zc, ry, o) | boards on bearers with splayed legs, braces, bolted |
+| `fence` | (pts, o: span) | low timber post-and-rail fence with capped posts |
 
 ### play (`js/props/play.js`)
 
-| Object | Built today |
-|---|---|
-| Playground slide | none on land; the water slide nighthall.js:29-33 (`tube` chute, solid chain) |
-| Swing set | field.js:31-35 (tube legs, top bar, block chains and seats) |
-| Roundabout | field.js:36-38 |
-| Spring rider base | none yet |
-| Soft-play foam shapes (cube, wedge, cylinder, arch) | softplay.js:31 (cubes), 30 (steps and block), 32 (arch wall), 34-36 (rainbow), 17 (padded wall band), 12-15 (floor mats, pit) |
-| Swim ring | poolhall.js:33-36 (torus meshes on `rings`) |
-| Beach ball | `beachBall()` mat.js:210; used poolhall.js:37, gallery.js:30; field ball field.js:51-52 (`paintedBall`) |
-| Ball-pit balls | softplay.js:18-29 (InstancedMesh on `loose`) |
-| Pool lane-rope floats | none yet |
-| Stackable moulded garden chair | none yet |
-| Also: seesaw | field.js:39-42 |
-| Also: sand pit edge | field.js:30 |
+| Function | Arguments | Builds |
+|---|---|---|
+| `swingSet` | (x, y, zc, ry, o: color) | A-frame swing set with chains and rubber seats |
+| `slide` | (x, y, zc, ry, o: color, deck, frame) | playground slide: deck, ladder, rails and moulded chute |
+| `roundabout` | (x, y, zc, ry, o) | 1.6 m moulded-panel deck on a steel frame with grab rails |
+| `springRider` | (x, y, zc, ry, o) | heavy coil spring between cast cups under a moulded cover |
+| `beachBall` | (z, r) | a loose beach ball mesh (push it onto the loose bodies) |
+| `swimRing` | (z, o) | a flat swim ring mesh (push it onto `rings`) |
+| `foamCube` | (x, y, zc, ry, o: s) | soft-play vinyl cube, zip and all |
+| `foamWedge` | (x, y, zc, ry, o: w, d, h) | soft-play ramp, stepped solids so you walk up it |
+| `foamCylinder` | (x, y, zc, ry, o: r, h) | soft-play cylinder on its end |
+| `foamArch` | (x, y, zc, ry, o: w, h, d, a) | soft-play arch block with a round opening |
+| `pitBall` | (z, r) | `{geometry, fine, material}` for an InstancedMesh of pit balls |
+| `laneRope` | (pts, o) | pool lane rope of floats, red ends then blue and white |
+| `gardenChair` | (x, y, zc, ry, o: color) | stackable moulded plastic chair |
 
 ### structure (`js/props/structure.js`)
 
-| Object | Built today |
-|---|---|
-| Parking-level pillar | parking.js:13 (50 cm box + yellow band block) |
-| Wheel stop | parking.js:14 (boxes); kit example `wheelStop()` structure.js:10-16 |
-| Kerb run with dropped section | none yet (car park) |
-| Speed bump | none yet |
-| Painted bay lines and arrows | parking.js:14, carpark.js:18 (paint blocks); wall stripe parking.js:15 |
-| Round column with base and capital | terrace.js:16 (columns from the cloud); square columns poolhall.js:28, nighthall.js:24 |
-| Arch pier with impost | `slab(..., through)` build.js; terrace.js:19-21, vault.js:20, arcade.js:13-14, softplay.js:32 |
-| Step run with nosings | `flight()` build.js:47; field.js:44 (stair to nothing), terrace.js:23-24, softplay.js:30; pool entry steps poolhall.js:20, gallery.js:15 |
-| Concrete bollard | none yet |
-| Skirting | `wall()` build.js:93 (trim box); mall walls have none |
-| Ceiling beam / downstand | parking.js:13 (beams over the pillars) |
-| Also: traffic cone | carpark.js:19 |
-| Also: pilasters | gallery.js:19; backrooms pillars backrooms.js:33 |
-| Also: parapet rail | terrace.js:13 (`rail`) |
+| Function | Arguments | Builds |
+|---|---|---|
+| `pillar` | (x, y, zc, ry, o: num, guard) | car-park concrete pillar with bay number and corner guards |
+| `beam` | ([[x1, y1, z1], [x2, , z2]], o: ends, pw, haunch) | cast-in-place downstand beam with haunches |
+| `wheelStop` | (x, y, zc, ry, o) | precast wheel stop pinned by two spikes |
+| `bayLine` | ([[x1, y1, z1], [x2, , z2]], o: on) | painted 10 cm bay line |
+| `arrow` | (x, y, zc, ry, o) | painted direction arrow on concrete |
+| `kerb` | (pts, o: drop) | precast kerb run, with an optional dropped crossing |
+| `bollard` | (x, y, zc, ry, o) | precast concrete bollard (the steel one is in metalwork) |
+| `speedBump` | ([[x1, y1, z1], [x2, , z2]], o) | ribbed rubber-and-plastic speed bump in bolted modules |
+| `steps` | (x, y, zc, ry, o: n, r, g, w, color, insert) | concrete flight with fluted nosings and anti-slip inserts, solid per step |
+| `skirting` | (pts, o: color) | gloss-painted skirting with a caulk bead along a wall run |
+| `column` | (x, y, zc, ry, o) | round stone column with plinth, drums and capital; plinth stands, shaft is a post |
+| `pier` | (x, y, zc, ry, o: mat, color) | arch pier with plinth course and moulded impost |

@@ -8,7 +8,7 @@ All tools are dependency-free (Node 22; the two image tools use Python 3 with Pi
 
 ## The page
 
-- `?dev` in the address turns on the test hooks (`window.dev`, in `js/dev.js`). Without it none of them exist, and the dev-only showroom is not loaded.
+- `?dev` in the address turns on the test hooks (`window.dev`, in `js/dev.js`). Without it none of them exist. Plain `?dev` also loads the two test-only areas far away at x below -500 (the material showroom and the prop yard); they are drawn in every view, which adds about a million triangles and several hundred draw calls and bakes every material set (texMem 420 MB against 322 MB). `?dev&bare` loads the same hooks without them: it is what the real game costs. Which tool uses which: `perf.mjs` and `test.mjs` use `?dev&bare` (`perf.mjs --full` the plain load; `test.mjs` keeps its cost-and-tour check on plain `?dev`, which needs the showroom shaders); `shots.mjs` uses `?dev&bare` unless a view of the run has x below -500, then plain `?dev` (`FULL=1` forces it); `browse.mjs` loads whatever address you give it.
 - `#x,z,yaw,pitch` starts the player there.
 
 ### `window.dev`
