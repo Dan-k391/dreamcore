@@ -24,7 +24,7 @@ const rows = [];
 console.log('view'.padEnd(24), 'ms'.padStart(6), 'calls'.padStart(6), 'tris'.padStart(9), 'progs'.padStart(6), 'texs'.padStart(5), 'load'.padStart(6), ' zone/sky');
 for (const v of views) {
   let r;
-  try { r = JSON.parse(execFileSync(process.execPath, [browse, '--url', `http://127.0.0.1:${port}/?dev#${v.hash}`, '--size', size, '--eval', measure], { encoding: 'utf8' })).result; }
+  try { r = JSON.parse(execFileSync(process.execPath, [browse, '--url', `http://127.0.0.1:${port}/${argv.includes("--full") ? "?dev" : "?dev&bare"}#${v.hash}`, '--size', size, '--eval', measure], { encoding: 'utf8' })).result; }
   catch (e) { console.log(v.name.padEnd(24), 'FAILED', String(e.stdout || e.message).slice(0, 400)); process.exitCode = 1; continue; }
   rows.push({ name: v.name, ...r });
   console.log(v.name.padEnd(24), String(r.ms).padStart(6), String(r.calls).padStart(6), String(r.tris).padStart(9), String(r.programs).padStart(6), String(r.textures).padStart(5), String(r.load).padStart(6), ` ${r.zone}/${r.sky}`);

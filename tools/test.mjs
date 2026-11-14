@@ -44,7 +44,7 @@ const walks = [
   ['fieldWall', [-27, 668, 0, "['KeyW']", 2], { zone: 'fD', z: 665.95 }], // the end wall stops you where the hill is higher than it
 ];
 
-const dev = run(base + '?dev', `[${walks.map(([, a]) => `dev.go(${a.join(',')})`).join(',')}]`);
+const dev = run(base + '?dev&bare', `[${walks.map(([, a]) => `dev.go(${a.join(',')})`).join(',')}]`);
 check('dev mode loads without console errors', !dev.errors.length, dev.errors.join(' | ').slice(0, 600));
 walks.forEach(([name, , want], k) => {
   const got = dev.result?.[k], bad = got ? Object.entries(want).filter(([key, v]) => typeof v === 'number' ? !(Math.abs(got[key] - v) <= .35) : got[key] !== v) : [1];
@@ -78,7 +78,7 @@ const solids = [
   ['every ball mesh, fine ones too, keeps its own material, not one swapped in while programs compile', 'const g = (await import("/js/physics.js")).groups; return g.flatMap(x => [x.mesh, x.fine].filter(Boolean).map(m => m.material.type))', t => t.length > 4 && t.every(s => s !== "MeshNormalMaterial" && s !== "MeshDepthMaterial")],
   ['in the pit the near balls are drawn with the fine shape, none from afar','const Ph = await import("/js/physics.js"), g = Ph.groups[2]; dev.go(-31.6, 34.5, P / 2, ["KeyW"], 1.5); dev.step(2); const near = g.fine.count; dev.go(-20, 36, P / 2); dev.step(2); return [near, g.fine.count]', ([near, far]) => near > 20 && far === 0],
 ];
-const loose = run(base + '?dev', `(async () => { const P = Math.PI, out = []; for (const f of [${solids.map(([, e]) => `async () => { ${e} }`).join(',')}]) out.push(await f()); return out; })()`);
+const loose = run(base + '?dev&bare', `(async () => { const P = Math.PI, out = []; for (const f of [${solids.map(([, e]) => `async () => { ${e} }`).join(',')}]) out.push(await f()); return out; })()`);
 check('solids page loads without console errors', !loose.errors.length, loose.errors.join(' | ').slice(0, 600));
 solids.forEach(([name, , ok], k) => { const got = loose.result?.[k]; let pass = false; try { pass = got !== undefined && ok(got); } catch {} check(name, pass, pass ? '' : 'got ' + JSON.stringify(got)); });
 

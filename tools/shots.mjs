@@ -21,9 +21,10 @@ if (only && views.length !== only.length) { console.error('unknown view in --onl
 mkdirSync(out, { recursive: true });
 
 let last = false; // --fresh: the final, sequential pass
+const dev = process.env.FULL || views.some(v => +v.hash.split(",")[0] < -500) ? "?dev" : "?dev&bare"; // test areas (showroom, yard) lie at x < -500: load them only for views there (FULL=1 forces them)
 const browse = fileURLToPath(new URL('./browse.mjs', import.meta.url));
 const shoot = v => new Promise(done => {
-  const p = spawn(process.execPath, [browse, '--url', `http://127.0.0.1:${port}/?dev#${v.hash}`, '--shot', join(out, v.name + '.png'), '--size', `${W}x${H}`,
+  const p = spawn(process.execPath, [browse, '--url', `http://127.0.0.1:${port}/${dev}#${v.hash}`, '--shot', join(out, v.name + '.png'), '--size', `${W}x${H}`,
     // the headless window can reach its final size late: wait until the page and canvas are 1280x720, draw, and fail (then retry) if it changed meanwhile
     '--eval', `(async () => { const c = dev.renderer.domElement, size = () => c.width === ${W} && c.height === ${H} && innerWidth === ${W} && innerHeight === ${H};
       for (let i = 0; i < 100 && !size(); i++) await new Promise(r => setTimeout(r, 50));
@@ -93,7 +94,7 @@ const run = async (expression, timeout = 90000) => {
   return r.result.value; };
 await send('Runtime.enable'); await send('Log.enable'); await send('Page.enable');
 await send('Emulation.setDeviceMetricsOverride', { width: W, height: H, deviceScaleFactor: 1, mobile: false });
-await send('Page.navigate', { url: `http://127.0.0.1:${port}/?dev#${views[0]?.hash || ''}` });
+await send('Page.navigate', { url: `http://127.0.0.1:${port}/${dev}#${views[0]?.hash || ''}` });
 let ready = false; for (const end = Date.now() + 90000; Date.now() < end && !ready && !errors.length; await sleep(250)) ready = await run('document.readyState === "complete" && !!(window.dev && window.dev.ready)', 5000).catch(() => false);
 if (!ready) { console.error('page did not become ready\n' + errors.join('\n')); quit(1); }
 
