@@ -1,3 +1,15 @@
 [
- { "name": "play-plot", "hash": "-644,-685,0,-0.2", "lift": 1.2 }
+ { "name": "play-plot", "hash": "-644,-685,0,-0.2", "lift": 1.2 },
+ { "name": "play-swing-far", "hash": "-643.6,-693.6,0.38,-0.05" },
+ { "name": "play-swing-close", "hash": "-645.4,-696.3,0.29,-0.25", "lift": -1.0 },
+ { "name": "play-slide-far", "hash": "-638.3,-694.2,0.54,-0.12" },
+ { "name": "play-slide-close", "hash": "-639.6,-695.9,0.98,-0.35", "lift": -1.0 },
+ { "name": "play-roundabout-far", "hash": "-639.7,-691.0,-0.34,-0.3" },
+ { "name": "play-roundabout-close", "hash": "-638.0,-692.9,0.51,-0.3", "lift": -0.9 },
+ { "name": "play-spring-far", "hash": "-648.0,-692.0,0.40,-0.35" },
+ { "name": "play-spring-close", "hash": "-649.0,-694.35,0.42,-0.25", "lift": -1.1 },
+ { "name": "play-ball-far", "hash": "-647.0,-690.1,0.31,-0.45" },
+ { "name": "play-ball-close", "hash": "-647.75,-692.4,0.29,-0.25", "lift": -1.1 },
+ { "name": "play-ring-far", "hash": "-645.5,-690.0,0.28,-0.45" },
+ { "name": "play-ring-close", "hash": "-646.0,-692.2,0.46,-0.6", "lift": -1.0 }
 ]

@@ -17,13 +17,14 @@ set('gelcoat', 1, 512, 512, .07, 0, `
 // Hard moulded plastic (play equipment): rotomoulded polyethylene, semi-gloss, gentle sink marks and pinholes, paler and chalkier
 // where the sun has had it, polished by hands where it is gripped, and whitened along scratches where the plastic was stressed.
 set('hardPlastic', 1, 512, 512, .36, 0, `
-  float mv = multi(uv, 3), sink = fbm(uv * 10., vec2(10), 3, 17), peel = gn(uv * 120., vec2(120), 6);
-  float fade = ss(.48, .8, fbm(uv * 2., vec2(2), 5, 4)), grip = ss(.52, .75, fbm(uv * 4., vec2(4), 4, 9)) * (1. - fade);
-  float scr = .6 * scratches(uv, 4., .2, .25, 13), pin = pits(uv, 40., 1.2, .3, 19);
-  c = vec3(.82) * (1. + .06 * mv); c = mix(c, vec3(.92), .12 * fade + .1 * scr);
-  t = 1. - .22 * fade - .15 * scr - .2 * pin;
-  h = .03 * (sink - .5) * 2. + .006 * (peel - .5) * 2. - .015 * scr - .06 * pin;
-  r = .36 + .03 * mv + .14 * fade - .2 * grip + .12 * scr + .1 * pin;`);
+  float mv = multi(uv, 3), sink = fbm(uv * 10., vec2(10), 3, 17), peel = gn(uv * 220., vec2(220), 6) * .6 + gn(uv * 120., vec2(120), 8) * .4;
+  float fade = ss(.5, .85, fbm(uv * 2., vec2(2), 5, 4)), grip = ss(.55, .78, fbm(uv * 4., vec2(4), 4, 9)) * (1. - fade);
+  float scr = scratches(uv, 3., .15, .03, 13) * ss(.45, .7, fbm(uv * 3., vec2(3), 3, 23)), pin = pits(uv, 40., 1., .12, 19);
+  float flow = .5 + .5 * sin(2. * PI * (uv.x * 9. + .6 * fbm(uv * 3., vec2(3), 3, 31))); // faint flow lines from the mould's fill
+  c = vec3(.82) * (1. + .02 * mv); c = mix(c, vec3(.9), .05 * fade);
+  t = 1. - .1 * fade - .15 * pin;
+  h = .02 * (sink - .5) * 2. + .008 * (peel - .5) * 2. - .006 * scr - .04 * pin;
+  r = .34 + .02 * mv + .12 * fade - .12 * grip + .1 * scr + .08 * pin + .03 * flow;`);
 // PVC sheet (inflatables), panels 0.5 m wide welded at their edges: each panel pillows out between its welds, puckers into
 // creases beside them, and has a slightly glossier, embossed weld band with a raised lip either side.
 set('pvc', .5, 512, 512, .16, 0, `
@@ -31,18 +32,18 @@ set('pvc', .5, 512, 512, .16, 0, `
   float pk = exp(-du / 35.) * ridged(uv * vec2(4., 40.), vec2(4., 40.), 3, 5); // puckered creases running off the weld
   float slack = ridged(uv * vec2(3., 2.), vec2(3., 2.), 4, 7), mv = multi(uv, 9), emb = gn(uv * 150., vec2(150), 11);
   float handled = ss(.5, .8, fbm(uv * 4., vec2(4), 4, 13));
-  h = 2. * sin(PI * uv.x) + .35 * pk + .25 * slack + .2 * lip + weld * (.03 * sin(uv.y * 166. * 2. * PI) - .15) + .004 * emb;
-  c = vec3(.86) * (1. + .05 * mv) * (1. - .08 * weld); t = 1.;
+  h = 2. * sin(PI * uv.x) + .15 * pk + .2 * slack + .01 * sin(uv.y * 2. * PI * 160.) + .2 * lip + weld * (.03 * sin(uv.y * 166. * 2. * PI) - .15) + .004 * emb;
+  c = vec3(.86) * (1. + .03 * mv) * mix(vec3(1), vec3(.97, .93, .8), weld); t = 1.;
   r = .13 + .03 * mv - .03 * weld + .1 * handled + .02 * emb;`);
 // Moulded black rubber: a fine moulded stipple and the odd air bubble, waxy grey bloom risen into the recesses and over
 // patches, and lighter, glossier smears where it has been scuffed. Dark, so it is read by its highlights.
-set('rubber', .5, 512, 512, .55, 0, `
+set('rubber', .5, 512, 512, .66, 0, `
   vec4 v = vor(uv * 160., vec2(160), 3, .9); float stip = 1. - ss(.0, .55, v.x); // moulded stipple, 3 mm
   float mv = multi(uv, 5), bub = pits(uv, 20., 1.6, .4, 7), scr = .7 * scratches(uv, 4., .3, .45, 9) * ss(.4, .7, fbm(uv * 3., vec2(3), 3, 15));
   float bloom = ss(.5, .85, fbm(uv * 5., vec2(5), 4, 21)) * (.2 + .8 * (1. - stip)) + .8 * bub; // wax blooms out and gathers low
-  c = vec3(.056, .053, .049) * (1. + .15 * mv); c = mix(c, vec3(.15, .145, .135), sat(.4 * bloom)); c = mix(c, vec3(.09), .4 * scr);
+  c = vec3(.066, .063, .058) * (1. + .12 * mv); c = mix(c, vec3(.15, .145, .135), sat(.4 * bloom)); c = mix(c, vec3(.09), .4 * scr);
   h = .07 * stip + .1 * (fbm(uv * 20., vec2(20), 3, 3) - .5) - .25 * bub - .01 * scr;
-  r = .46 + .08 * mv + .1 * stip + .3 * sat(bloom) - .2 * scr; t = 1.;`);
+  r = .58 + .08 * mv + .1 * stip + .3 * sat(bloom) - .2 * scr; t = 1.;`);
 // Float glass: nearly invisible itself, read by its reflections: the faint roller wave of the float line, wiped arcs and
 // fingerprints that catch the light, and specks of dust (untinted, so they stay pale on any glass).
 set('glass', 1, 512, 512, .06, 0, `
