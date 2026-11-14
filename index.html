@@ -174,7 +174,10 @@ function tileFX(m, z) {
     ` + s.fragmentShader
       .replace('#include <envmap_physical_pars_fragment>', THREE.ShaderChunk.envmap_physical_pars_fragment.replace(
         'reflectVec = inverseTransformDirection( reflectVec, viewMatrix );', 'reflectVec = boxProj( inverseTransformDirection( reflectVec, viewMatrix ) );'))
-      .replace('#include <color_fragment>', '#include <color_fragment>\nif (vW.y < uBand) diffuseColor.rgb *= uBandCol;')
+      .replace('#include <color_fragment>', `#include <color_fragment>
+        if (vW.y < uBand) diffuseColor.rgb *= uBandCol;
+        float wet = 1. - smoothstep(0., .06, abs(vW.y + ${-WY})); diffuseColor.rgb *= 1. - .3 * wet; // the waterline leaves a wet band`)
+      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor *= 1. - .6 * wet;')
       .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
         if (vW.y < ${WY}) { // light focused by the surface: a drifting base pattern plus the real ripples (crests focus, troughs spread)
           vec2 s = (vW.xz - uPond.xy) / (uPond.zw - uPond.xy), o = uPx * 2.;
@@ -315,7 +318,10 @@ tube([...slide, [35.4, .5, -9.5], [33.4, .22, -9.7]], .55, 320, slideMat);
 // Each pool is a wave-equation simulation on the GPU (the player's legs and landings disturb it) feeding a ray-traced
 // surface: the view ray is reflected and refracted at the simulated normal; the refracted ray is bent by Snell's law and
 // traced to the basin's floor or walls, tinted by how much water it crossed; the reflected ray is followed into the room.
-// What each ray hits is looked up in a planar reflection / refraction render of the real scene.
+// What each ray hits is looked up in a planar reflection / refraction render of the real scene. Those renders see OVER
+// times more than the screen, because bent rays near the screen's edges land outside it; without that the bottom stretches.
+// Where the water gets thin against a step, wall or column it fades out, so the shoreline is soft instead of a hard cut.
+const OVER = 1.45;
 const simMat = new THREE.ShaderMaterial({ uniforms: { tSim: { value: null }, uPx: { value: null }, uDrop: { value: V(0, 0, 0) } }, vertexShader: quadVS,
   fragmentShader: `uniform sampler2D tSim; uniform vec2 uPx; uniform vec3 uDrop; varying vec2 vUv;
     void main() { vec4 s = texture2D(tSim, vUv); // r = height, g = velocity
@@ -329,36 +335,48 @@ const waterShader = {
   uniforms: { color: { value: null }, reflectivity: { value: 0 }, tReflectionMap: { value: null }, tRefractionMap: { value: null }, tNormalMap0: { value: null }, tNormalMap1: { value: null },
               textureMatrix: { value: null }, config: { value: new THREE.Vector4() } }, // the names Water2 fills in
   vertexShader: 'varying vec3 vW; void main() { vec4 w = modelMatrix * vec4(position, 1.); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }',
-  fragmentShader: `uniform sampler2D tReflectionMap, tRefractionMap, tNormalMap0, tNormalMap1, tSim;
-    uniform mat4 projectionMatrix; uniform vec4 uPond; uniform vec2 uPx; uniform vec3 color; uniform float uFloor, uTime; varying vec3 vW;
-    vec2 screen(vec3 p) { vec4 c = projectionMatrix * viewMatrix * vec4(p, 1.); return c.xy / c.w * .5 + .5; }
+  fragmentShader: `#include <packing>
+    uniform sampler2D tReflectionMap, tRefractionMap, tNormalMap0, tNormalMap1, tSim, tDepth;
+    uniform mat4 projectionMatrix; uniform vec4 uPond; uniform vec2 uPx; uniform vec3 color; uniform float uFloor, uTime, uSoft; varying vec3 vW;
+    vec2 ndc(vec3 p) { vec4 c = projectionMatrix * viewMatrix * vec4(p, 1.); return c.xy / c.w; }
+    vec2 wide(vec3 p) { return ndc(p) * ${(.5 / OVER).toFixed(5)} + .5; } // a world point's place in the wider reflection / refraction renders
     vec2 onScreen(vec2 from, vec2 to) { vec2 d = to - from, room = max(mix(from, 1. - from, step(0., d)), 1e-4); return from + sign(d) * room * (1. - exp(-abs(d) / room)); } // rays that would land off-screen are eased toward the edge; clamping smears streaks
     void main() {
+      // metres of water between this bit of surface and whatever lies behind it, from last frame's water-free depth
+      float gap = (viewMatrix * vec4(vW, 1.)).z - perspectiveDepthToViewZ(texture2D(tDepth, ndc(vW) * .5 + .5).x, .08, 5000.);
+      float body = mix(1., smoothstep(0., .1, gap), uSoft); // 0 at the shore, 1 in open water
       vec2 s = (vW.xz - uPond.xy) / (uPond.zw - uPond.xy);
       float hx = texture2D(tSim, s - vec2(uPx.x, 0.)).r - texture2D(tSim, s + vec2(uPx.x, 0.)).r, hz = texture2D(tSim, s - vec2(0., uPx.y)).r - texture2D(tSim, s + vec2(0., uPx.y)).r;
       vec2 calm = (texture2D(tNormalMap0, vW.xz * .23 + uTime * vec2(.011, .007)).rg + texture2D(tNormalMap1, vW.xz * .37 - uTime * vec2(.009, .013)).rg - 1.) * .09; // water is never glass-flat
-      vec3 n = normalize(vec3(hx * 10. + calm.x, 1., hz * 10. + calm.y)), V = normalize(cameraPosition - vW);
+      vec3 n = normalize(vec3((hx * 10. + calm.x) * body, 1., (hz * 10. + calm.y) * body)), V = normalize(cameraPosition - vW);
       vec3 R = reflect(-V, n); R.y = -max(R.y, .03); // mirrored: the planar render shows the room upside-down below the surface
-      vec2 here = screen(vW), ru = onScreen(here, screen(vW + R * 9.));
+      vec2 here = wide(vW), ru = onScreen(here, wide(vW + R * 9.));
       vec3 refl = texture2D(tReflectionMap, vec2(1. - ru.x, ru.y)).rgb;
       vec3 T = refract(-V, n, .75); // air to water
       vec2 tw = mix(vW.xz - uPond.xy, uPond.zw - vW.xz, step(0., T.xz)) / (abs(T.xz) + 1e-5);
       float t = clamp(min((uFloor - vW.y) / min(T.y, -.001), min(tw.x, tw.y)), 0., 30.); // distance to the basin floor or nearest wall; never negative, or exp() below overflows
-      vec3 refr = texture2D(tRefractionMap, onScreen(here, screen(vW + T * t))).rgb * exp(-vec3(.42, .085, .06) * t) * color; // red is absorbed first
-      gl_FragColor = vec4(mix(refr, refl, .02 + .98 * pow(1. - max(dot(V, n), 0.), 5.)), 1.);
+      vec3 refr = texture2D(tRefractionMap, onScreen(here, wide(vW + T * t))).rgb * exp(-vec3(.42, .085, .06) * t) * color; // red is absorbed first
+      vec3 col = mix(refr, refl, .02 + .98 * pow(1. - max(dot(V, n), 0.), 5.));
+      col = mix(texture2D(tRefractionMap, here).rgb, col, body); // thin water shows what is behind it, unbent and untinted
+      col += refl * .3 * smoothstep(0., .015, gap) * (1. - smoothstep(.015, .06, gap)) * uSoft; // a wet glint along the contact line
+      gl_FragColor = vec4(col, 1.);
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
     }`,
 };
 const ponds = [[-4, -19, 5, -6, -1.2, 'pH', ['bA', 'pH', 'pC', 'pN']], [9.4, -14.4, 24, -9.6, -.3, 'pC', ['pH', 'pC', 'pN']], [24, -21, 42, -3, -1.2, 'pN', ['pC', 'pN', 'bC']]].map(([x1, z1, x2, z2, floor, zid, seen]) => {
-  const w = new Water(new THREE.PlaneGeometry(x2 - x1, z2 - z1), { color: 0xffffff, textureWidth: 1024, textureHeight: 1024, normalMap0: wn0, normalMap1: wn1, shader: waterShader });
+  const w = new Water(new THREE.PlaneGeometry(x2 - x1, z2 - z1), { color: 0xffffff, textureWidth: 1280, textureHeight: 1280, normalMap0: wn0, normalMap1: wn1, shader: waterShader });
   const rt = () => new THREE.WebGLRenderTarget(Math.round((x2 - x1) * 20), Math.round((z2 - z1) * 20), { type: THREE.HalfFloatType, depthBuffer: false }); // 5cm cells
   Object.assign(w, { seen, rect: new THREE.Vector4(x1, z1, x2, z2), px: new THREE.Vector2(.05 / (x2 - x1), .05 / (z2 - z1)), sim: [rt(), rt()], tileU: zones[zid].tileU });
-  Object.assign(w.material.uniforms, { tSim: { value: w.sim[0].texture }, uPond: { value: w.rect }, uPx: { value: w.px }, uFloor: { value: floor }, uTime });
+  Object.assign(w.material.uniforms, { tSim: { value: w.sim[0].texture }, uPond: { value: w.rect }, uPx: { value: w.px }, uFloor: { value: floor }, uTime, tDepth: { value: null }, uSoft: { value: 0 } });
   w.tileU.uSim.value = w.sim[0].texture; w.tileU.uPond.value = w.rect; w.tileU.uPx.value = w.px;
   w.rotation.x = -Math.PI / 2; w.position.set((x1 + x2) / 2, WY, (z1 + z2) / 2); scene.add(w);
-  const pre = w.onBeforeRender; // skip the reflection/refraction renders during the AO normal pass
-  w.onBeforeRender = (r, s, c) => { if (!s.overrideMaterial) pre(r, s, c); };
+  const pre = w.onBeforeRender, wideCam = new THREE.PerspectiveCamera(); // one per pool: pools render each other, so a shared camera would be overwritten mid-render
+  w.onBeforeRender = (r, s, c) => { // make the reflection and refraction renders with a view OVER times wider than the camera drawing the water
+    wideCam.copy(c); wideCam.projectionMatrix.elements[0] /= OVER; wideCam.projectionMatrix.elements[5] /= OVER; wideCam.projectionMatrixInverse.copy(wideCam.projectionMatrix).invert();
+    w.material.uniforms.uSoft.value = +(c === camera); // the depth used for the soft shore belongs to the main view only
+    pre(r, s, wideCam);
+  };
   return w;
 });
 function ripple(w, x, z, power) { // one 60Hz step of a pool's waves, with a disturbance of the given size at world (x, z)
@@ -424,6 +442,9 @@ composer.addPass(new RenderPass(scene, camera));
 const ao = new GTAOPass(scene, camera, 1, 1);
 ao.updateGtaoMaterial({ radius: .7, distanceExponent: 1.5, thickness: 1, scale: 1.3, samples: 16 });
 composer.addPass(ao);
+const aoRender = ao.render.bind(ao); // the AO pass leaves the water out, so its depth buffer is the pool floor; the water reads it to know how deep it is at each pixel
+ao.render = (...a) => { const on = ponds.map(w => w.visible); for (const w of ponds) w.visible = false; aoRender(...a); ponds.forEach((w, i) => w.visible = on[i]); };
+for (const w of ponds) w.material.uniforms.tDepth.value = ao.depthTexture;
 const look = { exp: zone.exp, shaft: 0, sat: zone.sat, bloom: zone.bloom, fog: zone.fog.clone(), tint: zone.tint.clone() }; // eases toward the current zone's values
 const atmos = new THREE.ShaderMaterial({ // distance fog per zone + sun shafts ray-marched through the sun's shadow map
   uniforms: { tDiffuse: { value: null }, tDepth: { value: ao.depthTexture }, tShadow: { value: sun.shadow.map.texture }, uPI: { value: camera.projectionMatrixInverse }, uCW: { value: camera.matrixWorld },
