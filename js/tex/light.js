@@ -1,25 +1,69 @@
 // Light fittings (for an emitter, t is the emission pattern): the texture sets (GLSL, see docs/materials.md) and the materials made from them.
 import { set, mat } from './registry.js';
 
+// A 600 mm recessed troffer, u across it (two T8 tubes along v): painted steel door frame with a rolled edge, a K12-style lens of
+// 4 mm pyramids that images each tube as a bright dot per prism, a reflector that falls off toward the frame, and what years in a
+// ceiling leave on top of the lens: dust drifted into the gutter, gnats, two flies and a moth seen softened through it.
 set('troffer', .6, 512, 1024, .25, 0, `
-  float tubes = exp(-pow((uv.x - .28) / .1, 2.)) + exp(-pow((uv.x - .72) / .1, 2.));
-  vec2 p = fract(uv * 150.) - .5; // 4 mm prisms
-  float facet = abs(p.x) > abs(p.y) ? sign(p.x) * sign(uv.x < .5 ? .28 - uv.x : .72 - uv.x) : 0.; // faces turned toward a tube catch more of it
-  float frame = 1. - ss(.012, .016, min(uv.x, 1. - uv.x) * .6);
-  h = mix(1.2 * (.5 - max(abs(p.x), abs(p.y))), 2., frame);
-  t = (.22 + .78 * tubes) * (.86 + .22 * facet) * (1. - frame);
-  c = mix(vec3(.84, .84, .82), vec3(.78, .78, .76), frame); r = mix(.2, .45, frame);`);
-set('opal', .5, 512, 512, .3, 0, `
-  vec2 p = fract(uv * 10.) - .5; float led = exp(-dot(p, p) * 9.), mot = fbm(uv * 8., vec2(8), 4, 1); // LEDs on a 5 cm grid, softened by the diffuser
-  t = .42 + .36 * led + .22 * mot; // a diffuser shows what is behind it: LED hot spots and an uneven glow, not a flat white c = vec3(.9); r = .28 + .05 * mot; h = .01 * fbm(uv * 300., vec2(300), 2, 3);`);
+  vec2 p = fract(uv * 150.) - .5, ap = abs(p); // 4 mm prisms
+  float e = min(uv.x, 1. - uv.x) * 600.; // mm to the frame's outer edge
+  float fr = 1. - ss(14., 16., e), gap = ss(14., 15.5, e) * (1. - ss(16.5, 19., e)); // the 15 mm frame return, and the shadow line where the lens sits in it
+  float d1 = (uv.x - .28) * 600., d2 = (uv.x - .72) * 600., dn = abs(d1) < abs(d2) ? d1 : d2; // mm from each tube's axis
+  float glow = exp(-d1 * d1 / 6050.) + exp(-d2 * d2 / 6050.), core = exp(-d1 * d1 / 392.) + exp(-d2 * d2 / 392.); // reflector glow (55 mm), the tube's own image (14 mm)
+  float fall = .55 + .45 * ss(18., 110., e); // the reflector's side wall shades the lens next to the frame
+  float face = (ap.x > ap.y ? -sign(p.x) * sign(dn) : 0.) * ss(0., 30., abs(dn)); // +1: a facet turned toward the nearer tube
+  float spark = exp(-dot(p, p) * 18.) * (core + .35 * glow); // each prism's apex catches the tube
+  float wob = .04 * sin(2. * PI * uv.y + 1.3) * (d1 < d2 ? 1. : -1.); // the two tubes not quite equal, each brighter at one end of its run
+  float dust = ss(.45, .85, fbm(uv * 6., vec2(6), 4, 7)), gut = 1. - ss(20., 90., e); // dust settles on the lens, most in the gutter by the frame
+  float gnat = ss(.8, .95, vn(uv * 300., vec2(300), 13)) * (.25 + .75 * gut) * ss(.3, .6, fbm(uv * 3., vec2(3), 2, 17));
+  float bug = trBug(uv, vec2(.06, .21), .7, 9.) + trBug(uv, vec2(.91, .63), 2.1, 8.) + trBug(uv, vec2(.36, .86), -.4, 22.) * .8;
+  float lens = clamp((.26 + .46 * glow + .22 * core) * fall * (.9 + .22 * face + wob) + .2 * spark, 0., 1.);
+  lens *= (1. - .35 * dust * (.3 + .7 * gut)) * (1. - .45 * gnat) * (1. - .7 * min(bug, 1.));
+  float mac = multi(uv, 3);
+  vec3 ivory = mix(vec3(.78, .75, .66), vec3(.77, .68, .49), .4 * glow); // the acrylic yellows over the tubes
+  vec3 lc = mix(ivory, vec3(.5, .45, .37), .5 * dust * (.4 + .6 * gut) + .4 * gnat);
+  lc = mix(lc, vec3(.07, .055, .045), .85 * min(bug, 1.));
+  float fh = 1.7 + .8 * sqrt(sat(e / 4.)) - .9 * ss(11., 15., e) + .02 * vn(uv * 400., vec2(400), 5); // rolled edge, flat face, return; orange peel
+  float lh = .9 * min(.5 - max(ap.x, ap.y), .44) + .25 * fbm(uv * 3., vec2(3), 3, 9) + .03 * dust - .4 * gap; // prisms, the sheet's slight bow
+  h = mix(lh, fh, fr);
+  t = mix(lens * (1. - .75 * gap), .03, fr); // the frame only catches the lens's spill
+  c = mix(lc, vec3(.70, .68, .62) * (1. + .05 * mac), fr);
+  r = mix(.16 + .25 * dust + .2 * gnat, .42 + .06 * mac, fr);`, `
+  float trBug(vec2 uv, vec2 at, float a, float L) { // a dead insect lying on the lens (L mm long), softened by it
+    vec2 d = (fract(uv - at + .5) - .5) * 600.; d = mat2(cos(a), -sin(a), sin(a), cos(a)) * d;
+    float body = exp(-pow(d.x / (L * .5), 2.) - pow(d.y / (L * .17), 2.));
+    vec2 w = vec2(d.x + L * .05, abs(d.y) - L * .3);
+    return body + .5 * exp(-pow(w.x / (L * .35), 2.) - pow(w.y / (L * .22), 2.)); }`);
+// Opal acrylic over a direct-lit LED board: hot spots on a 50 mm grid, each LED binned a little differently and each strip on its
+// own driver, the sheet's uneven thickness and its milky particle mottle, a faint yellowing and dust.
+set('opal', .5, 512, 256, .3, 0, `
+  vec2 q = uv * 10., id = floor(q), p = fract(q) - .5;
+  float lv = (.88 + .22 * hf(id, 3)) * (.95 + .1 * hf(vec2(id.y, 7.), 5)), led = exp(-dot(p, p) * 7.) * lv;
+  float mot = fbm(uv * 4., vec2(4), 4, 1), grain = vn(uv * 250., vec2(250), 5), dust = ss(.6, .9, fbm(uv * 8., vec2(8), 3, 11));
+  t = (.44 + .34 * led + .2 * mot + .04 * (grain - .5)) * (1. - .12 * dust);
+  c = mix(mix(vec3(.87, .85, .78), vec3(.86, .8, .66), .5 * mot), vec3(.6, .56, .48), .35 * dust);
+  r = .26 + .06 * mot + .15 * dust; h = .015 * fbm(uv * 300., vec2(300), 2, 3) + .01 * dust;`);
+// Acid-etched opal glass: an isotropic frost (globes are box- or triplanar-projected, so nothing directional), thicker and
+// thinner etch in soft patches, a fine sugary grain.
+set('globe', .1, 256, 256, .55, 0, `
+  float mo = fbm(uv * 5., vec2(5), 4, 2), g = vn(uv * 120., vec2(120), 3), g2 = vn(uv * 60., vec2(60), 4);
+  t = .58 + .3 * mo + .1 * (g - .5) + .08 * (g2 - .5);
+  c = mix(vec3(.88, .86, .8), vec3(.86, .82, .72), mo); r = .5 + .1 * g + .05 * mo; h = .015 * g + .01 * g2;`);
+// T8 LED tubes, four around a 75 mm circumference per tile: SMD LEDs on a 10 mm pitch seen through the frosted half, brightest
+// facing out and falling around the cylinder, a clipped seam, the aluminium housing behind.
 set('ledTube', .3, 512, 512, .25, 0, `
-  float p = fract(uv.x * 30.) - .5; t = .7 + .3 * exp(-p * p * 14.); c = vec3(.9); r = .25; h = .08 * (.5 + .5 * sin(uv.y * 2. * PI * 60.));`);
+  float a = (fract(uv.y * 4.) - .5) * 2., hous = ss(.62, .7, abs(a)), seam = exp(-pow((abs(a) - .66) / .025, 2.));
+  float lx = fract(uv.x * 30.) - .5, lv = .85 + .25 * hf(vec2(floor(uv.x * 30.), floor(uv.y * 4.)), 4);
+  float spot = exp(-(lx * lx * 16. + a * a * 6.)) * lv, fr = fbm(uv * 20., vec2(20), 3, 6);
+  t = mix((.38 + .62 * spot) * cos(a * 1.2) * (.97 + .06 * fr), .012, hous) * (1. - .8 * seam);
+  c = mix(vec3(.86, .84, .78), vec3(.42, .42, .41) * (.9 + .2 * fr), hous); m = hous; r = mix(.3, .35 + .1 * fr, hous);
+  h = .6 * hous - .3 * seam + .04 * fr;`);
 
 
 // materials: name, texture set, shader options (see mat.js)
 mat('troffer', 'troffer', { color: 0x6a6a66, emit: [0xffd6a0, 6.5], fine: .004 }); // fine: the 4 mm prisms fade out down a room instead of fringing
-mat('trofferOff', 'troffer', { color: 0x9a9a90 });
+mat('trofferOff', 'troffer', { color: 0xc4c0b2, fine: .004 }); // light tint: the dark tubes show through the lens, not stripes
 mat('opalPanel', 'opal', { color: 0x9a9a96, emit: [0xffd29a, 4.5], fine: .05 });
-mat('ledTube', 'ledTube', { color: 0x9a9a96, emit: [0xffd09a, 5], fine: .01 });
-mat('frostedGlobe', 'opal', { color: 0x9a9a96, emit: [0xffc684, 4.5], fine: .05 });
+mat('ledTube', 'ledTube', { color: 0x9a9a96, emit: [0xffd09a, 8], fine: .01 }); // brighter: the housing third of each tube is dark
+mat('frostedGlobe', 'globe', { color: 0x9a9a96, emit: [0xffc684, 4.7], fine: .002 });
 mat('backlitPanel', 'opal', { color: 0x9a9a96, emit: [0xffd8a8, 3.2], fine: .05 });
