@@ -33,7 +33,8 @@ import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
-import { Water } from 'three/addons/objects/Water2.js';
+import { Reflector } from 'three/addons/objects/Reflector.js';
+import { Refractor } from 'three/addons/objects/Refractor.js';
 import { Sky } from 'three/addons/objects/Sky.js';
 import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -282,7 +283,9 @@ const lamp = (z, x, zc, h = H, on = true, power = 120) => { // ceiling panel on 
   const T = zones.pH.tile;
   box(T, -9.4, -1.4, -23.4, -4, 0, 0); box(T, 5, -1.4, -23.4, 9.4, 0, 0); box(T, -4, -1.4, -6, 5, 0, 0); box(T, -4, -1.4, -23.4, 5, 0, -19); // deck
   box(T, -4, -1.4, -19, 5, -1.2, -6); // basin floor
-  for (let i = 1; i < 4; i++) box(T, -4, -1.2, -6 - .5 * i, 5, -.3 * i, -5.5 - .5 * i); // entry steps
+  // Entry steps. Each block runs on under the decks beside and behind it: the underwater picture looks through the decks, and a
+  // block that stopped at the pool's edge would show its hidden end face there, in front of the real steps.
+  for (let i = 1; i < 4; i++) box(T, -9.39, -1.2, -6 - .5 * i, 9.39, -.3 * i, -.01);
   box(T, -9.4, PH, -23.4, 9.4, PH + .3, 0); // ceiling
   box(T, 9, 0, -23.4, 9.4, PH, -13.2); box(T, 9, 0, -10.8, 9.4, PH, -1); box(T, 9, 2.6, -13.2, 9.4, PH, -10.8); // east wall, door to the arcade
   box(T, -9.4, 0, -1, -1.2, PH, 0); box(T, 1.2, 0, -1, 9.4, PH, 0); box(T, -1.2, 2.2, -1, 1.2, PH, 0); // south wall, door to the backrooms
@@ -319,7 +322,7 @@ const lamp = (z, x, zc, h = H, on = true, power = 120) => { // ceiling panel on 
   const z = zones.pG, T = z.tile, M = z.metal;
   box(T, 18.3, -1.4, 12.4, 20.9, 0, 39.4); box(T, 25.5, -1.4, 12.4, 28.1, 0, 39.4); box(T, 20.9, -1.4, 12.4, 25.5, 0, 16); box(T, 20.9, -1.4, 35, 25.5, 0, 39.4); // deck
   box(T, 20.9, -1.4, 16, 25.5, -1.2, 35); // basin
-  for (let i = 1; i < 4; i++) box(T, 20.9, -1.2, 35 - .5 * i, 25.5, -.3 * i, 35.5 - .5 * i); // steps at the far end
+  for (let i = 1; i < 4; i++) box(T, 18.31, -1.2, 35 - .5 * i, 28.09, -.3 * i, 39.39); // steps at the far end, running on under the decks like the sunlit pool's
   box(T, 18.3, 6, 12.4, 28.1, 6.3, 39.4); // ceiling
   box(T, 18.3, 0, 12.4, 18.7, 6, 39.4); box(T, 27.7, 0, 12.4, 28.1, 6, 39.4); // side walls
   for (const zw of [12.4, 39]) { box(T, 18.7, 0, zw, 22, 6, zw + .4); box(T, 24.4, 0, zw, 27.7, 6, zw + .4); box(T, 22, 2.3, zw, 24.4, 6, zw + .4); } // end walls, each with a door
@@ -377,12 +380,14 @@ for (let i = 0; i <= 20; i++) slide.push([38 + 2.4 * Math.cos(-i * Math.PI / 8),
 tube([...slide, [35.4, .5, -9.5], [33.4, .22, -9.7]], .55, 320, slideMat);
 
 // ---------- water ----------
-// Each pool is a wave-equation simulation on the GPU (the player's legs and landings disturb it) feeding a ray-traced
-// surface: the view ray is reflected and refracted at the simulated normal; the refracted ray is bent by Snell's law and
-// traced to the basin's floor or walls, tinted by how much water it crossed; the reflected ray is followed into the room.
-// What each ray hits is looked up in a planar reflection / refraction render of the real scene. Those renders see OVER
-// times more than the screen, because bent rays near the screen's edges land outside it; without that the bottom stretches.
-// Where the water gets thin against a step, wall or column it fades out, so the shoreline is soft instead of a hard cut.
+// Each pool is a wave-equation simulation on the GPU (the player's legs and landings disturb it) feeding a ray-traced surface.
+// Every frame the main view draws a pool, two extra pictures are made from a camera OVER times wider than the screen
+// (bent rays near the screen's edges land outside it): the room mirrored in the surface, and everything below the surface
+// with its depth. The shader reflects and refracts the view ray at the simulated normal. The refracted ray is bent by Snell's
+// law and marched through that underwater depth until it reaches something, so steps, columns and ladders appear where
+// they really are, tinted by how much water the ray crossed. The march must use the underwater picture's own depth: in the
+// main view the deck hides the pool's near side, and tracing against that smears streaks along the edge.
+// Where the water is thin against a step or wall it fades out, so the shoreline is soft instead of a hard cut.
 const OVER = 1.45;
 const simMat = new THREE.ShaderMaterial({ uniforms: { tSim: { value: null }, uPx: { value: null }, uDrop: { value: V(0, 0, 0) } }, vertexShader: quadVS,
   fragmentShader: `uniform sampler2D tSim; uniform vec2 uPx; uniform vec3 uDrop; varying vec2 vUv;
@@ -392,69 +397,75 @@ const simMat = new THREE.ShaderMaterial({ uniforms: { tSim: { value: null }, uPx
       vec2 d = (vUv - uDrop.xy) / uPx; s.r += uDrop.z * exp(-dot(d, d) / 18.);
       gl_FragColor = s; }` });
 const simQuad = new FullScreenQuad(simMat);
-const waterShader = {
-  name: 'TracedWater',
-  uniforms: { color: { value: null }, reflectivity: { value: 0 }, tReflectionMap: { value: null }, tRefractionMap: { value: null }, tNormalMap0: { value: null }, tNormalMap1: { value: null },
-              textureMatrix: { value: null }, config: { value: new THREE.Vector4() } }, // the names Water2 fills in
-  vertexShader: 'varying vec3 vW; void main() { vec4 w = modelMatrix * vec4(position, 1.); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }',
-  fragmentShader: `#include <packing>
-    uniform sampler2D tReflectionMap, tRefractionMap, tNormalMap0, tNormalMap1, tSim, tDepth;
-    uniform mat4 projectionMatrix; uniform vec4 uPond; uniform vec2 uPx; uniform vec3 color, uScatter; uniform float uFloor, uTime, uSoft; varying vec3 vW;
-    vec2 ndc(vec3 p) { vec4 c = projectionMatrix * viewMatrix * vec4(p, 1.); return c.xy / c.w; }
-    float past(vec3 p) { // how far a point lies behind the nearest surface the camera saw there last frame, water excluded (-1000 if off-screen)
-      vec4 c = projectionMatrix * viewMatrix * vec4(p, 1.); vec2 u = c.xy / c.w * .5 + .5;
-      return any(lessThan(u, vec2(0.))) || any(greaterThan(u, vec2(1.))) ? -1e3 : c.w + perspectiveDepthToViewZ(texture2D(tDepth, u).x, .08, 5000.); }
-    vec2 wide(vec3 p) { return ndc(p) * ${(.5 / OVER).toFixed(5)} + .5; } // a world point's place in the wider reflection / refraction renders
-    vec2 onScreen(vec2 from, vec2 to) { vec2 d = to - from, room = max(mix(from, 1. - from, step(0., d)), 1e-4); return from + sign(d) * room * (1. - exp(-abs(d) / room)); } // rays that would land off-screen are eased toward the edge; clamping smears streaks
+const waterVS = 'varying vec3 vW; void main() { vec4 w = modelMatrix * vec4(position, 1.); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }';
+const waterFS = `uniform sampler2D tMirror, tUnder, tUnderZ, tNormalMap0, tNormalMap1, tSim;
+    uniform mat4 projectionMatrix, uLens; uniform vec4 uPond; uniform vec2 uPx; uniform vec3 uScatter; uniform float uFloor, uTime, uMain; varying vec3 vW;
+    vec4 clip(vec3 p) { return projectionMatrix * viewMatrix * vec4(p, 1.); } // .w is the distance from the camera
+    vec2 wide(vec4 c) { return c.xy / c.w * ${(.5 / OVER).toFixed(5)} + .5; } // a clip position's place in the two wider pictures
+    float seen(vec2 u) { // distance to the nearest underwater surface at that place. The underwater picture's projection is skewed so its near
+      float d = texture2D(tUnderZ, u).x; vec2 q = u * 2. - 1.; // plane lies on the water (that is how it clips), so depth is undone with that matrix's own third row
+      return d > .999999 ? 1e4 : -uLens[3][2] / (uLens[0][2] * q.x / uLens[0][0] + uLens[1][2] * q.y / uLens[1][1] - uLens[2][2] - (d * 2. - 1.)); }
+    bool off(vec2 u) { return any(lessThan(u, vec2(0.))) || any(greaterThan(u, vec2(1.))); }
+    vec2 onScreen(vec2 from, vec2 to) { vec2 d = to - from, room = max(mix(from, 1. - from, step(0., d)), 1e-4); return from + sign(d) * room * (1. - exp(-abs(d) / room)); } // a lookup that would leave the picture is eased toward its edge; clamping smears streaks
     void main() {
-      // metres of water between this bit of surface and whatever lies behind it, from last frame's water-free depth
-      float gap = (viewMatrix * vec4(vW, 1.)).z - perspectiveDepthToViewZ(texture2D(tDepth, ndc(vW) * .5 + .5).x, .08, 5000.);
-      float body = mix(1., smoothstep(0., .1, gap), uSoft); // 0 at the shore, 1 in open water
+      vec4 c0 = clip(vW); vec2 here = wide(c0);
+      float gap = mix(9., seen(here) - c0.w, uMain); // metres of water between this bit of surface and what lies under it
+      float body = smoothstep(0., .1, gap); // 0 at the shore, 1 in open water
       vec2 s = (vW.xz - uPond.xy) / (uPond.zw - uPond.xy);
       float hx = texture2D(tSim, s - vec2(uPx.x, 0.)).r - texture2D(tSim, s + vec2(uPx.x, 0.)).r, hz = texture2D(tSim, s - vec2(0., uPx.y)).r - texture2D(tSim, s + vec2(0., uPx.y)).r;
       vec2 calm = (texture2D(tNormalMap0, vW.xz * .23 + uTime * vec2(.011, .007)).rg + texture2D(tNormalMap1, vW.xz * .37 - uTime * vec2(.009, .013)).rg - 1.) * .09; // water is never glass-flat
       vec3 n = normalize(vec3((hx * 10. + calm.x) * body, 1., (hz * 10. + calm.y) * body)), V = normalize(cameraPosition - vW);
-      vec3 R = reflect(-V, n); R.y = -max(R.y, .03); // mirrored: the planar render shows the room upside-down below the surface
-      vec2 here = wide(vW), ru = onScreen(here, wide(vW + R * 9.));
-      ru.x = 1. - ru.x; vec2 o = vec2(.0016, 0.); // four taps: a real surface is never a perfect mirror
-      vec3 refl = (texture2D(tReflectionMap, ru + o.xy).rgb + texture2D(tReflectionMap, ru - o.xy).rgb + texture2D(tReflectionMap, ru + o.yx).rgb + texture2D(tReflectionMap, ru - o.yx).rgb) * .25;
+      vec3 R = reflect(-V, n); R.y = -max(R.y, .03); // mirrored: the mirror picture shows the room upside-down below the surface
+      vec2 ru = onScreen(here, wide(clip(vW + R * 9.))), o = vec2(.0016, 0.); ru.x = 1. - ru.x; // four taps: a real surface is never a perfect mirror
+      vec3 refl = (texture2D(tMirror, ru + o.xy).rgb + texture2D(tMirror, ru - o.xy).rgb + texture2D(tMirror, ru + o.yx).rgb + texture2D(tMirror, ru - o.yx).rgb) * .25;
       vec3 T = refract(-V, n, .75); // air to water
       vec2 tw = mix(vW.xz - uPond.xy, uPond.zw - vW.xz, step(0., T.xz)) / (abs(T.xz) + 1e-5);
-      float t = clamp(min((uFloor - vW.y) / min(T.y, -.001), min(tw.x, tw.y)), 0., 30.); // distance to the basin floor or nearest wall; never negative, or exp() below overflows
-      if (uSoft > .5) { // a basin is not a plain box (steps, columns, a ladder): march the bent ray through the real depth and stop at the first thing it reaches
+      float t = clamp(min((uFloor - vW.y) / min(T.y, -.001), min(tw.x, tw.y)), 0., 30.); // furthest the ray can go: the basin's floor or wall. Never negative, or exp() below overflows
+      if (uMain > .5) { // march it through the underwater depth and stop at the first thing it reaches
         float lo = 0., hi = t; bool found = false;
-        for (int i = 1; i <= 16; i++) { float ti = t * float(i) / 16., b = past(vW + T * ti);
-          if (b < -999.) break; // off-screen: nothing to test against, keep the box answer
-          if (b > 0. && b < 1.5 + t * .15) { hi = ti; found = true; break; } // behind something, and not so far behind that it merely passed a thin object
+        for (int i = 1; i <= 24; i++) { float ti = t * float(i) / 24.; vec4 c = clip(vW + T * ti); vec2 u = wide(c);
+          if (off(u)) break; // left the picture: keep the basin answer
+          float b = c.w - seen(u);
+          if (b > 0. && b < .6 + t * .1) { hi = ti; found = true; break; } // behind a surface, and not so far behind that it only passed something thin
           lo = ti; }
-        if (found) { for (int i = 0; i < 5; i++) { float tm = .5 * (lo + hi); if (past(vW + T * tm) > 0.) hi = tm; else lo = tm; } t = hi; }
+        if (found) { for (int i = 0; i < 5; i++) { float tm = .5 * (lo + hi); vec4 c = clip(vW + T * tm); if (c.w - seen(wide(c)) > 0.) hi = tm; else lo = tm; } t = hi; }
       }
-      vec3 refr = texture2D(tRefractionMap, onScreen(here, wide(vW + T * t))).rgb * exp(-vec3(.42, .085, .06) * t) * color; // red is absorbed first
+      vec3 refr = texture2D(tUnder, onScreen(here, wide(clip(vW + T * t)))).rgb * exp(-vec3(.42, .085, .06) * t); // red is absorbed first
       refr += uScatter * (1. - exp(-.3 * t)); // and the water itself scatters the room's light back, giving deep water a pale body
       vec3 col = mix(refr, refl, .02 + .98 * pow(1. - max(dot(V, n), 0.), 5.));
-      col = mix(texture2D(tRefractionMap, here).rgb, col, body); // thin water shows what is behind it, unbent and untinted
-      col += refl * .3 * smoothstep(0., .015, gap) * (1. - smoothstep(.015, .06, gap)) * uSoft; // a wet glint along the contact line
+      col = mix(texture2D(tUnder, here).rgb, col, body); // thin water shows what is under it, unbent and untinted
+      col += refl * .3 * smoothstep(0., .015, gap) * (1. - smoothstep(.015, .06, gap)); // a wet glint along the contact line
       gl_FragColor = vec4(col, 1.);
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
-    }`,
-};
+    }`;
 const ponds = [ // x1, z1, x2, z2, floor height, zone, zones it is drawn from, scattered light
   [-4, -19, 5, -6, -1.2, 'pH', ['bA', 'pH', 'pC', 'pN'], [.08, .18, .17]], [9.4, -14.4, 24, -9.6, -.3, 'pC', ['pH', 'pC', 'pN'], [.003, .01, .009]],
   [24, -21, 42, -3, -1.2, 'pN', ['pC', 'pN', 'bC'], [.003, .01, .009]], [20.9, 16, 25.5, 35, -1.2, 'pG', ['bC', 'pG', 'pV'], [.08, .17, .15]],
   [12, 40.2, 36, 63, -.6, 'pV', ['pG', 'pV'], [.006, .012, .016]],
 ].map(([x1, z1, x2, z2, floor, zid, seen, scatter]) => {
-  const w = new Water(new THREE.PlaneGeometry(x2 - x1, z2 - z1), { color: 0xffffff, textureWidth: 1280, textureHeight: 1280, normalMap0: wn0, normalMap1: wn1, shader: waterShader });
+  const g = new THREE.PlaneGeometry(x2 - x1, z2 - z1), size = { textureWidth: 1280, textureHeight: 1280, multisample: 0 };
+  const mirror = new Reflector(g, size), lens = new Refractor(g, size), under = lens.getRenderTarget(); // three's own mirror render, and its render of only what lies below the plane
+  under.depthTexture = new THREE.DepthTexture(1280, 1280, THREE.FloatType); // kept, so rays can be traced through what is under the water
   const rt = () => new THREE.WebGLRenderTarget(Math.round((x2 - x1) * 20), Math.round((z2 - z1) * 20), { type: THREE.HalfFloatType, depthBuffer: false }); // 5cm cells
-  Object.assign(w, { seen, rect: new THREE.Vector4(x1, z1, x2, z2), px: new THREE.Vector2(.05 / (x2 - x1), .05 / (z2 - z1)), sim: [rt(), rt()], tileU: zones[zid].tileU });
-  Object.assign(w.material.uniforms, { tSim: { value: w.sim[0].texture }, uPond: { value: w.rect }, uPx: { value: w.px }, uFloor: { value: floor }, uTime, tDepth: { value: null }, uSoft: { value: 0 }, uScatter: { value: V(...scatter) } });
-  w.tileU.uSim.value = w.sim[0].texture; w.tileU.uPond.value = w.rect; w.tileU.uPx.value = w.px;
+  const sim = [rt(), rt()], rect = new THREE.Vector4(x1, z1, x2, z2), px = new THREE.Vector2(.05 / (x2 - x1), .05 / (z2 - z1));
+  const U = { tMirror: { value: mirror.getRenderTarget().texture }, tUnder: { value: under.texture }, tUnderZ: { value: under.depthTexture }, uLens: { value: lens.camera.projectionMatrix }, tNormalMap0: { value: wn0 }, tNormalMap1: { value: wn1 },
+              tSim: { value: sim[0].texture }, uPond: { value: rect }, uPx: { value: px }, uFloor: { value: floor }, uScatter: { value: V(...scatter) }, uMain: { value: 0 }, uTime };
+  const w = new THREE.Mesh(g, new THREE.ShaderMaterial({ uniforms: U, vertexShader: waterVS, fragmentShader: waterFS, transparent: true }));
+  Object.assign(w, { seen, rect, px, sim, tileU: zones[zid].tileU });
+  w.tileU.uSim.value = sim[0].texture; w.tileU.uPond.value = rect; w.tileU.uPx.value = px;
   w.rotation.x = -Math.PI / 2; w.position.set((x1 + x2) / 2, WY, (z1 + z2) / 2); scene.add(w);
-  const pre = w.onBeforeRender, wideCam = new THREE.PerspectiveCamera(); // one per pool: pools render each other, so a shared camera would be overwritten mid-render
-  w.onBeforeRender = (r, s, c) => { // make the reflection and refraction renders with a view OVER times wider than the camera drawing the water
+  mirror.matrixAutoUpdate = lens.matrixAutoUpdate = false;
+  const wideCam = new THREE.PerspectiveCamera();
+  w.onBeforeRender = (r, s, c) => {
+    U.uMain.value = +(c === camera);
+    if (c !== camera) return; // only the main view makes the two pictures
     wideCam.copy(c); wideCam.projectionMatrix.elements[0] /= OVER; wideCam.projectionMatrix.elements[5] /= OVER; wideCam.projectionMatrixInverse.copy(wideCam.projectionMatrix).invert();
-    w.material.uniforms.uSoft.value = +(c === camera); // the depth used for the soft shore belongs to the main view only
-    pre(r, s, wideCam);
+    const on = ponds.map(q => q.visible); // every pool is at the same level, so none belongs in another's mirror or underwater picture
+    for (const q of ponds) q.visible = false;
+    mirror.matrixWorld.copy(w.matrixWorld); mirror.onBeforeRender(r, s, wideCam);
+    sky.visible = false; lens.matrixWorld.copy(w.matrixWorld); lens.onBeforeRender(r, s, wideCam); sky.visible = true; // the sky ignores the clip and would fill the gaps
+    ponds.forEach((q, i) => q.visible = on[i]);
   };
   return w;
 });
@@ -509,7 +520,7 @@ function bake(z, mats = z.mats, k = z.k) {
   const env = pmrem.fromCubemap(cubeRT.texture).texture;
   for (const m of mats) { m.envMap = env; m.envMapIntensity = k; m.needsUpdate = true; }
 }
-for (const w of ponds) w.visible = false; // Water2's nested render would reset the active cube face
+for (const w of ponds) w.visible = false; // a pool's nested renders would reset the active cube face
 bake({ probe: V(-200, 3, -12) }, [seaMat], 1);
 for (let pass = 0; pass < 2; pass++) for (const z of Object.values(zones)) bake(z); // second pass picks up the first bounce, including through doorways
 let zone = Object.values(zones).find(z => inR(camera.position.x, camera.position.z, ...z.box)) || zones.bA;
@@ -521,9 +532,8 @@ composer.addPass(new RenderPass(scene, camera));
 const ao = new GTAOPass(scene, camera, 1, 1);
 ao.updateGtaoMaterial({ radius: .9, distanceExponent: 1.5, thickness: 1, scale: 1.3, samples: 16 });
 composer.addPass(ao);
-const aoRender = ao.render.bind(ao); // the AO pass leaves the water out, so its depth buffer is the pool floor; the water reads it to know how deep it is at each pixel
+const aoRender = ao.render.bind(ao); // the AO pass leaves the water out: its normals and depth then describe the pool floor, and the water isn't asked to re-render its pictures
 ao.render = (...a) => { const on = ponds.map(w => w.visible); for (const w of ponds) w.visible = false; aoRender(...a); ponds.forEach((w, i) => w.visible = on[i]); };
-for (const w of ponds) w.material.uniforms.tDepth.value = ao.depthTexture;
 const look = { exp: zone.exp, shaft: 0, sat: zone.sat, bloom: zone.bloom, fog: zone.fog.clone(), tint: zone.tint.clone() }; // eases toward the current zone's values
 const atmos = new THREE.ShaderMaterial({ // distance fog per zone + sun shafts ray-marched through the sun's shadow map
   uniforms: { tDiffuse: { value: null }, tDepth: { value: ao.depthTexture }, tShadow: { value: sun.shadow.map.texture }, uPI: { value: camera.projectionMatrixInverse }, uCW: { value: camera.matrixWorld },
@@ -566,9 +576,6 @@ function resize() {
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight); composer.setPixelRatio(renderer.getPixelRatio()); composer.setSize(innerWidth, innerHeight);
-  // The water samples the AO pass's depth texture earlier in the frame than that pass re-creates it. Told its new size here, it is
-  // re-created correctly; otherwise it comes back at the old size and the AO framebuffer is incomplete from then on.
-  Object.assign(ao.depthTexture.image, { width: ao.normalRenderTarget.width, height: ao.normalRenderTarget.height });
 }
 addEventListener('resize', resize); resize();
 
