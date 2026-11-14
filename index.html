@@ -401,6 +401,9 @@ const waterShader = {
     uniform sampler2D tReflectionMap, tRefractionMap, tNormalMap0, tNormalMap1, tSim, tDepth;
     uniform mat4 projectionMatrix; uniform vec4 uPond; uniform vec2 uPx; uniform vec3 color, uScatter; uniform float uFloor, uTime, uSoft; varying vec3 vW;
     vec2 ndc(vec3 p) { vec4 c = projectionMatrix * viewMatrix * vec4(p, 1.); return c.xy / c.w; }
+    float past(vec3 p) { // how far a point lies behind the nearest surface the camera saw there last frame, water excluded (-1000 if off-screen)
+      vec4 c = projectionMatrix * viewMatrix * vec4(p, 1.); vec2 u = c.xy / c.w * .5 + .5;
+      return any(lessThan(u, vec2(0.))) || any(greaterThan(u, vec2(1.))) ? -1e3 : c.w + perspectiveDepthToViewZ(texture2D(tDepth, u).x, .08, 5000.); }
     vec2 wide(vec3 p) { return ndc(p) * ${(.5 / OVER).toFixed(5)} + .5; } // a world point's place in the wider reflection / refraction renders
     vec2 onScreen(vec2 from, vec2 to) { vec2 d = to - from, room = max(mix(from, 1. - from, step(0., d)), 1e-4); return from + sign(d) * room * (1. - exp(-abs(d) / room)); } // rays that would land off-screen are eased toward the edge; clamping smears streaks
     void main() {
@@ -418,6 +421,14 @@ const waterShader = {
       vec3 T = refract(-V, n, .75); // air to water
       vec2 tw = mix(vW.xz - uPond.xy, uPond.zw - vW.xz, step(0., T.xz)) / (abs(T.xz) + 1e-5);
       float t = clamp(min((uFloor - vW.y) / min(T.y, -.001), min(tw.x, tw.y)), 0., 30.); // distance to the basin floor or nearest wall; never negative, or exp() below overflows
+      if (uSoft > .5) { // a basin is not a plain box (steps, columns, a ladder): march the bent ray through the real depth and stop at the first thing it reaches
+        float lo = 0., hi = t; bool found = false;
+        for (int i = 1; i <= 16; i++) { float ti = t * float(i) / 16., b = past(vW + T * ti);
+          if (b < -999.) break; // off-screen: nothing to test against, keep the box answer
+          if (b > 0. && b < 1.5 + t * .15) { hi = ti; found = true; break; } // behind something, and not so far behind that it merely passed a thin object
+          lo = ti; }
+        if (found) { for (int i = 0; i < 5; i++) { float tm = .5 * (lo + hi); if (past(vW + T * tm) > 0.) hi = tm; else lo = tm; } t = hi; }
+      }
       vec3 refr = texture2D(tRefractionMap, onScreen(here, wide(vW + T * t))).rgb * exp(-vec3(.42, .085, .06) * t) * color; // red is absorbed first
       refr += uScatter * (1. - exp(-.3 * t)); // and the water itself scatters the room's light back, giving deep water a pale body
       vec3 col = mix(refr, refl, .02 + .98 * pow(1. - max(dot(V, n), 0.), 5.));
