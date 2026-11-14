@@ -6,4 +6,5 @@ import { frame } from './player.js';
 import './dev.js';
 
 const clock = new THREE.Clock();
-renderer.setAnimationLoop(() => { const dt = Math.min(clock.getDelta(), .05); if (window.dev?.hold) return; frame(dt); if (window.dev) dev.ready = true; });
+let drawn = false;
+renderer.setAnimationLoop(() => { const dt = Math.min(clock.getDelta(), .05); if (window.dev?.hold) return; frame(dt); if (!drawn) drawn = performance.mark('load: first frame'); if (window.dev) dev.ready = true; });

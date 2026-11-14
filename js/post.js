@@ -27,13 +27,13 @@ composer.addPass(ao);
 const aoRender = ao.render.bind(ao); // the AO pass leaves the water out: its normals and depth then describe the pool floor, and the water isn't asked to re-render its pictures
 const noAO = [...ponds, ...seeThrough]; // and anything else see-through
 ao.render = (...a) => { const on = noAO.map(w => w.visible); for (const w of noAO) w.visible = false; aoRender(...a); noAO.forEach((w, i) => w.visible = on[i]); };
+const ahead = []; // programs compiling in parallel, awaited together once the passes are set up
 { // the AO pass draws every mesh in its normal material: compile that now in each kind of mesh there is (plain, instanced, instanced
   // with colours), not on the frame the ball pit first comes into view
   const was = []; scene.traverse(o => { if (o.isMesh) { was.push([o, o.material]); o.material = ao.normalMaterial; } });
   renderer.setRenderTarget(ao.normalRenderTarget);
-  const compiled = (async () => renderer.compileAsync?.(scene, camera))(); // the materials are collected now, synchronously
+  ahead.push((async () => renderer.compileAsync?.(scene, camera))()); // the materials are collected now, synchronously
   renderer.setRenderTarget(null); for (const [o, m] of was) o.material = m; // so put them back before awaiting: other modules run meanwhile and must not see the swap
-  try { await compiled; } catch (e) { console.warn('compiling ahead failed, compiling as drawn instead', e); }
 }
 const look = { exp: zone.exp, shaft: 0, sat: zone.sat, bloom: zone.bloom, fog: zone.fog.clone(), tint: zone.tint.clone() }; // eases toward the current zone's values
 const atmos = new THREE.ShaderMaterial({ // distance fog per zone + sun shafts ray-marched through the sun's shadow map
@@ -81,5 +81,14 @@ function resize() {
   renderer.setSize(innerWidth, innerHeight); composer.setPixelRatio(renderer.getPixelRatio()); composer.setSize(innerWidth, innerHeight); msaa.setSize(innerWidth * renderer.getPixelRatio(), innerHeight * renderer.getPixelRatio());
 }
 addEventListener('resize', resize); resize();
+{ // and every program the passes draw with, for the target each draws into: found by one frame through the composer with the
+  // draws left out (passes set their defines as they render), not compiled one after another on the first frame
+  // (each draw's materials collected as it is asked for: the full-screen passes share one quad and swap its material)
+  const draw = renderer.render;
+  renderer.render = (s, c) => { ahead.push((async () => renderer.compileAsync?.(s, c))()); };
+  try { composer.render(0); } finally { renderer.render = draw; renderer.setRenderTarget(null); }
+  try { await Promise.all(ahead); } catch (e) { console.warn('compiling ahead failed, compiling as drawn instead', e); }
+}
+performance.mark('load: passes compiled');
 
 export { composer, ao, look, atmos, bloom, film };

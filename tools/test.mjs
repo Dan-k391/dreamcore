@@ -87,10 +87,14 @@ solids.forEach(([name, , ok], k) => { const got = loose.result?.[k]; let pass = 
 const cost = run(base + '?dev#702.5,649.4,1.5708,-0.2', `(() => { dev.hold = true; dev.step(2); const look = dev.info().calls, p0 = dev.renderer.info.programs.length;
   for (const z of Object.values(dev.zones)) for (const yaw of [0, 1.57, 3.14, 4.71]) dev.go(z.probe.x, z.probe.z, yaw);
   const P = Math.PI, R = ['KeyW', 'ShiftLeft']; dev.go(3.8, 50.5, P, R, 6); dev.go(3.8, 668, 0, R, 5); dev.go(65.5, 14, -P / 2, R, 6); dev.go(683, 14, P / 2, R, 5); dev.go(34, 49.4, -P / 2, R, 7); dev.go(652, 649.4, P / 2, R, 5);
-  return { look, p0, p1: dev.renderer.info.programs.length }; })()`);
+  return { look, p0, p1: dev.renderer.info.programs.length, load: dev.readyAt, bake: Math.round(dev.lib.ms) }; })()`);
 check('cost page loads without console errors', !cost.errors.length, cost.errors.join(' | ').slice(0, 600));
 check('only the terrace is drawn at the terrace lookout (under 80 draw calls)', cost.result?.look < 80, JSON.stringify(cost.result));
 check('no shader compiles after load on a tour of every zone and passage', cost.result && cost.result.p1 === cost.result.p0, JSON.stringify(cost.result));
+// Load guards, loose enough for a shared GPU and a cold CDN: the library bake (every showroom set too) took 3.5 s when its
+// programs compiled again, one by one, on first draw; it takes about 0.5 s with them compiled ahead
+check('the material library bakes in under 2 s', cost.result?.bake < 2000, JSON.stringify(cost.result));
+check('dev mode is ready in under 30 s', cost.result?.load < 30000, JSON.stringify(cost.result));
 
 // Production address: no window.dev, the start overlay is up once the level is built.
 const prod = run(base, `await new Promise(ok => { const t = setInterval(() => /click to enter/.test(document.getElementById('s').textContent) && (clearInterval(t), ok()), 100); }),

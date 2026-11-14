@@ -14,6 +14,7 @@ const noise = (x, y, p) => { // tileable value noise, integer period p
 const fbm = (u, v, p, o) => { let a = 0, k = .5; for (let i = 0; i < o; i++, p *= 2, k *= .5) a += k * noise(u * p, v * p, p); return a; };
 const ss = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 const maxA = renderer.capabilities.getMaxAnisotropy();
+if (new URLSearchParams(location.search).has('dev')) import('three/addons/geometries/RoundedBoxGeometry.js'); // the showroom's, fetched now: its import starts only once every place is built
 
 // fn(u, v, px, py) -> [r, g, b, height, roughness]; texture covers `meters` of world space
 function makeTex(n, meters, fn, bump = 1) {
@@ -107,29 +108,33 @@ const pass2B = new THREE.ShaderMaterial({ glslVersion: THREE.GLSL3, vertexShader
 async function bakeLibrary() { // run once, after every place has asked for its materials and before anything is drawn (level.js)
   if (!queue.length) return;
   const t0 = performance.now(), list = queue.splice(0), N = Math.max(...list.map(s => Math.max(s.a, s.b)));
-  const scratch = new THREE.WebGLRenderTarget(N, N, { count: 2, type: THREE.FloatType, depthBuffer: false, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
-  for (const s of list) s.p1 = new THREE.ShaderMaterial({ glslVersion: THREE.GLSL3, vertexShader: quadVS, uniforms: { tR: { value: tR }, uOne: { value: 1 } }, fragmentShader: `precision highp float; precision highp int;
-    varying vec2 vUv; layout(location = 0) out highp vec4 o0; layout(location = 1) out highp vec4 o1;
+  // Two single targets, the set's shader drawn once into each (uOut picks what it writes), not one two-target draw: ANGLE on
+  // D3D11 compiles a program ahead (compileAsync, in parallel) only for its first output, so a two-output program was compiled
+  // again, one after another, on its first draw (30-250 ms a set). Drawing it twice costs a few ms; the texels are the same.
+  const sc0 = () => new THREE.WebGLRenderTarget(N, N, { type: THREE.FloatType, depthBuffer: false, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
+  const scratch = [sc0(), sc0()];
+  for (const s of list) s.p1 = new THREE.ShaderMaterial({ glslVersion: THREE.GLSL3, vertexShader: quadVS, uniforms: { tR: { value: tR }, uOne: { value: 1 }, uOut: { value: 0 } }, fragmentShader: `precision highp float; precision highp int;
+    varying vec2 vUv; uniform int uOut; layout(location = 0) out highp vec4 o0;
     #define SZ ${s.m.toFixed(4)}
     #define NPX ${Math.max(s.a, s.b).toFixed(1)}
     ${GLIB}\n${s.glsl}
-    void main() { vec3 c = vec3(.5); float h = 0., r = .5, m = 0., t = 1.; surf(vUv, c, h, r, m, t); o0 = vec4(c, h); o1 = vec4(r, m, t, 0.); }` });
+    void main() { vec3 c = vec3(.5); float h = 0., r = .5, m = 0., t = 1.; surf(vUv, c, h, r, m, t); o0 = uOut == 0 ? vec4(c, h) : vec4(r, m, t, 0.); }` });
   const sc = new THREE.Scene(), quad = new FullScreenQuad();
   for (const m of [...list.map(s => s.p1), pass2A, pass2B]) { const q = new THREE.Mesh(quad._mesh.geometry, m); q.frustumCulled = false; sc.add(q); }
-  renderer.setRenderTarget(scratch); // the programs must be made for drawing into a target, as they will be
+  renderer.setRenderTarget(scratch[0]); // the programs must be made for drawing into a target, as they will be
   await renderer.compileAsync(sc, new THREE.Camera()); // all at once, in parallel where the browser can
-  libStats.compileMs += performance.now() - t0;
-  const u = pass2A.uniforms; u.t0.value = scratch.textures[0]; u.t1.value = scratch.textures[1];
+  libStats.compileMs += performance.now() - t0; performance.mark('load: library compiled');
+  const u = pass2A.uniforms; u.t0.value = scratch[0].texture; u.t1.value = scratch[1].texture;
   for (const s of list) {
-    const n = Math.max(s.a, s.b); scratch.viewport.set(0, 0, n, n);
-    renderer.setRenderTarget(scratch); quad.material = s.p1; quad.render(renderer);
+    const n = Math.max(s.a, s.b); quad.material = s.p1;
+    for (let k = 0; k < 2; k++) { scratch[k].viewport.set(0, 0, n, n); s.p1.uniforms.uOut.value = k; renderer.setRenderTarget(scratch[k]); quad.render(renderer); }
     u.uN.value = n; u.uMM.value = s.m * 1000 / n; u.uCav.value = s.cav;
     if (s.A) { u.uK.value = n / s.a; renderer.setRenderTarget(s.A); quad.material = pass2A; quad.render(renderer); }
     u.uK.value = n / s.b; renderer.setRenderTarget(s.B); quad.material = pass2B; quad.render(renderer);
     s.p1.dispose(); delete s.p1;
     libStats.bytes += ((s.a * s.a) + s.b * s.b) * 4 * 1.33; libStats.sets++;
   }
-  renderer.setRenderTarget(null); scratch.dispose(); pass2A.dispose(); pass2B.dispose(); quad.dispose(); // three remakes them if a later bake needs them
+  renderer.setRenderTarget(null); for (const t of scratch) t.dispose(); pass2A.dispose(); pass2B.dispose(); quad.dispose(); // three remakes them if a later bake needs them
   libStats.programs += list.length + 2;
   libStats.ms += performance.now() - t0;
 }

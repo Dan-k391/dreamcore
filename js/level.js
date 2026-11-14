@@ -23,5 +23,6 @@ import './zones/terrace.js';
 import './zones/sea.js';
 if (new URLSearchParams(location.search).has('dev')) await import('./zones/showroom.js'); // the material showroom: test builds only
 
+performance.mark('load: places built'); // the load's phases, for a profile or performance.getEntriesByType('mark')
 merge();
-await bakeLibrary(); // every library texture the places asked for, on the GPU, before anything is drawn
+await bakeLibrary(); performance.mark('load: library baked'); // every library texture the places asked for, on the GPU, before anything is drawn
