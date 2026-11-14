@@ -48,9 +48,9 @@ scene.traverse(o => { shown.push([o, o.visible]); o.visible = true; });
 renderer.setRenderTarget(cubeRT);
 const compiled = (async () => renderer.compileAsync?.(scene, camera))(); // (a throw becomes a rejection) the GPU compiles them while the rest goes on
 renderer.setRenderTarget(null);
+for (const [o, v] of shown) o.visible = v; // collected synchronously above: restored before the await, while other modules run
 if (ponds.length) ripple(ponds[0], []); // and the wave step's program, by one step of still water (which stays still), not when a pool first comes into view
 try { await compiled; } catch (e) { console.warn('compiling ahead failed, compiling as drawn instead', e); }
-for (const [o, v] of shown) o.visible = v;
 for (const w of ponds) w.visible = false; // a pool's nested renders would reset the active cube face
 bake({ probe: V(-200, 3, -12) }, [seaMat], 1);
 for (let pass = 0; pass < 2; pass++) for (const z of Object.values(zones)) { // second pass picks up the first bounce, including through doorways

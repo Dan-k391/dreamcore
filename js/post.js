@@ -31,8 +31,9 @@ ao.render = (...a) => { const on = noAO.map(w => w.visible); for (const w of noA
   // with colours), not on the frame the ball pit first comes into view
   const was = []; scene.traverse(o => { if (o.isMesh) { was.push([o, o.material]); o.material = ao.normalMaterial; } });
   renderer.setRenderTarget(ao.normalRenderTarget);
-  try { if (renderer.compileAsync) await renderer.compileAsync(scene, camera); } catch (e) { console.warn('compiling ahead failed, compiling as drawn instead', e); }
-  renderer.setRenderTarget(null); for (const [o, m] of was) o.material = m;
+  const compiled = (async () => renderer.compileAsync?.(scene, camera))(); // the materials are collected now, synchronously
+  renderer.setRenderTarget(null); for (const [o, m] of was) o.material = m; // so put them back before awaiting: other modules run meanwhile and must not see the swap
+  try { await compiled; } catch (e) { console.warn('compiling ahead failed, compiling as drawn instead', e); }
 }
 const look = { exp: zone.exp, shaft: 0, sat: zone.sat, bloom: zone.bloom, fog: zone.fog.clone(), tint: zone.tint.clone() }; // eases toward the current zone's values
 const atmos = new THREE.ShaderMaterial({ // distance fog per zone + sun shafts ray-marched through the sun's shadow map
