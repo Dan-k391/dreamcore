@@ -1,0 +1,594 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>dreamcore</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden }
+  canvas { display: block }
+  #o { position: fixed; inset: 0; width: 100%; border: 0; color: #fff; background: rgba(0,0,0,.4); cursor: pointer;
+       font: 300 14px/2 Georgia, serif; letter-spacing: .22em; text-shadow: 0 0 14px #000 }
+  #h { position: fixed; left: 0; right: 0; bottom: 20px; text-align: center; pointer-events: none; color: #fff;
+       font: 13px Georgia, serif; letter-spacing: .12em; text-shadow: 0 0 8px #000 }
+  #x { position: fixed; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px; border-radius: 50%; background: rgba(255,255,255,.55); pointer-events: none }
+  .e { position: fixed; top: 0; bottom: 0; left: 0; width: 7%; pointer-events: none; opacity: 0; transition: opacity .2s; background: linear-gradient(90deg, rgba(255,255,255,.14), transparent) }
+  #eR { left: auto; right: 0; transform: scaleX(-1) }
+  #o b { display: block; font-weight: 300; font-size: 46px; letter-spacing: .55em; margin-left: .55em }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<div id="h" hidden>this preview pane blocks mouse capture — move the mouse to look; the lit strip at the left or right edge keeps turning · open in Chrome or Edge for full mouse look</div>
+<div id="x" hidden></div><div id="eL" class="e"></div><div id="eR" class="e"></div>
+<button id="o"><b>dreamcore</b><span id="s">loading…</span></button>
+<script type="module">
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { Water } from 'three/addons/objects/Water2.js';
+import { Sky } from 'three/addons/objects/Sky.js';
+import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+
+// Anything outside a light's shadow frustum counts as shadowed instead of lit. The sun's shadow map then only has to
+// cover the one hall it shines into; every enclosed zone is dark to it for free.
+THREE.ShaderChunk.shadowmap_pars_fragment = THREE.ShaderChunk.shadowmap_pars_fragment.replace('float shadow = 1.0;', 'float shadow = 0.0;');
+
+const renderer = new THREE.WebGLRenderer({ powerPreference: 'high-performance' });
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false; // static level: a shadow map is re-rendered only when its light moves
+document.body.append(renderer.domElement);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(72, 1, .08, 5000);
+const spawn = location.hash.slice(1).split(',').map(Number), spawned = spawn.length > 1 && spawn.every(isFinite); // optional #x,z,yaw,pitch: start anywhere (used for stage photos)
+camera.position.set(spawned ? spawn[0] : 1.9, 1.62, spawned ? spawn[1] : 20);
+if (spawned) camera.rotation.set(spawn[3] || 0, spawn[2] || 0, 0, 'YXZ');
+const uTime = { value: 0 }, V = (x, y, z) => new THREE.Vector3(x, y, z);
+const quadVS = 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0., 1.); }';
+const H = 2.7, PH = 5, WY = -0.12; // backrooms ceiling, pool hall ceiling, water level (shared by every pool)
+
+// ---------- zones: each has its own materials, ambient probe, exposure, fog, grade and room tone ----------
+const warm = { grp: 'b', k: 1.2, exp: .36, fog: [.55, .45, .2, .002], tint: [1.02, 1, .96], sat: 1, bloom: .3, shaft: 0, hum: 1, water: 0, wet: .15 };
+const dark = { grp: 'd', k: .6, fog: [.006, .02, .018, .004], tint: [1, 1, .98], sat: 1, shaft: 0, hum: 0, water: 1, band: 1.15, bandCol: [.05, .3, .28] };
+const zones = {
+  bA: { ...warm, box: [-9.4, 0, 9.4, 21.4], probe: [0, 1.5, 11] },
+  bB: { ...warm, box: [-33.4, .6, -9.4, 21.4], probe: [-21.3, 1.7, 13] },
+  bC: { ...warm, box: [9.4, .4, 36.8, 12.4], probe: [23.4, 1.5, 10.8], wet: .3 },
+  pH: { grp: 'h', k: 1.25, exp: .34, fog: [.7, .82, .95, .0015], tint: [1, 1, 1.02], sat: 1.08, bloom: .35, shaft: 1, hum: 0, water: 1, wet: .5,
+        box: [-9.4, -23.4, 9.4, 0], probe: [.5, 2.2, -12.5], env: [[-9, -1.4, -23], [9, 5, -1]], band: -99, bandCol: [1, 1, 1], shimmer: .25 },
+  pC: { ...dark, exp: .26, bloom: .3, wet: .6, box: [9.4, -14.8, 21, -9.2], probe: [15.2, 1.6, -12], env: [[9.4, -.3, -14.8], [21, 3.6, -9.2]], shimmer: .35 },
+  pN: { ...dark, exp: .22, bloom: .34, wet: .8, box: [21, -24.4, 45.4, .4], probe: [33, 3, -12], env: [[21, -1.4, -24.4], [45, 7, .4]], shimmer: .25 },
+};
+for (const [id, z] of Object.entries(zones)) Object.assign(z, { id, fog: new THREE.Vector4(...z.fog), tint: V(...z.tint), probe: V(...z.probe) });
+
+// ---------- procedural textures (albedo + normal + roughness from one function) ----------
+const hash = (x, y) => { let h = (Math.imul(x, 374761393) + Math.imul(y, 668265263)) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
+const noise = (x, y, p) => { // tileable value noise, integer period p
+  const xi = Math.floor(x), yi = Math.floor(y), fx = x - xi, fy = y - yi, sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy), w = (i, j) => hash(i % p, j % p);
+  return (w(xi, yi) * (1 - sx) + w(xi + 1, yi) * sx) * (1 - sy) + (w(xi, yi + 1) * (1 - sx) + w(xi + 1, yi + 1) * sx) * sy;
+};
+const fbm = (u, v, p, o) => { let a = 0, k = .5; for (let i = 0; i < o; i++, p *= 2, k *= .5) a += k * noise(u * p, v * p, p); return a; };
+const ss = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+const maxA = renderer.capabilities.getMaxAnisotropy();
+
+// fn(u, v, px, py) -> [r, g, b, height, roughness]; texture covers `meters` of world space
+function makeTex(n, meters, fn, bump = 1) {
+  const col = new Uint8ClampedArray(n * n * 4), rgh = new Uint8ClampedArray(n * n * 4), nor = new Uint8ClampedArray(n * n * 4), hgt = new Float32Array(n * n);
+  for (let y = 0, i = 0; y < n; y++) for (let x = 0; x < n; x++, i++) {
+    const [r, g, b, h, ro] = fn(x / n, y / n, x, y);
+    col.set([r * 255, g * 255, b * 255, 255], i * 4); rgh.set([ro * 255, ro * 255, ro * 255, 255], i * 4); hgt[i] = h;
+  }
+  for (let y = 0, i = 0; y < n; y++) for (let x = 0; x < n; x++, i++) {
+    const dx = (hgt[y * n + (x + 1) % n] - hgt[y * n + (x + n - 1) % n]) * bump, dy = (hgt[((y + 1) % n) * n + x] - hgt[((y + n - 1) % n) * n + x]) * bump, l = 127.5 / Math.hypot(dx, dy, 1);
+    nor.set([127.5 - dx * l, 127.5 - dy * l, 127.5 + l, 255], i * 4);
+  }
+  const T = (d, srgb) => {
+    const t = new THREE.DataTexture(new Uint8Array(d.buffer), n, n);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.setScalar(1 / meters);
+    t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearMipmapLinearFilter; t.generateMipmaps = true; t.anisotropy = maxA;
+    if (srgb) t.colorSpace = THREE.SRGBColorSpace;
+    t.needsUpdate = true; return t;
+  };
+  return { map: T(col, true), normalMap: T(nor), roughnessMap: T(rgh) };
+}
+
+const tileTex = makeTex(1024, 1, (u, v) => { // 10cm glazed tiles, each slightly tilted so reflections break up per tile
+  const tu = u * 10 % 1, tv = v * 10 % 1, iu = Math.floor(u * 10), iv = Math.floor(v * 10);
+  const g = ss(.015, .045, Math.min(tu, 1 - tu, tv, 1 - tv)), n = noise(u * 80, v * 80, 80), c = .58 + g * (.33 + .05 * hash(iu, iv));
+  return [c * .975, c, c * .995, g + ((tu - .5) * (hash(iu + 31, iv) - .5) + (tv - .5) * (hash(iu, iv + 57) - .5)) * 1.5 + n * .015, .8 - g * (.72 - .1 * n)];
+}, 1.5);
+const carpetTex = makeTex(512, 1.5, (u, v, x, y) => {
+  const f = hash(x, y), s = noise(u * 128, v * 128, 128), k = .62 + .3 * f * s + .2 * s + .25 * fbm(u, v, 4, 3);
+  return [.66 * k, .58 * k, .37 * k, f * .5 + s, 1];
+}, 1.2);
+const paperTex = makeTex(1024, 1.2, (u, v) => { // mustard wallpaper: pinstripes + staggered embossed diamonds
+  const cu = u * 8 % 1, cv = (v * 8 + (Math.floor(u * 8) & 1) * .5) % 1;
+  const line = Math.abs(cu - .5) > .47 ? 1 : 0, motif = Math.abs(cu - .5) * 1.5 + Math.abs(cv - .5) < .13 ? 1 : 0;
+  const fib = noise(u * 300, v * 300, 300), k = (.9 + .1 * fib) * (1 - .1 * line - .08 * motif) * (.9 + .15 * fbm(u, v, 3, 4));
+  return [.93 * k, .83 * k, .46 * k, fib * .25 - line * .4 + motif * .4, .9];
+}, 1.5);
+const ceilTex = makeTex(1024, 1.2, (u, v, x, y) => { // 60cm acoustic tiles in a T-bar grid
+  const tu = u * 2 % 1, tv = v * 2 % 1, e = Math.min(tu, 1 - tu, tv, 1 - tv), bar = e < .02;
+  const pit = Math.min(1, Math.pow(noise(u * 160, v * 160, 160), 7) * 5 + (hash(x, y) > .994 ? .8 : 0));
+  const c = bar ? .9 : (.84 + .05 * hash(Math.floor(u * 2), Math.floor(v * 2) + 5)) * (1 - .16 * pit) * (.92 + .1 * fbm(u, v, 4, 3));
+  return [c, c * .985, c * .94, bar ? 1.6 : 1 - pit * .8 - (e < .03 ? .4 : 0), .95];
+}, 2);
+const lampTex = makeTex(256, .6, (u, v) => { // prismatic diffuser with two tubes glowing behind it
+  const c = (.5 + .5 * (Math.exp(-(((u - .28) / .11) ** 2)) + Math.exp(-(((u - .72) / .11) ** 2)))) * (.93 + .07 * Math.sin(u * 251.3) * Math.sin(v * 251.3));
+  return [c, c * .97, c * .88, 0, .3];
+});
+const grime = makeTex(256, 9, (u, v) => [0, 0, 0, 0, .5 + .8 * fbm(u, v, 3, 5)]).roughnessMap; // large-scale mottling, breaks up tiling
+const waves = s => { // tileable ripple heightfield -> water normal map
+  const w = []; for (let i = 0; i < 14; i++) w.push([Math.round(hash(i, s) * 12 - 6) || 1, Math.round(hash(i, s + 9) * 12 - 6), hash(i, s + 5) * 6.28]);
+  return (u, v) => { let h = 0; for (const [a, b, p] of w) h += Math.sin(6.2832 * (a * u + b * v) + p) / Math.hypot(a, b); return [0, 0, 0, h, 0]; };
+};
+const wn0 = makeTex(512, 6, waves(1), 2).normalMap, wn1 = makeTex(512, 6, waves(2), 2).normalMap;
+
+// ---------- materials ----------
+// Budget: 16 texture units. 9 lamp shadows + 1 sun shadow leave 6: tiles use 5 (3 maps, env, ripple sim), nothing else may use more.
+const S = o => new THREE.MeshStandardMaterial(o);
+const dirt = { aoMap: grime, aoMapIntensity: .7 };
+for (const z of [zones.bA, zones.bB, zones.bC]) {
+  z.carpet = S({ map: carpetTex.map, normalMap: carpetTex.normalMap, ...dirt });
+  z.paper = S({ map: paperTex.map, normalMap: paperTex.normalMap, roughness: .88, ...dirt });
+  z.ceil = S({ map: ceilTex.map, normalMap: ceilTex.normalMap, roughness: .95, ...dirt });
+  z.trim = S({ color: 0xcfc59a, roughness: .55 });
+  z.mats = [z.carpet, z.paper, z.ceil, z.trim];
+}
+const lampOn = S({ color: 0x111111, emissive: 0xfff0cf, emissiveMap: lampTex.map, emissiveIntensity: 9 });
+const lampOff = S({ map: lampTex.map, color: 0x9a9a90, roughness: .35 });
+const glow = S({ color: 0, emissive: 0xffedc0, emissiveIntensity: 14 }); // frosted windows and light wells
+const chrome = S({ metalness: 1, roughness: .1 });
+const slideMat = S({ color: 0x0b4f4c, roughness: .16, side: THREE.DoubleSide });
+const seaMat = S({ color: 0x0f4652, roughness: .05, normalMap: wn0, normalScale: new THREE.Vector2(.5, .5) });
+zones.bA.mats.push(lampOff);
+
+// Tile shader extras: caustics under water, rippling reflected light on walls above it, a coloured tile band below a
+// given height, and box-projected reflections so glossy tiles mirror the room's windows in the right place.
+function tileFX(m, z) {
+  const u = z.tileU = { uTime, uBand: { value: z.band }, uBandCol: { value: new THREE.Color(...z.bandCol) }, uShimmer: { value: z.shimmer },
+              uBoxMin: { value: V(...z.env[0]) }, uBoxMax: { value: V(...z.env[1]) }, uProbe: { value: z.probe },
+              uSim: { value: null }, uPond: { value: new THREE.Vector4(0, 0, 1, 1) }, uPx: { value: new THREE.Vector2() } }; // this zone's pool, filled in when the pool is made
+  m.onBeforeCompile = s => {
+    Object.assign(s.uniforms, u);
+    s.vertexShader = 'varying vec3 vW;\n' + s.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\nvW = (modelMatrix * vec4(transformed, 1.)).xyz;');
+    s.fragmentShader = `varying vec3 vW; uniform float uTime, uBand, uShimmer; uniform vec3 uBandCol, uBoxMin, uBoxMax, uProbe; uniform sampler2D uSim; uniform vec4 uPond; uniform vec2 uPx;
+      vec2 h2(vec2 p) { return fract(sin(vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)))) * 43758.5453); }
+      float cell(vec2 p, float t) { vec2 i = floor(p), f = fract(p); float a = 8., b = 8.;
+        for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) { vec2 g = vec2(x, y); float d = length(g + .5 + .42 * sin(t + 6.2831 * h2(i + g)) - f); if (d < a) { b = a; a = d; } else b = min(b, d); }
+        return b - a; }
+      float caus(vec3 w) { vec2 p = w.xz * 1.5 + w.y * .9; p += .3 * sin(p.yx * 1.3 + uTime * .6) + .14 * sin(p.yx * 3.3 - uTime * .9); // warped so the cells don't read as straight-edged polygons
+        return pow(1. - smoothstep(0., .5, min(cell(p, uTime * .8), cell(p * 1.63 + 7.3, uTime * 1.1))), 3.); }
+      vec3 boxProj(vec3 d) { vec3 m = max((uBoxMax - vW) / d, (uBoxMin - vW) / d); return vW + d * min(min(m.x, m.y), m.z) - uProbe; }
+    ` + s.fragmentShader
+      .replace('#include <envmap_physical_pars_fragment>', THREE.ShaderChunk.envmap_physical_pars_fragment.replace(
+        'reflectVec = inverseTransformDirection( reflectVec, viewMatrix );', 'reflectVec = boxProj( inverseTransformDirection( reflectVec, viewMatrix ) );'))
+      .replace('#include <color_fragment>', '#include <color_fragment>\nif (vW.y < uBand) diffuseColor.rgb *= uBandCol;')
+      .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
+        if (vW.y < ${WY}) { // light focused by the surface: a drifting base pattern plus the real ripples (crests focus, troughs spread)
+          vec2 s = (vW.xz - uPond.xy) / (uPond.zw - uPond.xy), o = uPx * 2.;
+          float lap = texture2D(uSim, s - vec2(o.x, 0.)).r + texture2D(uSim, s + vec2(o.x, 0.)).r + texture2D(uSim, s - vec2(0., o.y)).r + texture2D(uSim, s + vec2(0., o.y)).r - 4. * texture2D(uSim, s).r;
+          float c = max(caus(vW) + clamp(-lap * 30., -.6, 2.5), 0.) * smoothstep(${WY}, ${WY} - .3, vW.y);
+          reflectedLight.directDiffuse *= 1. + 3. * c; reflectedLight.indirectDiffuse *= 1. + 1.2 * c; }
+        else if (uShimmer > 0.) reflectedLight.indirectDiffuse *= 1. + uShimmer * caus(vW * .6) * smoothstep(.2, 1.2, vW.y - ${WY}) * exp((${WY} - vW.y) * .3);`);
+  };
+  return m;
+}
+for (const z of [zones.pH, zones.pC, zones.pN]) { z.tile = tileFX(S({ ...tileTex }), z); z.mats = [z.tile]; }
+zones.pH.mats.push(chrome); zones.pN.mats.push(slideMat);
+
+// ---------- level builder: boxes and cut-out wall slabs with world-space UVs, merged into one mesh per material ----------
+const colliders = [], geo = new Map(), noCast = new Set([lampOn, glow, seaMat]), emitters = [];
+function add(mat, g) {
+  g = g.index ? g.toNonIndexed() : g;
+  const p = g.attributes.position, n = g.attributes.normal, uv = g.attributes.uv;
+  for (let i = 0; i < p.count; i++) {
+    if (Math.abs(n.getY(i)) > .5) uv.setXY(i, p.getX(i), p.getZ(i));
+    else if (Math.abs(n.getX(i)) > .5) uv.setXY(i, p.getZ(i), p.getY(i));
+    else uv.setXY(i, p.getX(i), p.getY(i));
+  }
+  geo.has(mat) ? geo.get(mat).push(g) : geo.set(mat, [g]);
+}
+function box(mat, x1, y1, z1, x2, y2, z2) {
+  add(mat, new THREE.BoxGeometry(x2 - x1, y2 - y1, z2 - z1).translate((x1 + x2) / 2, (y1 + y2) / 2, (z1 + z2) / 2));
+  if (y1 < 1.7 && y2 > .3) colliders.push([x1, z1, x2, z2]); // anything at body height blocks the player
+}
+// Wall slab with shapes cut out of it. axis 'x': runs a1..a2 along x, occupying z = at..at+depth; axis 'z': the same along z.
+// cuts: ['arch', centre, width, top] (niche rising from the floor), ['pill', centre, width, y, height], ['round', centre, diameter, y]
+function slab(mat, axis, at, depth, a1, a2, y1, y2, cuts) {
+  const sh = new THREE.Shape().moveTo(a1, y1).lineTo(a1, y2).lineTo(a2, y2).lineTo(a2, y1);
+  for (const [, c, w, top] of cuts.filter(c => c[0] === 'arch').sort((p, q) => q[1] - p[1]))
+    sh.lineTo(c + w / 2, y1).lineTo(c + w / 2, top - w / 2).absarc(c, top - w / 2, w / 2, 0, Math.PI, false).lineTo(c - w / 2, y1);
+  sh.closePath();
+  for (const [kind, c, w, y, h] of cuts) if (kind !== 'arch') {
+    const p = new THREE.Path();
+    if (kind === 'pill') p.absarc(c, y + h / 2 - w / 2, w / 2, 0, Math.PI, false).absarc(c, y - h / 2 + w / 2, w / 2, Math.PI, 2 * Math.PI, false);
+    else p.absarc(c, y, w / 2, 0, 2 * Math.PI, false);
+    p.closePath(); sh.holes.push(p);
+  }
+  const g = new THREE.ExtrudeGeometry(sh, { depth, bevelEnabled: false, curveSegments: 24 });
+  add(mat, axis === 'x' ? g.translate(0, 0, at) : g.rotateY(-Math.PI / 2).translate(at + depth, 0, 0));
+  colliders.push(axis === 'x' ? [a1, at, a2, at + depth] : [at, a1, at + depth, a2]);
+}
+const room = (z, x1, z1, x2, z2, h) => { box(z.carpet, x1, -.2, z1, x2, 0, z2); box(z.ceil, x1, h, z1, x2, h + .2, z2); };
+const wall = (z, x1, z1, x2, z2, h = H) => { box(z.paper, x1, 0, z1, x2, h, z2); box(z.trim, x1 - .012, 0, z1 - .012, x2 + .012, .1, z2 + .012); };
+const lamp = (z, x, zc, h = H, on = true, power = 120) => { // ceiling panel on the 60cm grid, plus the light it emits
+  box(on ? lampOn : lampOff, x - .3, h - .012, zc - .6, x + .3, h + .01, zc + .6);
+  if (on) emitters.push({ zone: z, p: V(x, h - .05, zc), t: V(x, 0, zc), power: power * (h / H) ** 2, angle: 1.45, dist: 16, color: 0xfff0cf });
+};
+
+{ // backrooms A: the first maze. x[-9,9] z[1,21]
+  const z = zones.bA;
+  room(z, -9.4, 0, 9.4, 21.4, H);
+  box(z.paper, -1.2, 2.2, 0, 1.2, H, 1); box(z.paper, -9.42, 2.3, 3, -9, 3.3, 6); box(z.paper, 9, 2.3, 9.6, 9.4, H, 12); // lintels: pools, pillar hall, corridor
+  for (const w of [
+    [-9.42, 1, -9, 3, 3.3], [-9.42, 6, -9, 21.4, 3.3], [9, 1, 9.4, 9.6], [9, 12, 9.4, 21.4], [-9.4, 21, 9.4, 21.4], [-9.4, 0, -1.2, 1], [1.2, 0, 9.4, 1], // outer walls
+    [-9, 7, -4, 7.3], [-1.5, 7, 4, 7.3], [6.5, 7, 9, 7.3], [-3.3, 10, -3, 16], [3, 7.3, 3.3, 13], [5, 14, 9, 14.3],
+    [-9, 16, -5.5, 16.3], [-3.3, 16, .5, 16.3], [.5, 16, .8, 18.5], [-6.3, 10.7, -5.7, 11.3], [6.2, 19.2, 6.8, 19.8],
+  ]) wall(z, ...w);
+  for (const [x, zc] of [[-5.7, 3.6], [.3, 4.2], [5.7, 3.6], [.3, 10.2], [.3, 14.4], [-6.3, 12.6], [6.3, 17.4], [-1.5, 19.2], [-6.3, 18.6]]) lamp(z, x, zc);
+  lamp(z, 6.3, 10.2, H, false); // one dead panel: the east room is lit only by spill
+}
+{ // backrooms B: a taller pillar hall to the west. x[-33,-9.4] z[1,21]
+  const z = zones.bB, h = 3.3;
+  room(z, -33.4, .6, -9.4, 21.4, h);
+  for (const w of [[-33.4, .6, -33, 21.4], [-33, .6, -9.4, 1], [-33, 21, -9.4, 21.4], [-31, 14, -27.5, 14.3], [-15.6, 6.5, -15.3, 10]]) wall(z, ...w, h);
+  for (const x of [-25.2, -17.4]) for (const zc of [7.5, 14.1]) wall(z, x - .45, zc - .45, x + .45, zc + .45, h);
+  for (const x of [-29.1, -21.3, -13.5]) for (const zc of [4.2, 10.8, 17.4]) lamp(z, x, zc, h);
+}
+{ // backrooms C: a long corridor east, turning north to the night hall
+  const z = zones.bC;
+  room(z, 9.4, 9.2, 36.8, 12.4, H); room(z, 33.6, .4, 36.8, 9.2, H);
+  for (const w of [[9.4, 9.2, 34, 9.6], [9.4, 12, 36.8, 12.4], [36.4, .4, 36.8, 12], [33.6, .4, 34, 9.2]]) wall(z, ...w);
+  for (const [x, zc] of [[13.5, 10.8], [20.1, 10.8], [26.7, 10.8], [35.1, 10.8], [35.1, 4.8]]) lamp(z, x, zc, H, true, 60); // narrow, so the walls are close to the lamps
+}
+{ // sunlit pool hall: x[-9,9] z[-23,-1], pool x[-4,5] z[-19,-6]
+  const T = zones.pH.tile;
+  box(T, -9.4, -1.4, -23.4, -4, 0, 0); box(T, 5, -1.4, -23.4, 9.4, 0, 0); box(T, -4, -1.4, -6, 5, 0, 0); box(T, -4, -1.4, -23.4, 5, 0, -19); // deck
+  box(T, -4, -1.4, -19, 5, -1.2, -6); // basin floor
+  for (let i = 1; i < 4; i++) box(T, -4, -1.2, -6 - .5 * i, 5, -.3 * i, -5.5 - .5 * i); // entry steps
+  box(T, -9.4, PH, -23.4, 9.4, PH + .3, 0); // ceiling
+  box(T, 9, 0, -23.4, 9.4, PH, -13.2); box(T, 9, 0, -10.8, 9.4, PH, -1); box(T, 9, 2.6, -13.2, 9.4, PH, -10.8); // east wall, door to the arcade
+  box(T, -9.4, 0, -1, -1.2, PH, 0); box(T, 1.2, 0, -1, 9.4, PH, 0); box(T, -1.2, 2.2, -1, 1.2, PH, 0); // south wall, door to the backrooms
+  box(T, -9.4, 0, -23.4, -9, 1, -1); box(T, -9.4, 4.2, -23.4, -9, PH, -1); // west wall: sill + header, windows between piers
+  for (const [a, b] of [[-23.4, -21.5], [-18.5, -16.5], [-13.5, -11.5], [-8.5, -6.5], [-3.5, -1]]) box(T, -9.4, 1, a, -9, 4.2, b);
+  box(T, -9, 0, -23.4, 9, .4, -23); box(T, -9, 4.2, -23.4, 9, PH, -23); // north side: low curb, open to the sea
+  for (const [a, b] of [[-9, -8.7], [-5.7, -5.1], [-2.1, -1.5], [1.5, 2.1], [5.1, 5.7], [8.7, 9]]) box(T, a, .4, -23.4, b, 4.2, -23);
+  box(T, .1, -1.2, -10.4, .9, PH, -9.6); box(T, .1, -1.2, -15.4, .9, PH, -14.6); // columns standing in the water
+  for (const y of [-.2, -.5, -.8]) box(chrome, 4.86, y, -16.25, 4.94, y + .03, -15.75); // ladder treads
+  box(T, -33.4, -1.5, 0, -9.4, PH + .3, .6); box(T, 20.6, -1.5, -25, 45.4, 7.3, -24.7); // blank facades hiding the other wings from the windows
+}
+{ // flooded arcade x[9.4,21] z[-14,-10]: arched niches, ankle-deep water running on into the night hall's pool
+  const C = zones.pC.tile, arches = [10.9, 13.7, 16.5, 19.3].map(c => ['arch', c, 1.8, 2.5]);
+  box(C, 9.4, -.5, -14.8, 24, -.3, -9.2); box(C, 9.4, 3.6, -14.8, 20.6, 3.9, -9.2); // everything stops at 20.6, where the night hall's wall begins: shared faces flicker
+  slab(C, 'x', -14.4, .4, 9.4, 20.6, -.5, 3.6, arches); box(C, 9.4, -.5, -14.8, 20.6, 3.6, -14.4);
+  slab(C, 'x', -10, .4, 9.4, 20.6, -.5, 3.6, arches); box(C, 9.4, -.5, -9.6, 20.6, 3.6, -9.2);
+  for (const x of [12.4, 18.2]) { box(glow, x - .3, 3.585, -12.3, x + .3, 3.62, -11.7); emitters.push({ zone: zones.pC, p: V(x, 3.5, -12), t: V(x, 0, -12), power: 60, angle: 1.4, dist: 14, color: 0xffedc4 }); }
+}
+{ // night hall x[21,45] z[-24,0], 7m tall: dark pool x[24,42] z[-21,-3], glowing pill windows and portholes, a water slide
+  const T = zones.pN.tile, z = zones.pN;
+  box(T, 20.6, -1.4, -24.4, 24, 0, -14); box(T, 20.6, -1.4, -10, 24, 0, .4); box(T, 42, -1.4, -24.4, 45.4, 0, .4); box(T, 24, -1.4, -24.4, 42, 0, -21); box(T, 24, -1.4, -3, 42, 0, .4); // deck
+  box(T, 24, -1.4, -21, 42, -1.2, -3); box(T, 24, -1.2, -14, 24.5, -.6, -10); box(T, 24.5, -1.2, -14, 25, -.9, -10); // basin, steps down from the channel
+  box(T, 20.6, 7, -24.4, 45.4, 7.3, .4); // ceiling
+  box(T, 20.6, 0, -24.4, 21, 7, -14); box(T, 20.6, 0, -10, 21, 7, .4); box(T, 20.6, 3.6, -14, 21, 7, -10); // west wall, opening to the arcade
+  box(T, 21, 0, 0, 34, 7, .4); box(T, 36.4, 0, 0, 45.4, 7, .4); box(T, 34, 2.3, 0, 36.4, 7, .4); // south wall, door to the corridor
+  const windows = at => [...at.map(c => ['pill', c, 1.2, 3.3, 4.2]), ...at.slice(1).map(c => ['round', c - 2, 1.1, 6.1])];
+  slab(T, 'x', -24.4, .4, 21, 45, 0, 7, windows([25, 29, 33, 37, 41])); box(glow, 21, 0, -24.7, 45, 7, -24.45);
+  slab(T, 'z', 45, .4, -24, 0, 0, 7, windows([-20, -16, -12, -8, -4])); box(glow, 45.45, 0, -24, 45.7, 7, 0);
+  box(T, 45, 0, -24.4, 45.4, 7, -24); // corner
+  for (const x of [28, 38]) for (const zc of [-17, -7]) box(T, x - .4, -1.2, zc - .4, x + .4, 7, zc + .4); // columns in the water
+  for (const zc of [-20, -12, -4]) emitters.push({ zone: z, p: V(44.6, 3.3, zc), t: V(34, 0, zc), power: 240, angle: 1.25, dist: 34, color: 0xffedc4 });
+  for (const x of [25, 33, 41]) emitters.push({ zone: z, p: V(x, 3.3, -23.6), t: V(x, 0, -13), power: 240, angle: 1.25, dist: 34, color: 0xffedc4 });
+}
+box(seaMat, -3000, -3, -3000, 3000, -1.5, 3000);
+for (const [m, list] of geo) { const mesh = new THREE.Mesh(mergeGeometries(list), m); mesh.castShadow = !noCast.has(m); mesh.receiveShadow = m !== seaMat; scene.add(mesh); }
+
+const inR = (x, z, x1, z1, x2, z2) => x > x1 && x < x2 && z > z1 && z < z2;
+const floorH = (x, z) =>
+  inR(x, z, -4, -19, 5, -6) ? -.3 * Math.min(4, Math.floor((-6 - z) / .5) + 1) : // pool hall, stepped entry
+  inR(x, z, 9.4, -14, 24, -10) ? -.3 : // flooded arcade and its channel
+  inR(x, z, 24, -21, 42, -3) ? (z > -14 && z < -10 && x < 25 ? (x < 24.5 ? -.6 : -.9) : -1.2) : 0; // night pool
+
+// props: chrome ladder, floating rings, water slide spiralling round a column
+const tube = (pts, r, seg, mat) => { const m = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts.map(p => V(...p))), seg, r, 16), mat); m.castShadow = m.receiveShadow = true; scene.add(m); return m; };
+for (const z of [-16.25, -15.75]) tube([[4.9, -1], [4.9, .5], [4.97, .76], [5.17, .86], [5.37, .76], [5.44, .5], [5.44, 0]].map(([x, y]) => [x, y, z]), .022, 48, chrome);
+const rings = [[0xff9ec4, -1.6, -9.2], [0xffe27a, 2.9, -16.4], [0x9ee8d0, -2.3, -14]].map(([c, x, z]) => {
+  const m = new THREE.Mesh(new THREE.TorusGeometry(.42, .13, 20, 48).rotateX(Math.PI / 2), S({ color: c, roughness: .3 }));
+  m.position.set(x, WY + .05, z); m.castShadow = true; scene.add(m); zones.pH.mats.push(m.material); return m;
+});
+const slide = [[40.4, 6, -.2], [40.4, 5.6, -3.5]];
+for (let i = 0; i <= 20; i++) slide.push([38 + 2.4 * Math.cos(-i * Math.PI / 8), 5.1 - 4.3 * i / 20, -7 + 2.4 * Math.sin(-i * Math.PI / 8)]);
+tube([...slide, [35.4, .5, -9.5], [33.4, .22, -9.7]], .55, 320, slideMat);
+
+// ---------- water ----------
+// Each pool is a wave-equation simulation on the GPU (the player's legs and landings disturb it) feeding a ray-traced
+// surface: the view ray is reflected and refracted at the simulated normal; the refracted ray is bent by Snell's law and
+// traced to the basin's floor or walls, tinted by how much water it crossed; the reflected ray is followed into the room.
+// What each ray hits is looked up in a planar reflection / refraction render of the real scene.
+const simMat = new THREE.ShaderMaterial({ uniforms: { tSim: { value: null }, uPx: { value: null }, uDrop: { value: V(0, 0, 0) } }, vertexShader: quadVS,
+  fragmentShader: `uniform sampler2D tSim; uniform vec2 uPx; uniform vec3 uDrop; varying vec2 vUv;
+    void main() { vec4 s = texture2D(tSim, vUv); // r = height, g = velocity
+      float avg = (texture2D(tSim, vUv - vec2(uPx.x, 0.)).r + texture2D(tSim, vUv + vec2(uPx.x, 0.)).r + texture2D(tSim, vUv - vec2(0., uPx.y)).r + texture2D(tSim, vUv + vec2(0., uPx.y)).r) * .25;
+      s.g = (s.g + (avg - s.r) * 2.) * .993; s.r += s.g;
+      vec2 d = (vUv - uDrop.xy) / uPx; s.r += uDrop.z * exp(-dot(d, d) / 18.);
+      gl_FragColor = s; }` });
+const simQuad = new FullScreenQuad(simMat);
+const waterShader = {
+  name: 'TracedWater',
+  uniforms: { color: { value: null }, reflectivity: { value: 0 }, tReflectionMap: { value: null }, tRefractionMap: { value: null }, tNormalMap0: { value: null }, tNormalMap1: { value: null },
+              textureMatrix: { value: null }, config: { value: new THREE.Vector4() } }, // the names Water2 fills in
+  vertexShader: 'varying vec3 vW; void main() { vec4 w = modelMatrix * vec4(position, 1.); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }',
+  fragmentShader: `uniform sampler2D tReflectionMap, tRefractionMap, tNormalMap0, tNormalMap1, tSim;
+    uniform mat4 projectionMatrix; uniform vec4 uPond; uniform vec2 uPx; uniform vec3 color; uniform float uFloor, uTime; varying vec3 vW;
+    vec2 screen(vec3 p) { vec4 c = projectionMatrix * viewMatrix * vec4(p, 1.); return c.xy / c.w * .5 + .5; }
+    vec2 onScreen(vec2 from, vec2 to) { vec2 d = to - from, room = max(mix(from, 1. - from, step(0., d)), 1e-4); return from + sign(d) * room * (1. - exp(-abs(d) / room)); } // rays that would land off-screen are eased toward the edge; clamping smears streaks
+    void main() {
+      vec2 s = (vW.xz - uPond.xy) / (uPond.zw - uPond.xy);
+      float hx = texture2D(tSim, s - vec2(uPx.x, 0.)).r - texture2D(tSim, s + vec2(uPx.x, 0.)).r, hz = texture2D(tSim, s - vec2(0., uPx.y)).r - texture2D(tSim, s + vec2(0., uPx.y)).r;
+      vec2 calm = (texture2D(tNormalMap0, vW.xz * .23 + uTime * vec2(.011, .007)).rg + texture2D(tNormalMap1, vW.xz * .37 - uTime * vec2(.009, .013)).rg - 1.) * .09; // water is never glass-flat
+      vec3 n = normalize(vec3(hx * 10. + calm.x, 1., hz * 10. + calm.y)), V = normalize(cameraPosition - vW);
+      vec3 R = reflect(-V, n); R.y = -max(R.y, .03); // mirrored: the planar render shows the room upside-down below the surface
+      vec2 here = screen(vW), ru = onScreen(here, screen(vW + R * 9.));
+      vec3 refl = texture2D(tReflectionMap, vec2(1. - ru.x, ru.y)).rgb;
+      vec3 T = refract(-V, n, .75); // air to water
+      vec2 tw = mix(vW.xz - uPond.xy, uPond.zw - vW.xz, step(0., T.xz)) / (abs(T.xz) + 1e-5);
+      float t = clamp(min((uFloor - vW.y) / min(T.y, -.001), min(tw.x, tw.y)), 0., 30.); // distance to the basin floor or nearest wall; never negative, or exp() below overflows
+      vec3 refr = texture2D(tRefractionMap, onScreen(here, screen(vW + T * t))).rgb * exp(-vec3(.42, .085, .06) * t) * color; // red is absorbed first
+      gl_FragColor = vec4(mix(refr, refl, .02 + .98 * pow(1. - max(dot(V, n), 0.), 5.)), 1.);
+      #include <tonemapping_fragment>
+      #include <colorspace_fragment>
+    }`,
+};
+const ponds = [[-4, -19, 5, -6, -1.2, 'pH', ['bA', 'pH', 'pC', 'pN']], [9.4, -14.4, 24, -9.6, -.3, 'pC', ['pH', 'pC', 'pN']], [24, -21, 42, -3, -1.2, 'pN', ['pC', 'pN', 'bC']]].map(([x1, z1, x2, z2, floor, zid, seen]) => {
+  const w = new Water(new THREE.PlaneGeometry(x2 - x1, z2 - z1), { color: 0xffffff, textureWidth: 1024, textureHeight: 1024, normalMap0: wn0, normalMap1: wn1, shader: waterShader });
+  const rt = () => new THREE.WebGLRenderTarget(Math.round((x2 - x1) * 20), Math.round((z2 - z1) * 20), { type: THREE.HalfFloatType, depthBuffer: false }); // 5cm cells
+  Object.assign(w, { seen, rect: new THREE.Vector4(x1, z1, x2, z2), px: new THREE.Vector2(.05 / (x2 - x1), .05 / (z2 - z1)), sim: [rt(), rt()], tileU: zones[zid].tileU });
+  Object.assign(w.material.uniforms, { tSim: { value: w.sim[0].texture }, uPond: { value: w.rect }, uPx: { value: w.px }, uFloor: { value: floor }, uTime });
+  w.tileU.uSim.value = w.sim[0].texture; w.tileU.uPond.value = w.rect; w.tileU.uPx.value = w.px;
+  w.rotation.x = -Math.PI / 2; w.position.set((x1 + x2) / 2, WY, (z1 + z2) / 2); scene.add(w);
+  const pre = w.onBeforeRender; // skip the reflection/refraction renders during the AO normal pass
+  w.onBeforeRender = (r, s, c) => { if (!s.overrideMaterial) pre(r, s, c); };
+  return w;
+});
+function ripple(w, x, z, power) { // one 60Hz step of a pool's waves, with a disturbance of the given size at world (x, z)
+  simMat.uniforms.tSim.value = w.sim[0].texture; simMat.uniforms.uPx.value = w.px;
+  simMat.uniforms.uDrop.value.set((x - w.rect.x) / (w.rect.z - w.rect.x), (z - w.rect.y) / (w.rect.w - w.rect.y), power);
+  renderer.setRenderTarget(w.sim[1]); simQuad.render(renderer); renderer.setRenderTarget(null);
+  w.sim.reverse(); w.material.uniforms.tSim.value = w.tileU.uSim.value = w.sim[0].texture;
+}
+
+// outside: sky, low sun through the pool hall's west windows, calm sea to the horizon
+const sunDir = new THREE.Vector3(-1, .5, -.32).normalize();
+const sky = new Sky(); sky.scale.setScalar(10000); scene.add(sky);
+Object.assign(sky.material.uniforms.sunPosition.value, sunDir);
+sky.material.uniforms.turbidity.value = 2; sky.material.uniforms.rayleigh.value = 3.5;
+sky.material.uniforms.mieCoefficient.value = .004; sky.material.uniforms.mieDirectionalG.value = .85;
+const sun = new THREE.DirectionalLight(0xfff0dc, 15);
+sun.position.copy(sunDir).multiplyScalar(40).add(sun.target.position.set(0, 2, -12));
+sun.castShadow = true; sun.shadow.mapSize.set(4096, 2048); sun.shadow.bias = -.0004; sun.shadow.normalBias = .03; sun.shadow.autoUpdate = false; sun.shadow.needsUpdate = true;
+Object.assign(sun.shadow.camera, { left: -15, right: 15, top: 10.5, bottom: -10.5, near: 1, far: 90 }); // just the pool hall
+scene.add(sun, sun.target);
+
+// lamps: nine shadow-casting spotlights are shared by every light fixture in the level and follow the player from
+// fixture to fixture, fading out before they move. More fixtures cost nothing; the world can grow without more lights.
+const lights = Array.from({ length: 9 }, () => {
+  const l = new THREE.SpotLight(0xffffff, 0, 16, 1.45, 1, 2);
+  l.castShadow = true; l.shadow.mapSize.setScalar(1024); l.shadow.bias = -.001; l.shadow.normalBias = .03; l.shadow.autoUpdate = false; l.k = 0;
+  scene.add(l, l.target); return l;
+});
+function relight(pos, zone, fade) { // fade: how far to move brightness this call (1 = snap)
+  const want = emitters.map(e => [e.p.distanceTo(pos) + (e.zone.grp === zone.grp ? 0 : 8) - (e.light ? 2 : 0), e]).sort((a, b) => a[0] - b[0]).slice(0, lights.length).map(a => a[1]);
+  for (const l of lights) {
+    const keep = want.includes(l.e);
+    l.k = Math.min(1, Math.max(0, l.k + (keep ? fade : -fade)));
+    const e = !keep && l.k === 0 && want.find(e => !e.light);
+    if (e) {
+      if (l.e) l.e.light = null;
+      l.e = e; e.light = l; l.position.copy(e.p); l.target.position.copy(e.t); l.color.set(e.color); l.angle = e.angle; l.distance = e.dist;
+      l.shadow.needsUpdate = renderer.shadowMap.needsUpdate = true;
+    }
+    l.intensity = l.e ? l.e.power * l.k * l.k : 0;
+  }
+}
+
+// ---------- fake GI: capture each zone into a cubemap and use it as that zone's ambient + reflections ----------
+const cubeRT = new THREE.WebGLCubeRenderTarget(256, { type: THREE.HalfFloatType });
+const cubeCam = new THREE.CubeCamera(.1, 5000, cubeRT);
+const pmrem = new THREE.PMREMGenerator(renderer);
+function bake(z, mats = z.mats, k = z.k) {
+  if (z.id) { relight(z.probe, z, 1); relight(z.probe, z, 1); } // bring the lamps to this zone: first call assigns, second switches on
+  cubeCam.position.copy(z.probe); cubeCam.update(renderer, scene);
+  const env = pmrem.fromCubemap(cubeRT.texture).texture;
+  for (const m of mats) { m.envMap = env; m.envMapIntensity = k; m.needsUpdate = true; }
+}
+for (const w of ponds) w.visible = false; // Water2's nested render would reset the active cube face
+bake({ probe: V(-200, 3, -12) }, [seaMat], 1);
+for (let pass = 0; pass < 2; pass++) for (const z of Object.values(zones)) bake(z); // second pass picks up the first bounce, including through doorways
+let zone = Object.values(zones).find(z => inR(camera.position.x, camera.position.z, ...z.box)) || zones.bA;
+relight(camera.position, zone, 1); relight(camera.position, zone, 1);
+
+// ---------- post ----------
+const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 }));
+composer.addPass(new RenderPass(scene, camera));
+const ao = new GTAOPass(scene, camera, 1, 1);
+ao.updateGtaoMaterial({ radius: .7, distanceExponent: 1.5, thickness: 1, scale: 1.3, samples: 16 });
+composer.addPass(ao);
+const look = { exp: zone.exp, shaft: 0, sat: zone.sat, bloom: zone.bloom, fog: zone.fog.clone(), tint: zone.tint.clone() }; // eases toward the current zone's values
+const atmos = new THREE.ShaderMaterial({ // distance fog per zone + sun shafts ray-marched through the sun's shadow map
+  uniforms: { tDiffuse: { value: null }, tDepth: { value: ao.depthTexture }, tShadow: { value: sun.shadow.map.texture }, uPI: { value: camera.projectionMatrixInverse }, uCW: { value: camera.matrixWorld },
+              uSM: { value: sun.shadow.matrix }, uCam: { value: camera.position }, uSun: { value: sunDir }, uFog: { value: look.fog }, uShaft: { value: 0 }, t: uTime },
+  vertexShader: quadVS,
+  fragmentShader: `#include <packing>
+    uniform sampler2D tDiffuse, tDepth, tShadow; uniform mat4 uPI, uCW, uSM; uniform vec3 uCam, uSun; uniform vec4 uFog; uniform float uShaft, t; varying vec2 vUv;
+    void main() {
+      vec3 col = texture2D(tDiffuse, vUv).rgb;
+      vec4 v = uPI * vec4(vUv * 2. - 1., texture2D(tDepth, vUv).x * 2. - 1., 1.);
+      vec3 ray = (uCW * vec4(v.xyz / v.w, 1.)).xyz - uCam; float len = min(length(ray), 60.); vec3 dir = normalize(ray);
+      col = mix(col, uFog.rgb, 1. - exp(-len * uFog.a));
+      if (uShaft > .001) {
+        float lit = 0., n = fract(sin(dot(gl_FragCoord.xy + fract(t) * 37., vec2(12.9898, 78.233))) * 43758.5453);
+        for (int i = 0; i < 32; i++) { vec4 s = uSM * vec4(uCam + dir * len * (float(i) + n) / 32., 1.);
+          if (s.x > 0. && s.x < 1. && s.y > 0. && s.y < 1. && s.z < 1.) lit += step(s.z, unpackRGBAToDepth(texture2D(tShadow, s.xy)) + .002); }
+        col += vec3(1., .93, .8) * uShaft * lit / 32. * len * (.003 + .05 * pow(max(dot(dir, uSun), 0.), 6.));
+      }
+      gl_FragColor = vec4(col, 1.);
+    }`,
+});
+composer.addPass(new ShaderPass(atmos));
+const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), .3, .85, .95);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+const film = new THREE.ShaderMaterial({ // lens fringing, per-zone grade, vignette, grain
+  uniforms: { tDiffuse: { value: null }, t: uTime, uTint: { value: look.tint }, uSat: { value: 1 } },
+  vertexShader: quadVS,
+  fragmentShader: `uniform sampler2D tDiffuse; uniform float t, uSat; uniform vec3 uTint; varying vec2 vUv;
+    void main() { vec2 d = vUv - .5; float r = dot(d, d);
+      vec3 c = vec3(texture2D(tDiffuse, vUv - d * r * .014).r, texture2D(tDiffuse, vUv).g, texture2D(tDiffuse, vUv + d * r * .014).b);
+      c = clamp(mix(vec3(dot(c, vec3(.2126, .7152, .0722))), c, uSat) * uTint, 0., 1.);
+      c = mix(c, c * c * (3. - 2. * c), .4) * (1. - r * .7); // S-curve: deeper darks, cleaner highlights
+      c += (fract(sin(dot(gl_FragCoord.xy + fract(t) * 91., vec2(12.9898, 78.233))) * 43758.5453) - .5) * .035;
+      gl_FragColor = vec4(c, 1.); }`,
+});
+composer.addPass(new ShaderPass(film));
+function resize() {
+  if (!innerWidth || !innerHeight) return; // hidden tab
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight); composer.setPixelRatio(renderer.getPixelRatio()); composer.setSize(innerWidth, innerHeight);
+}
+addEventListener('resize', resize); resize();
+
+// ---------- audio: generative ambient music, room tone and footsteps, all synthesised ----------
+let sfx;
+function startAudio() {
+  const ac = new AudioContext(), master = ac.createGain(), verb = ac.createConvolver(), comp = ac.createDynamicsCompressor();
+  master.connect(comp).connect(ac.destination);
+  const bus = (vol, ...to) => { const g = ac.createGain(); g.gain.value = vol; for (const n of to) g.connect(n); return g; };
+  const ir = ac.createBuffer(2, ac.sampleRate * 5, ac.sampleRate), noise = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate); // hall reverb impulse, white noise
+  for (let c = 0; c < 2; c++) for (let d = ir.getChannelData(c), i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length) ** 4;
+  for (let d = noise.getChannelData(0), i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  const wet = bus(.3, master); verb.buffer = ir; verb.connect(wet);
+  const lfo = (f, depth, param) => { const o = ac.createOscillator(); o.frequency.value = f; o.connect(bus(depth, param)); o.start(); };
+  const wow = bus(7); { const o = ac.createOscillator(); o.frequency.value = .11; o.connect(wow); o.start(); } // tape wobble, in cents
+  const voice = (dest, type, f, t, vol, att, hold, rel) => { // one enveloped oscillator
+    const o = ac.createOscillator(), g = ac.createGain(); o.type = type; o.frequency.value = f; wow.connect(o.detune);
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + att); g.gain.setTargetAtTime(0, t + att + hold, rel);
+    o.connect(g).connect(dest); o.start(t); o.stop(t + att + hold + rel * 6);
+  };
+  // music: a slow major-ninth pad progression in D, with sparse bell notes through a tape echo
+  const music = bus(1.2, master, verb), pad = ac.createBiquadFilter(), echo = ac.createDelay(2);
+  pad.frequency.value = 850; pad.Q.value = .4; pad.connect(music); lfo(.04, 300, pad.frequency);
+  echo.delayTime.value = .52; echo.connect(bus(.45, echo)); echo.connect(music);
+  const hz = m => 440 * 2 ** ((m - 69) / 12), scale = [74, 76, 78, 81, 83, 86, 88, 90];
+  const chords = [[38, 50, 57, 61, 64, 66], [35, 47, 54, 57, 61, 62], [31, 43, 50, 54, 57, 59], [33, 45, 52, 57, 59, 64]]; // Dmaj9, Bm9, Gmaj7, A6sus
+  let bar = 0, next = ac.currentTime + .3;
+  setInterval(() => { while (next < ac.currentTime + 2) { // look-ahead scheduler, one 10s bar at a time
+    for (const m of chords[bar++ % 4]) for (const d of [-.07, .07]) voice(pad, 'sawtooth', hz(m + d), next, .035, 4, 5, 2.2);
+    for (let t = next + Math.random() * 2; t < next + 10; t += 1.3 + Math.random() * 3.5) {
+      const f = hz(scale[Math.random() * scale.length | 0]);
+      voice(echo, 'sine', f, t, .06, .01, .05, .9); voice(echo, 'sine', f * 2.01, t, .015, .01, .02, .4); voice(music, 'sine', f, t, .05, .01, .05, .9);
+    }
+    next += 10;
+  } }, 500);
+  // room tone: fluorescent hum in the backrooms, lapping water by the pools
+  const hum = bus(0, master), water = bus(0, master, verb), lap = bus(.5, water);
+  for (const [f, v] of [[120, .5], [240, .2], [360, .08], [1080, .012]]) { const o = ac.createOscillator(); o.frequency.value = f; o.connect(bus(v, hum)); o.start(); }
+  const hiss = (type, f, q, dest) => { const s = ac.createBufferSource(), b = ac.createBiquadFilter(); s.buffer = noise; s.loop = true; b.type = type; b.frequency.value = f; b.Q.value = q; s.connect(b).connect(dest); s.start(); };
+  hiss('bandpass', 420, .7, lap); hiss('highpass', 5000, .5, bus(.04, water)); lfo(.17, .3, lap.gain);
+  const kinds = { carpet: ['lowpass', 260, .7, .5, .11], tile: ['bandpass', 1300, 1.1, .3, .06], water: ['bandpass', 650, .5, .45, .32] };
+  sfx = {
+    step(kind) { // a short filtered noise burst per footfall
+      const t = ac.currentTime, s = ac.createBufferSource(), b = ac.createBiquadFilter(), g = bus(0, master, verb), [type, f, q, vol, dur] = kinds[kind];
+      s.buffer = noise; s.playbackRate.value = .7 + Math.random() * .6; b.type = type; b.frequency.value = f * (.85 + Math.random() * .3); b.Q.value = q;
+      g.gain.setValueAtTime(kind === 'water' ? .001 : vol, t); g.gain.exponentialRampToValueAtTime(vol, t + .04); g.gain.exponentialRampToValueAtTime(.001, t + .04 + dur);
+      s.connect(b).connect(g); s.start(t, Math.random()); s.stop(t + dur + .1);
+    },
+    zone(z) { const t = ac.currentTime; hum.gain.setTargetAtTime(z.hum * .07, t, .8); water.gain.setTargetAtTime(z.water * .4, t, .8); wet.gain.setTargetAtTime(z.wet, t, .8); },
+    mute() { master.gain.value = master.gain.value ? 0 : 1; },
+  };
+  sfx.zone(zone);
+}
+
+// ---------- walking ----------
+const canvas = renderer.domElement, o = document.getElementById('o'), keys = {}, eu = new THREE.Euler(0, 0, 0, 'YXZ');
+const locked = () => document.pointerLockElement === canvas;
+let free = false, edgeX = 0; // free: capture was refused, so the bare cursor steers, and holding it in a side strip keeps turning
+const noLock = () => { free = true; canvas.style.cursor = 'none'; document.getElementById('x').hidden = false; const h = document.getElementById('h'); h.hidden = false; setTimeout(() => h.hidden = true, 12000); };
+const turn = (dx, dy) => { eu.setFromQuaternion(camera.quaternion); eu.y -= dx; eu.x = Math.max(-1.5, Math.min(1.5, eu.x - dy)); camera.quaternion.setFromEuler(eu); };
+const setEdge = n => { edgeX = n < .07 ? -1 : n > .93 ? 1 : 0; document.getElementById('eL').style.opacity = +(edgeX < 0); document.getElementById('eR').style.opacity = +(edgeX > 0); };
+o.onclick = () => { o.style.display = 'none'; sfx || startAudio(); canvas.requestPointerLock()?.catch(noLock); };
+document.addEventListener('pointerlockerror', noLock);
+document.addEventListener('pointerlockchange', () => { if (!locked()) o.style.display = ''; }); // Esc pauses
+addEventListener('mousemove', e => { // mouse look: captured pointer where the browser allows it, bare cursor movement where it doesn't
+  if (!locked() && !free) return;
+  const m = free ? 60 : 250, cl = v => Math.max(-m, Math.min(m, v)); // drop the one-event jumps browsers report on re-entry or under capture
+  turn(cl(e.movementX) * .0022, cl(e.movementY) * .0022);
+  if (free) setEdge(e.clientX / innerWidth);
+});
+for (const ev of ['mouseleave', 'mouseout', 'blur']) addEventListener(ev, e => { if (!e.relatedTarget) setEdge(.5); }, true); // cursor left the page: stop turning
+addEventListener('keydown', e => { keys[e.code] = 1; if (e.code === 'Space') e.preventDefault(); if (e.code === 'KeyM') sfx?.mute(); });
+addEventListener('keyup', e => keys[e.code] = 0);
+document.getElementById('s').textContent = 'click to enter  ·  wasd walk  ·  mouse look  ·  space jump  ·  shift run  ·  m mute';
+
+function collide(p, R = .3) { // push the player circle out of every wall box along the shallowest axis
+  for (const [x1, z1, x2, z2] of colliders) if (p.x > x1 - R && p.x < x2 + R && p.z > z1 - R && p.z < z2 + R) {
+    const dx = p.x - (x1 - R) < x2 + R - p.x ? x1 - R - p.x : x2 + R - p.x, dz = p.z - (z1 - R) < z2 + R - p.z ? z1 - R - p.z : z2 + R - p.z;
+    if (Math.abs(dx) < Math.abs(dz)) p.x += dx; else p.z += dz;
+  }
+  return p;
+}
+console.assert(floorH(0, -12) === -1.2 && floorH(0, -6.2) === -.3 && floorH(15, -12) === -.3 && floorH(24.2, -12) === -.6 && floorH(30, -12) === -1.2 && floorH(0, 10) === 0
+  && collide(V(5, 0, .6)).z > 1.29 && Object.values(zones).every(z => inR(z.probe.x, z.probe.z, ...z.box)) && emitters.every(e => inR(e.p.x, e.p.z, ...e.zone.box)), 'level self-check failed');
+
+const clock = new THREE.Clock(), vel = new THREE.Vector2(), UP = new THREE.Vector3(0, 1, 0);
+let stride = 0, foot = 0, eye = floorH(camera.position.x, camera.position.z) + 1.62, jump = 0, vy = 0, simT = 0;
+renderer.setAnimationLoop(() => {
+  const dt = Math.min(clock.getDelta(), .05), p = camera.position, k = c => keys[c] ? 1 : 0, ease = Math.min(1, dt * 8);
+  uTime.value += dt;
+  const ground = floorH(p.x, p.z), speed = (k('ShiftLeft') ? 4 : 1.9) * (ground < -.5 ? .55 : 1); // wading is slower
+  vel.x += ((k('KeyD') - k('KeyA')) * speed - vel.x) * ease;
+  vel.y += (((k('KeyW') | k('ArrowUp')) - (k('KeyS') | k('ArrowDown'))) * speed - vel.y) * ease;
+  camera.rotateOnWorldAxis(UP, (k('ArrowLeft') - k('ArrowRight')) * dt * 1.6);
+  if (edgeX) turn(edgeX * 1.8 * dt, 0);
+  const yaw = eu.setFromQuaternion(camera.quaternion).y, sn = Math.sin(yaw), cs = Math.cos(yaw);
+  p.x += (vel.x * cs - vel.y * sn) * dt; p.z += (-vel.x * sn - vel.y * cs) * dt;
+  collide(p);
+  stride += vel.length() * dt;
+  eye += (ground + 1.62 + Math.sin(stride * 3.4) * .018 * Math.min(1, vel.length()) - eye) * Math.min(1, dt * 7);
+  const air = jump > 0;
+  if (k('Space') && !air) vy = 4.3;
+  vy -= 11 * dt; jump = Math.max(0, jump + vy * dt); if (jump === 0) vy = 0;
+  p.y = eye + jump;
+  const f = Math.floor(stride * 3.4 / Math.PI); // one footfall per half bob cycle, and one on landing
+  if (sfx && ((f !== foot && !air && vel.length() > .5) || (air && jump === 0))) sfx.step(ground < 0 ? 'water' : zone.tile ? 'tile' : 'carpet');
+  foot = f;
+
+  const here = Object.values(zones).find(z => inR(p.x, p.z, ...z.box));
+  if (here && here !== zone) { zone = here; sfx?.zone(zone); }
+  relight(p, zone, dt * 3);
+  for (const w of ponds) w.visible = w.seen.includes(zone.id);
+  const wake = ground < 0 ? (air && jump === 0 ? .3 : air ? 0 : Math.min(vel.length(), 4) * .006) : 0; // wading leaves a wake, landing makes a splash
+  for (simT += dt; simT > 1 / 60; simT = simT > .05 ? 0 : simT - 1 / 60) for (const w of ponds) if (w.visible) ripple(w, p.x, p.z, wake);
+  const a = 1 - Math.exp(-dt * 1.5); // eye adaptation and mood drift between zones
+  for (const key of ['exp', 'shaft', 'sat', 'bloom']) look[key] += (zone[key] - look[key]) * a;
+  look.fog.lerp(zone.fog, a); look.tint.lerp(zone.tint, a);
+  renderer.toneMappingExposure = look.exp; bloom.strength = look.bloom; atmos.uniforms.uShaft.value = look.shaft; film.uniforms.uSat.value = look.sat;
+  rings.forEach((r, i) => { r.position.y = WY + .05 + .012 * Math.sin(uTime.value * 1.1 + i * 2); r.rotation.z = .03 * Math.sin(uTime.value * .7 + i); });
+  composer.render(dt);
+});
+</script>
+</body>
+</html>
