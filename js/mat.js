@@ -1,7 +1,7 @@
 // Materials more than one place uses, and the helpers places make their own with.
 import * as THREE from 'three';
 import { scene, uTime, V, WY } from './core.js';
-import { maxA, grime, wn0, sets, libTex, detailTex } from './tex.js';
+import { maxA, grime, wn0, sets, LIB, libTex, detailTex } from './tex.js';
 
 // ---------- materials ----------
 // Budget: 16 texture units. 9 lamp shadows + 1 sun shadow leave 6: a library material uses 4 (its two maps, the shared detail, env),
@@ -10,67 +10,21 @@ const S = o => new THREE.MeshStandardMaterial(o);
 const dirt = { aoMap: grime, aoMapIntensity: .7 };
 
 // ---------- the material library ----------
-// name: its texture set (tex.js) and how it is worn. detail: strength of the shared 10 cm micro normal; macro: large-scale
-// variation; dirt: grime where walls meet the floor and dust on tops (dirtCol multiplies); wear: lightening toward edgeCol on
-// rounded convex edges; vary: break up the repeat (isotropic sets only); sheen: velvet-like grazing light; back: back-face
-// albedo factor; emit: emissive colour and level (the set's pattern modulates it); everything else is a material property.
-const LIB = {
-  poolTile: ['poolTile', { detail: .12, macro: .04, dirt: .5, dirtCol: [.72, .68, .6] }],
-  poolMosaic: ['poolMosaic', { detail: .12, macro: .05, dirt: .4, dirtCol: [.72, .68, .6] }],
-  marble: ['marble', { detail: .08, macro: .06, dirt: .3, wear: .2, edgeCol: [.8, .78, .74] }],
-  terrazzo: ['terrazzo', { detail: .12, macro: .08, dirt: .4 }],
-  limestone: ['limestone', { detail: .4, macro: .2, dirt: .6, dirtCol: [.62, .6, .52], wear: .5, edgeCol: [.88, .84, .76] }],
-  travertine: ['limestone', { color: 0xf3dfc4, detail: .4, macro: .2, dirt: .6, dirtCol: [.62, .6, .52], wear: .5, edgeCol: [.9, .84, .74] }],
-  stoneWall: ['stoneWall', { detail: .4, macro: .2, dirt: .6, dirtCol: [.62, .6, .52] }],
-  plaster: ['plaster', { detail: .5, macro: .1, dirt: .5, dirtCol: [.64, .6, .54], wear: .4, edgeCol: [.95, .94, .9] }],
-  stucco: ['stucco', { detail: .6, macro: .12, dirt: .6, dirtCol: [.6, .57, .5], vary: 1 }],
-  concreteWall: ['concreteWall', { detail: .5, macro: .15, dirt: .6, dirtCol: [.6, .58, .54], wear: .4, edgeCol: [.7, .69, .66] }],
-  concreteFloor: ['concreteFloor', { detail: .35, macro: .18, dirt: .3, dirtCol: [.6, .58, .54] }],
-  asphalt: ['asphalt', { detail: .3, macro: .15, vary: 1 }],
-  roadPaint: ['roadPaint', { detail: .2, macro: .1 }],
-  sand: ['sand', { detail: .2, macro: .2, vary: 1 }],
-  mulch: ['mulch', { detail: .2, macro: .2, vary: 1 }],
-  rubberCrumb: ['rubberCrumb', { color: 0xb04a3a, detail: .2, macro: .1, vary: 1 }],
-  grassGround: ['grassGround', { detail: .2, macro: .3, vary: 1 }],
-  wallpaper: ['wallpaper', { detail: .25, macro: .08, dirt: .7, dirtCol: [.62, .52, .36] }],
-  loopCarpet: ['loopCarpet', { color: 0xc8b48a, macro: .25 }],
-  ceilingTile: ['ceilingTile', { detail: .25, macro: .06 }],
-  hotelCarpet: ['hotelCarpet', { macro: .15 }],
-  hardwood: ['hardwood', { detail: .08, macro: .05, dirt: .3, wear: .3, edgeCol: [.62, .45, .3] }],
-  damask: ['damask', { detail: .1, macro: .06, dirt: .5, dirtCol: [.66, .6, .5] }],
-  velvet: ['velvet', { color: 0x8a1a26, macro: .1, sheen: 1 }],
-  blackoutCarpet: ['loopCarpet', { color: 0x2a2a2e, macro: .2 }],
-  vinylFoam: ['vinylFoam', { color: 0x3f8fe0, detail: .12, macro: .05, dirt: .4, wear: .3, edgeCol: [.85, .85, .85] }],
-  chrome: ['smudge', { dirt: .2, dirtCol: [.7, .68, .64] }],
-  brushedSteel: ['brushed', { dirt: .2 }],
-  galvanised: ['galvanised', { detail: .1, dirt: .5, dirtCol: [.72, .7, .64] }],
-  anodised: ['anodised', { color: 0x9aa4b0, dirt: .2 }],
-  brass: ['smudge', { color: 0xf0d48c, macro: .3, dirt: .6, dirtCol: [.5, .42, .3] }],
-  castIron: ['castIron', { detail: .2, macro: .1, dirt: .5, dirtCol: [.9, .55, .35], wear: .4, edgeCol: [.22, .22, .23] }],
-  paintedSteel: ['paintedSteel', { color: 0x2b5d8a, detail: .1, macro: .05, dirt: .6, dirtCol: [.62, .4, .26], wear: .6, edgeCol: [.5, .5, .52] }],
-  gelcoat: ['gelcoat', { color: 0x3aa6c8, detail: .04 }],
-  hardPlastic: ['hardPlastic', { color: 0xe8b820, detail: .12, wear: .3, edgeCol: [.85, .85, .82] }],
-  pvc: ['pvc', { color: 0xff8fb0, detail: .04 }],
-  rubber: ['rubber', { detail: .2, dirt: .3 }],
-  glass: ['glass', { color: 0xdcefe6, transparent: true, opacity: .22, depthWrite: false }],
-  frostedGlass: ['glass', { color: 0xf2f2ec, roughness: .55, transparent: true, opacity: .85 }],
-  benchWood: ['benchWood', { detail: .08, dirt: .3, wear: .5, edgeCol: [.72, .56, .4] }],
-  weatheredWood: ['weatheredWood', { detail: .2, macro: .1 }],
-  palmTrunk: ['palmTrunk', { detail: .2, macro: .15 }],
-  palmLeaf: ['palmLeaf', { detail: .04, back: 1.6, side: THREE.DoubleSide }],
-  troffer: ['troffer', { color: 0x6a6a66, emit: [0xffe0b4, 3.2] }],
-  trofferOff: ['troffer', { color: 0x9a9a90 }],
-  opalPanel: ['opal', { color: 0x9a9a96, emit: [0xffe2b8, 2.2] }],
-  ledTube: ['ledTube', { color: 0x9a9a96, emit: [0xffdcaa, 2.6] }],
-  frostedGlobe: ['opal', { color: 0x9a9a96, emit: [0xffd49a, 2.2] }],
-  backlitPanel: ['opal', { color: 0x9a9a96, emit: [0xffe6c4, 1.6] }],
-};
-const libKeys = ['detail', 'dm', 'macro', 'dirt', 'wear', 'dirtCol', 'edgeCol', 'vary', 'sheen', 'back', 'emit', 'tri', 'uv', 'swap', 'floor', 'roughness'];
+// The materials themselves (name: its texture set and these options) are made in the family files, js/tex/<family>.js.
+// Options: detail: strength of the shared 10 cm micro normal; macro: albedo (and gloss) variation from the shared world-space
+// field, several metres down to a few cm; grime: how much the low patches of that field darken the ambient light and the
+// albedo (default .18: dust and handling that gathers unevenly); fine: metres of the set's finest pattern, which then fades to
+// a blur of itself where the screen can no longer resolve it (no moire); larger structure stays; dirt: grime where walls meet the floor and dust on tops
+// (dirtCol multiplies); wear: lightening toward edgeCol on rounded convex edges; vary: break up the repeat (isotropic sets
+// only); sheen: velvet-like grazing light; back: back-face albedo factor; emit: emissive colour and level (the set's pattern
+// modulates it); everything else is a material property.
+const libKeys = ['detail', 'dm', 'macro', 'grime', 'fine', 'dirt', 'wear', 'dirtCol', 'edgeCol', 'vary', 'sheen', 'back', 'emit', 'tri', 'uv', 'swap', 'floor', 'roughness'];
 // The shader every library material shares (one program, whatever the material): maps sampled by the geometry's UVs in metres
 // (build.js box-projects them) or triplanar in world space, a micro detail, macro variation, dirt and edge wear from the geometry.
-const libPars = `uniform sampler2D tLA, tLB, tLD; uniform vec4 uL0, uL1, uL2, uL3; uniform vec3 uLDirt, uLEdge; varying vec3 vLW, vLN; varying vec2 vLUv;
+const libPars = `uniform sampler2D tLA, tLB, tLD; uniform vec4 uL0, uL1, uL2, uL3, uL4; uniform vec3 uLDirt, uLEdge; varying vec3 vLW, vLN; varying vec2 vLUv;
   // uL0: 1 / metres a set covers, triplanar?, 1 / detail metres, detail strength. uL1: wear, dirt, vary, sheen.
   // uL2: normal strength, floor height, metres per UV unit (u, v). uL3: emitter?, back-face albedo, macro amount, swap u and v?
+  // uL4: grime, metres of the finest pattern (0: no fade)
   const mat2 lRot = mat2(.8, .6, -.6, .8);
   void lTap(vec2 t, out vec4 a, out vec4 b) {
     a = texture2D(tLA, t); b = texture2D(tLB, t);
@@ -81,29 +35,41 @@ const libPars = `uniform sampler2D tLA, tLB, tLD; uniform vec4 uL0, uL1, uL2, uL
   mat3 lFrame(vec3 N, vec3 p, vec2 uv) { vec3 d1 = dFdx(p), d2 = dFdy(p); vec2 e1 = dFdx(uv), e2 = dFdy(uv); vec3 a = cross(d2, N), b = cross(N, d1);
     vec3 T = a * e1.x + b * e2.x, B = a * e1.y + b * e2.y; float s = inversesqrt(max(max(dot(T, T), dot(B, B)), 1e-24)); return mat3(T * s, B * s, N); }
   vec3 lNz(vec2 xy) { return vec3(xy, sqrt(max(1. - dot(xy, xy), 0.))); }
+  // the macro field: the detail set's smooth channel at three scales (blobs of about 6 m, 1.5 m and 0.5 m, each with finer
+  // octaves), turned and offset so their repeats never line up. World space, so it runs on across separate boxes.
+  // x: all three scales, y: the two large ones only (for grime, which gathers in broad soft patches)
+  vec2 lF(vec2 p) { float a = texture2D(tLD, p * .041 + .17).a * .55 + texture2D(tLD, lRot * p * .17 + .5).a * .45; return vec2(a * .8 + texture2D(tLD, p.yx * .53 + .29).a * .2, a); }
+  vec2 lMacro(vec3 p, vec3 w) { vec2 a = w.y > .98 ? lF(p.xz) : w.x > .98 ? lF(p.zy) : w.z > .98 ? lF(p.xy) : lF(p.zy) * w.x + lF(p.xz) * w.y + lF(p.xy) * w.z;
+    return clamp((a - .5) * 3., -1.5, 1.5); } // centred on 0, standard deviation about .4, smooth (no clamped plateaus)
 `;
 const libMain = `
   vec3 lN = normalize(vLN) * (gl_FrontFacing ? 1. : -1.); vec4 la, lb; vec2 lM, lT; vec3 lNW = lN;
+  vec3 lW3 = pow(abs(lN), vec3(4.)); lW3 /= lW3.x + lW3.y + lW3.z;
   if (uL0.y < .5) { lM = vLUv * uL2.zw; if (uL3.w > .5) lM = lM.yx; lT = lM * uL0.x; lTap(lT, la, lb); }
-  else { vec3 w = pow(abs(lN), vec3(4.)); w /= w.x + w.y + w.z; vec4 ax, bx, ay, by, az, bz;
+  else { vec4 ax, bx, ay, by, az, bz; vec3 w = lW3;
     lTap(vLW.zy * uL0.x, ax, bx); lTap(vLW.xz * uL0.x, ay, by); lTap(vLW.xy * uL0.x, az, bz);
     la = ax * w.x + ay * w.y + az * w.z; lb = bx * w.x + by * w.y + bz * w.z;
     vec3 nx = lNz((bx.xy * 2. - 1.) * uL2.x), ny = lNz((by.xy * 2. - 1.) * uL2.x), nz = lNz((bz.xy * 2. - 1.) * uL2.x); // whiteout blend
     lNW = normalize(vec3(nx.xy + lN.zy, nx.z * lN.x).zyx * w.x + vec3(ny.xy + lN.xz, ny.z * lN.y).xzy * w.y + vec3(nz.xy + lN.xy, nz.z * lN.z) * w.z);
     lM = w.x > max(w.y, w.z) ? vLW.zy : w.y > w.z ? vLW.xz : vLW.xy; lT = lM * uL0.x; }
-  vec4 lD; float lMac;
-  if (uL0.y < .5) { lD = texture2D(tLD, lM * uL0.z); lMac = texture2D(tLD, lM * .143).a * .65 + texture2D(tLD, lM * .43 + .3).a * .35 - .5; }
-  else { vec3 w = pow(abs(lN), vec3(4.)); w /= w.x + w.y + w.z; // blended over the three projections, so no seam where the dominant one changes
-    lD = texture2D(tLD, vLW.zy * uL0.z) * w.x + texture2D(tLD, vLW.xz * uL0.z) * w.y + texture2D(tLD, vLW.xy * uL0.z) * w.z;
-    lMac = (texture2D(tLD, vLW.zy * .143).a * w.x + texture2D(tLD, vLW.xz * .143).a * w.y + texture2D(tLD, vLW.xy * .143).a * w.z) - .5; }
-  vec3 lC = la.rgb * mix(vec3(1.), diffuse, uL3.x > .5 ? 1. : la.a) * (1. + uL3.z * lMac);
-  float lR = clamp(lb.b * (1. + uL3.z * lMac * .6) + (lD.b - .5) * uL0.w * .4, .02, 1.), lMet = lb.a;
-  float lH = vLW.y - uL2.y, lG = clamp(.45 + 1.6 * lMac + .6 * (lD.a - .5), 0., 1.);
+  if (uL4.y > 0.) { // a pattern finer than the pixel fades to its average (the last mip) instead of beating against the pixel grid
+    float lFd = smoothstep(.25, .7, length(fwidth(lM)) / uL4.y);
+    if (lFd > 0.) { float lod = log2(uL4.y * uL0.x * float(textureSize(tLA, 0).x)) + 1.; // the mip whose texels span the fine pattern: it goes, larger structure stays
+      la = mix(la, textureLod(tLA, lT, lod), lFd); lb.xy = mix(lb.xy, textureLod(tLB, lT, lod).xy, lFd); } }
+  vec4 lD;
+  if (uL0.y < .5) lD = texture2D(tLD, lM * uL0.z);
+  else lD = texture2D(tLD, vLW.zy * uL0.z) * lW3.x + texture2D(tLD, vLW.xz * uL0.z) * lW3.y + texture2D(tLD, vLW.xy * uL0.z) * lW3.z; // blended: no seam where the dominant projection changes
+  vec2 lMa = lMacro(vLW, lW3); float lMac = lMa.x, lGr = uL4.x * smoothstep(.6, -1.4, lMa.y); // grime: the broad low patches of the field, edges kept wide (narrow ones read as smoke)
+  vec3 lC = la.rgb * mix(vec3(1.), diffuse, uL3.x > .5 ? 1. : la.a) * max(.3, 1. + uL3.z * lMac) * (1. - .25 * lGr);
+  float lDk = 1. - smoothstep(.015, .1, dot(lC, vec3(.3, .59, .11))); // a dark surface is read by its highlights: more variation in its gloss and relief
+  float lR = clamp(lb.b * (1. + (.25 * uL3.z + .25 * lDk) * lMac) + (lD.b - .5) * uL0.w * (.4 + .6 * lDk), .02, 1.), lMet = lb.a;
+  float lH = vLW.y - uL2.y, lG = clamp(.45 + .6 * lMac + .6 * (lD.a - .5), 0., 1.);
   float lDirt = uL1.y * (1. - smoothstep(0., .45, lH)) * step(-.03, lH) * (1. - abs(lN.y)) * lG; // grime where it meets the floor
   lC = mix(lC, lC * uLDirt, lDirt); lR = mix(lR, 1., .4 * lDirt); lMet *= 1. - lDirt;
   float lDust = uL1.y * .3 * smoothstep(.7, .95, lN.y) * step(.25, lH) * lG; lC = mix(lC, vec3(.4, .38, .35), lDust * .5); lR = mix(lR, .9, lDust); // dust settles on tops
-  float lE = uL1.x * smoothstep(6., 30., length(fwidth(lN)) / max(length(fwidth(vLW)), 1e-4)) * smoothstep(.35, .65, lD.a + lMac); // rounded convex edges wear
+  float lE = uL1.x * smoothstep(6., 30., length(fwidth(lN)) / max(length(fwidth(vLW)), 1e-4)) * smoothstep(.35, .65, lD.a + .4 * lMac); // rounded convex edges wear
   lC = mix(lC, uLEdge, lE * .45); lR = mix(lR, .7, lE * .3);
+  lC = max(lC, vec3(.012)); // nothing so dark that it reads as a hole
   diffuseColor.rgb = lC * (gl_FrontFacing ? 1. : uL3.y);
 `;
 function libCompile(s) {
@@ -119,11 +85,12 @@ function libCompile(s) {
     .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor *= lR;')
     .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor *= lMet;')
     .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
-      if (uL0.y < .5) { vec2 xy = (lb.xy * 2. - 1.) * uL2.x + (lD.xy * 2. - 1.) * uL0.w; xy *= min(1., .98 / max(length(xy), 1e-4));
+      if (uL0.y < .5) { vec2 xy = (lb.xy * 2. - 1.) * uL2.x + (lD.xy * 2. - 1.) * uL0.w * (1. + lDk); xy *= min(1., .98 / max(length(xy), 1e-4));
         normal = normalize(lFrame(normal, -vViewPosition, lT) * lNz(xy));
       } else normal = normalize((viewMatrix * vec4(lNW, 0.)).xyz);`)
     .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\nif (uL3.x > .5) totalEmissiveRadiance *= la.a;')
     .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
+      { float lAO = 1. - lGr; reflectedLight.indirectDiffuse *= lAO; reflectedLight.indirectSpecular *= mix(1., lAO, .6); } // grime holds back the room's ambient light
       if (uL1.w > 0.) { float sh = uL1.w * (1.6 * pow(1. - saturate(dot(normal, geometryViewDir)), 2.5) - .3); reflectedLight.directDiffuse *= 1. + sh; reflectedLight.indirectDiffuse *= 1. + sh; }`);
 }
 const col3 = c => new THREE.Vector3(...c);
@@ -132,14 +99,20 @@ const col3 = c => new THREE.Vector3(...c);
 // floor (the height its dirt gathers at, 0 if not given), and roughness: the mean roughness wanted (the set's own if not given).
 function libMat(name, o = {}) {
   const [setName, def] = LIB[name] || [name, {}], s = sets[setName], t = libTex(setName);
-  o = { detail: 0, dm: .1, macro: 0, dirt: 0, wear: 0, dirtCol: [.6, .58, .54], edgeCol: [.8, .8, .8], vary: 0, sheen: 0, back: 1, uv: [1, 1], floor: 0, ...def, ...o };
-  const props = {}; for (const k in o) if (!libKeys.includes(k)) props[k] = o[k];
+  o = { detail: 0, dm: .1, macro: 0, grime: .18, fine: 0, dirt: 0, wear: 0, dirtCol: [.6, .58, .54], edgeCol: [.8, .8, .8], vary: 0, sheen: 0, back: 1, uv: [1, 1], floor: 0, ...def, ...o };
+  const props = {};
+  for (const k in o) {
+    if (libKeys.includes(k)) continue;
+    // a library material's maps are its own: another map would take one of the 6 texture units left and be ignored or overwritten
+    if (/map$/i.test(k)) throw new Error(`library material ${name}: no ${k} (the library packs its own maps)`);
+    props[k] = o[k];
+  }
   const m = S({ roughness: o.roughness == null ? 1 : o.roughness / s.r0, metalness: 1, ...props });
   if (o.emit) { m.emissive.set(o.emit[0]); m.emissiveIntensity = o.emit[1]; noCast.add(m); }
   m.userData.libU = { tLA: { value: t.A.texture }, tLB: { value: t.B.texture }, tLD: { value: detailTex },
     uL0: { value: new THREE.Vector4(1 / s.m, o.tri ? 1 : 0, 1 / o.dm, o.detail) }, uL1: { value: new THREE.Vector4(o.wear, o.dirt, o.vary, o.sheen) },
     uL2: { value: new THREE.Vector4(1, o.floor, o.uv[0], o.uv[1]) }, uL3: { value: new THREE.Vector4(o.emit ? 1 : 0, o.back, o.macro, o.swap ? 1 : 0) },
-    uLDirt: { value: col3(o.dirtCol) }, uLEdge: { value: col3(o.edgeCol) } };
+    uL4: { value: new THREE.Vector4(o.grime, o.fine, 0, 0) }, uLDirt: { value: col3(o.dirtCol) }, uLEdge: { value: col3(o.edgeCol) } };
   m.onBeforeCompile = libCompile; m.userData.lib = name;
   return m;
 }

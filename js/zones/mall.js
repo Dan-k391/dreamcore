@@ -4,7 +4,7 @@ import { dry, zones, defZone } from '../core.js';
 import { M as lib, P, neon, wallMat } from '../mat.js';
 import { add, block, box, round, lit } from '../build.js';
 
-defZone('mL', { ...dry, grp: 'm', k: .9, exp: .3, fog: [.4, .38, .4, .0008], bloom: .25, wet: .7, box: [-27, 24, 2.4, 50], probe: [-12, 3, 37] });
+defZone('mL', { ...dry, grp: 'm', k: 1.15, exp: .3, fog: [.4, .38, .4, .0008], bloom: .25, wet: .7, box: [-27, 24, 2.4, 50], probe: [-12.5, 3.4, 41] }); // off the palms' line: from between them their leaves filled the floor's reflection with a green blob
 { // mall atrium x[-26.6,1.8] z[24.4,49.6], 7m tall: polished chequered floor, shuttered shops under glowing signs, a skylight, palms
   const z = zones.mL, h = 7, F = lib(z, 'marble'), W = wallMat(z, 0xe6dcd6), soft = neon(0xfff0d8, 2.2), M = P(z, { metalness: 1, roughness: .25 }), sh = P(z, { color: 0x8d9296, metalness: .6, roughness: .45 }),
     leaf = P(z, { color: 0x2f6b3a, roughness: .6, side: THREE.DoubleSide }), bark = P(z, { color: 0x6b5138, roughness: .9 }), soil = P(z, { color: 0x2a1d14, roughness: 1 });

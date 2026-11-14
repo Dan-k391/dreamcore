@@ -2,12 +2,12 @@
 import * as THREE from 'three';
 import { dry, zones, defZone } from '../core.js';
 import { concrete } from '../tex.js';
-import { dirt, P, neon } from '../mat.js';
+import { dirt, M, P, neon } from '../mat.js';
 import { add, block, box, round, lit, post } from '../build.js';
 
 defZone('nL', { ...dry, sky: 'night', air: .5, grp: 'n', k: 1, exp: .36, fog: [.012, .016, .03, .004], bloom: .4, wet: .15, box: [681, -20, 745, 50], probe: [712, 2.5, 15] });
 { // car park at night x[681,745] z[-20,50], out of the parking level's far door: pools of lamplight on wet asphalt, a bus shelter, vending machines, the moon
-  const z = zones.nL, A = P(z, { ...concrete, color: 0x77787e, roughness: .5 }), C = P(z, { ...concrete, ...dirt }), paint = P(z, { color: 0xc8c8be, roughness: .6 }), iron = P(z, { color: 0x1c2224, metalness: .7, roughness: .4 }),
+  const z = zones.nL, A = M(z, 'asphalt', { macro: .35, roughness: .45, detail: .6 }), C = P(z, { ...concrete, ...dirt }), paint = P(z, { color: 0xc8c8be, roughness: .6 }), iron = P(z, { color: 0x1c2224, metalness: .7, roughness: .4 }),
     cone = P(z, { color: 0xe8601c, roughness: .5 }), glass = P(z, { color: 0x9fb4b8, metalness: .9, roughness: .08 }), lampG = neon(0xffc98a, 7);
   box(A, 660, -.3, -40, 766, 0, 70);
   box(C, 680.55, 0, -20.4, 681.05, 3.4, 13); box(C, 680.55, 0, 15, 681.05, 3.4, 50.4); box(C, 680.55, 2.4, 13, 681.05, 3.4, 15); // the wall the passage comes out of

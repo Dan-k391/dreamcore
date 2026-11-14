@@ -7,9 +7,9 @@ defZone('bA', { ...warm, box: [-9.4, 0, 9.4, 21.4], probe: [0, 1.5, 11] });
 defZone('bB', { ...warm, box: [-33.4, .6, -9.4, 21.4], probe: [-21.3, 1.7, 13] });
 defZone('bC', { ...warm, box: [9.4, .4, 36.8, 12.4], probe: [23.4, 1.5, 10.8], wet: .3 });
 for (const z of [zones.bA, zones.bB, zones.bC]) { // yellowed wallpaper with a seam every 53 cm, worn loop carpet, mineral-fibre tiles in a T-bar grid
-  z.carpet = M(z, 'loopCarpet', { color: 0xd9bd7a });
+  z.carpet = M(z, 'loopCarpet', { color: 0xe8cc8c });
   z.paper = M(z, 'wallpaper');
-  z.ceil = M(z, 'ceilingTile', { color: 0xf2e9d6 });
+  z.ceil = M(z, 'ceilingTile', { color: 0xf2e9d6, grime: .3 }); // years of dust and damp, unevenly
   z.trim = P(z, { color: 0xcfc59a, roughness: .55 });
 }
 zones.bA.mats.push(lampOff);
