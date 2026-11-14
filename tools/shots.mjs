@@ -17,11 +17,19 @@ mkdirSync(out, { recursive: true });
 const browse = fileURLToPath(new URL('./browse.mjs', import.meta.url));
 const shoot = v => new Promise(done => {
   const p = spawn(process.execPath, [browse, '--url', `http://127.0.0.1:${port}/?dev#${v.hash}`, '--shot', join(out, v.name + '.png'),
-    // two animation frames first, so a late window resize has landed before the picture is drawn
-    '--eval', 'await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))), dev.hold = true, dev.uTime.value = 0, dev.step(90, 1 / 60), innerWidth + "x" + innerHeight'], { stdio: ['ignore', 'pipe', 'pipe'] });
+    // the headless window can reach its final size late: wait until the canvas is 1280x720, draw, and fail (then retry) if it changed meanwhile
+    '--eval', `(async () => { const c = dev.renderer.domElement, size = () => c.width === 1280 && c.height === 720;
+      for (let i = 0; i < 100 && !size(); i++) await new Promise(r => setTimeout(r, 50));
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+      dev.hold = true; dev.uTime.value = 0; dev.step(90, 1 / 60);
+      await new Promise(r => requestAnimationFrame(r));
+      if (!size()) throw new Error('canvas is ' + c.width + 'x' + c.height); return true; })()`], { stdio: ['ignore', 'pipe', 'pipe'] });
   let log = ''; p.stdout.on('data', d => log += d); p.stderr.on('data', d => log += d);
-  p.on('close', code => { console.log(`${code ? 'FAIL' : 'ok  '} ${v.name}${code ? '\n' + log : ''}`); done(code); });
+  p.on('close', code => { if (!code || last) console.log(`${code ? 'FAIL' : 'ok  '} ${v.name}${code ? '\n' + log : ''}`); done(code); });
 });
-let failed = 0;
-for (let i = 0; i < views.length; i += 3) failed += (await Promise.all(views.slice(i, i + 3).map(shoot))).filter(Boolean).length;
-process.exit(failed ? 1 : 0);
+let last = false, failed = [];
+for (let i = 0; i < views.length; i += 3) { const batch = views.slice(i, i + 3), codes = await Promise.all(batch.map(shoot)); failed.push(...batch.filter((v, k) => codes[k])); }
+// python's http.server refuses connections when three browsers fetch every module at once: retry those views one at a time
+last = true; const retry = failed; failed = [];
+for (const v of retry) if (await shoot(v)) failed.push(v);
+process.exit(failed.length ? 1 : 0);

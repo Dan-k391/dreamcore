@@ -27,6 +27,12 @@ When the two pull against each other, quality wins: one place finished properly 
 
 - Serve your working copy: `python -m http.server <port> --bind 127.0.0.1` from the repo root, on the port your brief gives you.
 - `node tools/browse.mjs --url "http://127.0.0.1:<port>/?dev#x,z,yaw,pitch" --shot out.png --eval "<js>"` loads the game in a private headless browser on the real GPU, runs JavaScript in the page, saves a 1280x720 screenshot and prints `{result, errors}`. It exits non-zero on any page error. Read the screenshot file to look at it.
-- `?dev` in the address turns on the test hooks (`window.dev`); `#x,z,yaw,pitch` starts the player there.
+- `?dev` in the address turns on the test hooks (`window.dev`, in `js/dev.js`); `#x,z,yaw,pitch` starts the player there. Without `?dev` none of it exists.
+  - `dev.ready`: level built, baked and one frame drawn. `dev.hold = true` stops the normal loop, so only `dev.step(n, dt = 1/60)` moves time (deterministic).
+  - `dev.state()` -> `{x, y, z, zone, sky, air}` (y = feet height). `dev.key(code, down)` presses a key by `KeyboardEvent.code`.
+  - `dev.go(x, z, yaw, keys = [], secs = 0, pitch = 0)`: teleport, settle, hold the keys for `secs`, release, return `state()`. Also `camera`, `scene`, `renderer`, `zones`, `cost()`, `info()`.
+- `node tools/test.mjs [--port 8200]`: the regression suite (page loads with and without `?dev` with no console errors or failed asserts, and walks between places land where they should). Run it before reporting; it must be green.
+- `node tools/shots.mjs <outDir> [--port 8200] [--only name,name]`: one repeatable 1280x720 photo per viewpoint in `tools/views.json` (`[{name, hash}]`). Shoot before and after a change and compare; run to run, the same code differs by well under 1/255 on average.
+- Code layout: `js/zones/<place>.js` holds everything about one place (its zones, materials, geometry, floors, lights, props); `js/level.js` imports them in order. Adding a place = a new file there and one import line in `level.js`. Shared things live in `js/core.js`, `tex.js`, `mat.js`, `build.js` (builder and registries); places never import each other.
 - Look at what you built, from several angles and up close, before calling it done. A change that was not looked at is not finished.
 - Put screenshots under `screenshots/` (ignored by git, never committed). The local branch `with-screenshots` is never pushed.
