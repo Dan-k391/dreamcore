@@ -46,24 +46,34 @@ set('stucco', 1.5, 512, 1024, .9, .3, `
   h = .25 * grains * (1. - .6 * top) + sp + .5 * swirl;
   c = vec3(.82, .80, .76) * (.92 + .08 * grains + .06 * fbm(uv * 5., vec2(5), 4, 13)) * (1. + .04 * top) * (1. - .09 * (1. - max(hA, hB)) * ss(.4, .6, dust));
   r = .93 - .12 * top; t = 1.;`);
-set('concreteWall', 2.4, 1024, 1024, .82, .3, ` // two 1.2 m panels across u: the first cast in place (form ties, pour lifts), the second a precast face (no ties, no lifts) for kerbs, bollards, wheel stops, beams
+set('concreteWall', 2.4, 1024, 1024, .82, .3, ` // two 1.2 m panels across u: the first cast in place (150 mm vertical formwork boards, form ties, pour lines every 1.2 m of v at .15),
+  // the second a precast face (sparse clustered pinholes, aggregate showing where it weathered, tyre rubber in its last 30 cm of u) for kerbs, bollards, wheel stops
   vec2 q = uv * 2.4; float px = mod(q.x, 1.2), pid = floor(q.x / 1.2), sd = min(px, 1.2 - px), insitu = 1. - pid;
   float fin = 1. - ss(1., 2.5, min(sd, min(q.y, 2.4 - q.y)) * 1000.); // panel joints: a thin raised fin
+  float bid = floor(px / .15), bj = min(fract(px / .15), 1. - fract(px / .15)) * 150.; // the boards of the form: grout squeezed between them, each set a hair proud or back
+  float bjH = insitu * (1. - ss(.4, 1.6, bj)), bst = insitu * (hf(vec2(bid, pid), 73) - .5);
+  float bgr = insitu * (vn((uv + vec2(.0013 * gn(uv * vec2(6., 2.), vec2(6., 2.), 74), .37 * bid)) * vec2(1100., 7.), vec2(1100., 7.), 75) - .5); // the boards' grain printed in the face
   vec2 tg = mod(q - .3, .6) - .3; float td = length(tg) * 1000.;
   float hole = insitu * (1. - ss(10., 12.5, td)), ring = insitu * (1. - ss(12., 30., td)) * (1. - hole); // form-tie holes on a 60 cm grid
-  float lift = insitu * ss(.94, .995, sin((uv.y * 6. + .03 * gn(uv * vec2(4., 1.), vec2(4., 1.), 9)) * 2. * PI)); // pour lines
-  float dl = abs(fract(uv.y * 6. - .25 + .5) - .5) * .4; // metres to the nearest pour line: air rose and was trapped under it
-  float bug = pits(uv, 40., 10., .2, 61) * ss(.3, .7, mix(.55, exp(-pow(dl / .12, 2.)), insitu) + .5 * fbm(uv * 8., vec2(8), 3, 62)); // bug holes 1-12 mm: bowls, many small, few big, clustered under the lifts
+  float lv = q.y - .15 + .012 * gn(uv * vec2(5., 1.), vec2(5., 1.), 9); lv -= 1.2 * floor(lv / 1.2 + .5); // metres to the nearest pour line
+  float lift = insitu * (1. - ss(.0015, .005, abs(lv))), dl = abs(lv); // a pour line: a crisp step with a darker seam; air rose and was trapped under it
+  float wm = (1. - insitu) * ss(.5, .72, fbm(uv * vec2(4., 3.), vec2(4., 3.), 3, 81)); // precast: weathered patches, the laitance gone and the aggregate showing
+  vec2 ag = minStones(uv * 420., vec2(420), 83, .55, .42); float agx = wm * ss(.05, .35, ag.x);
+  float tyre = (1. - insitu) * ss(.88, 1., px) * ss(.48, .7, fbm(uv * vec2(34., 5.), vec2(34., 5.), 4, 85)) * (.5 + .5 * ss(.3, .6, fbm(uv * 3., vec2(3), 3, 86))); // rubber smeared along
+  float bug = pits(uv, 40., 10., .2, 61) * ss(.3, .7, mix(.2 + .7 * ss(.4, .7, fbm(uv * 3., vec2(3), 3, 87)), exp(-pow(dl / .12, 2.)), insitu) + .5 * fbm(uv * 8., vec2(8), 3, 62)); // bug holes 1-12 mm: clustered under the lifts, in patches on precast
   float leak = exp(-pow(sd * 1000. / 9., 2.)) * ss(.35, .65, fbm(uv * vec2(4., 24.), vec2(4., 24.), 3, 64)); // grout bled out at the panel seams
   vec2 la = stain(uv, 2., .3, 63), fo = stain(uv, 5., .15, 67); // laitance blotches; form-oil stains
   float streak = insitu * exp(-pow(tg.x * 1000. / 7., 2.)) * ss(-.3, -.01, -abs(tg.y)) * step(tg.y, 0.) * (.5 + .5 * gn(uv * vec2(60., 8.), vec2(60., 8.), 11));
   streak += .6 * ss(.6, .8, vn(uv * vec2(40., 3.), vec2(40., 3.), 12)) * ss(.5, .7, fbm(uv * 3., vec2(3), 3, 14));
   float grain = vn(uv * vec2(300., 6.), vec2(300., 6.), 13), m1 = fbm(uv * 6., vec2(6), 5, 15), m2 = fbm(uv * 30., vec2(30), 4, 16);
-  h = .4 * fin - 9. * hole + .08 * (grain - .5) - 3.5 * bug + .08 * fbm(uv * 600., vec2(600), 2, 17) + .3 * lift + .15 * m2 + .1 * la.x;
+  h = .4 * fin - 9. * hole + .08 * (grain - .5) - 3.5 * bug + .08 * fbm(uv * 600., vec2(600), 2, 17) + .4 * lift * sign(lv) + .15 * m2 + .1 * la.x;
+  h += .3 * bst + .45 * bjH + .14 * bgr + 1.2 * agx * ag.x - .25 * wm;
   c = vec3(.36, .35, .33) * (.8 + .3 * m1) * (.9 + .2 * m2) * (.94 + .12 * hf(vec2(pid, 0.), 19)) * (1. - .05 * (grain - .5));
-  c *= (1. - .12 * fin) * (1. - .45 * hole) * (1. - .08 * ring) * (1. - .2 * sat(streak)) * (1. - .06 * lift) * (1. - .45 * sat(2. * bug)) * (1. - .15 * leak);
-  c *= (1. + .08 * la.x - .04 * la.y) * (1. - .08 * fo.x - .05 * fo.y);
-  r = .8 + .1 * m1 - .1 * sat(streak) + .05 * la.x - .08 * fo.x + .08 * sat(2. * bug); t = 1.;`);
+  c *= (1. - .12 * fin) * (1. - .45 * hole) * (1. - .08 * ring) * (1. - .2 * sat(streak)) * (1. - .14 * lift) * (1. - .45 * sat(2. * bug)) * (1. - .15 * leak);
+  c *= (1. + .08 * la.x - .04 * la.y) * (1. - .08 * fo.x - .05 * fo.y) * (1. + .06 * bst - .1 * bjH + .06 * bgr) * (1. - .06 * wm);
+  c = mix(c, minStoneCol(ag.y) * 2.2 + .04, agx * .8);
+  c = mix(c, vec3(.035, .033, .031), .75 * tyre);
+  r = .8 + .1 * m1 - .1 * sat(streak) + .05 * la.x - .08 * fo.x + .08 * sat(2. * bug) - .15 * agx - .3 * tyre; t = 1.;`, STONES);
 set('concreteFloor', 4, 1024, 1024, .5, .3, `
   float m1 = st(fbm(uv * 6., vec2(6), 6, 1), 2.), m2 = st(fbm(uv * 28., vec2(28), 5, 2), 2.5), m3 = st(fbm(uv * 2., vec2(2), 4, 4), 2.);
   float sweep = gn(uv * vec2(40., 4.) + 2. * vec2(0., gn(uv * 3., vec2(3), 5)), vec2(40., 4.), 7); // hand-float streaks
