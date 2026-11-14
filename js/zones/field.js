@@ -2,11 +2,10 @@
 import * as THREE from 'three';
 import { scene, camera, uTime, sunDir, dry, zones, defZone } from '../core.js';
 import { hash, noise, fbm, ss, makeTex, concrete } from '../tex.js';
-import { P, wallMat, paintedBall } from '../mat.js';
+import { M, P, wallMat, paintedBall } from '../mat.js';
 import { colliders, flats, seeThrough, skyOnly, onSun, loose, add, block, box, solid, round, flight, tube, lit, post, doorway } from '../build.js';
 
 defZone('fD', { ...dry, step: 'carpet', sky: 'hill', air: 1, grp: 'f', k: 1, exp: .3, fog: [.72, .82, .95, .002], sat: 1.15, bloom: .07, shaft: .04, wet: 0, box: [-50, 665.6, 58, 760], probe: [4, 6, 690] });
-const grassTex = makeTex(512, 4, (u, v) => { const n = fbm(u, v, 6, 5), b = noise(u * 256, v * 64, 64) * noise(u * 128, v * 256, 128), k = .55 + .9 * b; return [(.26 + .2 * n) * k, (.6 + .25 * n) * k, (.12 + .08 * n) * k, b * 2 + n, .95]; }, 1.2);
 // ---------- the field: reached through the dark passage at the end of the hotel hallway ----------
 // Rolling ground, written once for the walking floor and once for the shaders that plant grass on it. Flat at the door and at the playground, rising to a rim all round.
 const hill = (x, z) => { const h = (3 + 2.2 * Math.sin(x * .07 + 1) * Math.cos(z * .06) + 1.4 * Math.sin(x * .13 + z * .11) + .5 * Math.sin(x * .31) * Math.cos(z * .27) + 12 * ss(40, 62, Math.hypot(x - 4, z - 712)) ** 2) * ss(5, 22, Math.hypot(x - 3.8, z - 665.6));
@@ -15,7 +14,7 @@ const hillGLSL = `float hillH(vec2 p) { float r = smoothstep(40., 62., distance(
   float h = (3. + 2.2 * sin(p.x * .07 + 1.) * cos(p.y * .06) + 1.4 * sin(p.x * .13 + p.y * .11) + .5 * sin(p.x * .31) * cos(p.y * .27) + 12. * r * r) * smoothstep(5., 22., distance(p, vec2(3.8, 665.6)));
   return 3.2 + (h - 3.2) * smoothstep(7., 14., distance(p, vec2(-18., 705.))); }`;
 let grass;
-{ const z = zones.fD, W = wallMat(z, 0xf4f1ea), G = P(z, { map: grassTex.map, normalMap: grassTex.normalMap, roughness: 1 }), stone = P(z, { ...concrete, color: 0xd8d2c4 }),
+{ const z = zones.fD, W = wallMat(z, 0xf4f1ea), G = M(z, 'grassGround'), stone = P(z, { ...concrete, color: 0xd8d2c4 }),
     iron = P(z, { color: 0x24302c, metalness: .7, roughness: .45 }), red = P(z, { color: 0xc8322c, roughness: .35 }), blue = P(z, { color: 0x2f6fc0, roughness: .35 }), yel = P(z, { color: 0xe8b820, roughness: .35 }),
     wood = P(z, { color: 0x7a5a3c, roughness: .7 }), frost = P(z, { color: 0xfff6e0, roughness: .15, emissive: 0xffe2a8, emissiveIntensity: .5 }), sand = wallMat(z, 0xb39a68, { roughness: 1 }), y0 = 3.2;
   const g = new THREE.PlaneGeometry(180, 180, 240, 240).rotateX(-Math.PI / 2).translate(4, 0, 712), q = g.attributes.position;

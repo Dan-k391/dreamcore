@@ -6,6 +6,7 @@ import { skyNow } from './sky.js';
 import { o, zone, feet, air, frame, place, looseCost } from './player.js';
 import { groups, floaters } from './physics.js';
 import { composer } from './post.js';
+import { libStats } from './tex.js';
 
 // ---------- test harness: with ?dev in the address, tools/test.mjs and tools/shots.mjs drive the game through window.dev ----------
 if (new URLSearchParams(location.search).has('dev')) {
@@ -36,6 +37,15 @@ if (new URLSearchParams(location.search).has('dev')) {
       const p = camera.position.clone(), q = camera.quaternion.clone(); camera.position.set(x, y, z); camera.rotation.set(pitch, yaw, 0, 'YXZ'); camera.updateMatrixWorld();
       composer.render(0); camera.position.copy(p); camera.quaternion.copy(q); },
     physics(n = 60) { let t = 0; for (let i = 0; i < n; i++) { frame(1 / 60); t += looseCost.ms; } return +(t / n).toFixed(3); }, // ms a frame the loose things cost, over n frames
+    lib: libStats, // the material library's bake: ms, sets, bytes
+    texMem() { // material textures in the scene (env maps and shadow maps aside), counted as w x h x bytes per texel x 1.33 when mipmapped
+      const seen = new Set(), keys = ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'emissiveMap', 'alphaMap', 'bumpMap'];
+      scene.traverse(o => { for (const m of [o.material].flat()) if (m) { for (const k of keys) if (m[k]) seen.add(m[k]);
+        for (const u of Object.values(m.userData.libU || {})) if (u.value?.isTexture) seen.add(u.value);
+        for (const u of Object.values(m.uniforms || {})) if (u.value?.isTexture && !u.value.isRenderTargetTexture && !u.value.isDepthTexture) seen.add(u.value); } });
+      let bytes = 0; for (const t of seen) { const w = t.image?.width || 0, h = t.image?.height || 0, b = { 1015: 16, 1016: 8 }[t.type] || 4;
+        bytes += w * h * b * (t.generateMipmaps || t.mipmaps?.length ? 1.33 : 1); }
+      return { textures: seen.size, MB: +(bytes / 1048576).toFixed(1) }; },
     info() { renderer.info.reset(); this.step(1); return { ...renderer.info.render, ...renderer.info.memory, programs: renderer.info.programs.length }; }, // draw calls and triangles for one whole frame
   };
 }

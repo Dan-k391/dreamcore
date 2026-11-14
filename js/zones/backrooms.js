@@ -1,34 +1,16 @@
 // The backrooms: the first maze (bA), the pillar hall (bB) and the corridor east (bC).
 import { H, warm, zones, defZone } from '../core.js';
-import { hash, noise, fbm, makeTex } from '../tex.js';
-import { S, dirt, lampOff } from '../mat.js';
+import { M, P, lampOff } from '../mat.js';
 import { box, room, wall, lamp } from '../build.js';
 
 defZone('bA', { ...warm, box: [-9.4, 0, 9.4, 21.4], probe: [0, 1.5, 11] });
 defZone('bB', { ...warm, box: [-33.4, .6, -9.4, 21.4], probe: [-21.3, 1.7, 13] });
 defZone('bC', { ...warm, box: [9.4, .4, 36.8, 12.4], probe: [23.4, 1.5, 10.8], wet: .3 });
-const carpetTex = makeTex(512, 1.5, (u, v, x, y) => {
-  const f = hash(x, y), s = noise(u * 128, v * 128, 128), k = .62 + .3 * f * s + .2 * s + .25 * fbm(u, v, 4, 3);
-  return [.66 * k, .58 * k, .37 * k, f * .5 + s, 1];
-}, 1.2);
-const paperTex = makeTex(1024, 1.2, (u, v) => { // mustard wallpaper: pinstripes + staggered embossed diamonds
-  const cu = u * 8 % 1, cv = (v * 8 + (Math.floor(u * 8) & 1) * .5) % 1;
-  const line = Math.abs(cu - .5) > .47 ? 1 : 0, motif = Math.abs(cu - .5) * 1.5 + Math.abs(cv - .5) < .13 ? 1 : 0;
-  const fib = noise(u * 300, v * 300, 300), k = (.9 + .1 * fib) * (1 - .1 * line - .08 * motif) * (.9 + .15 * fbm(u, v, 3, 4));
-  return [.93 * k, .83 * k, .46 * k, fib * .25 - line * .4 + motif * .4, .9];
-}, 1.5);
-const ceilTex = makeTex(1024, 1.2, (u, v, x, y) => { // 60cm acoustic tiles in a T-bar grid
-  const tu = u * 2 % 1, tv = v * 2 % 1, e = Math.min(tu, 1 - tu, tv, 1 - tv), bar = e < .02;
-  const pit = Math.min(1, Math.pow(noise(u * 160, v * 160, 160), 7) * 5 + (hash(x, y) > .994 ? .8 : 0));
-  const c = bar ? .9 : (.84 + .05 * hash(Math.floor(u * 2), Math.floor(v * 2) + 5)) * (1 - .16 * pit) * (.92 + .1 * fbm(u, v, 4, 3));
-  return [c, c * .985, c * .94, bar ? 1.6 : 1 - pit * .8 - (e < .03 ? .4 : 0), .95];
-}, 2);
-for (const z of [zones.bA, zones.bB, zones.bC]) {
-  z.carpet = S({ map: carpetTex.map, normalMap: carpetTex.normalMap, ...dirt });
-  z.paper = S({ map: paperTex.map, normalMap: paperTex.normalMap, roughness: .88, ...dirt });
-  z.ceil = S({ map: ceilTex.map, normalMap: ceilTex.normalMap, roughness: .95, ...dirt });
-  z.trim = S({ color: 0xcfc59a, roughness: .55 });
-  z.mats = [z.carpet, z.paper, z.ceil, z.trim];
+for (const z of [zones.bA, zones.bB, zones.bC]) { // yellowed wallpaper with a seam every 53 cm, worn loop carpet, mineral-fibre tiles in a T-bar grid
+  z.carpet = M(z, 'loopCarpet', { color: 0xd9bd7a });
+  z.paper = M(z, 'wallpaper');
+  z.ceil = M(z, 'ceilingTile', { color: 0xf2e9d6 });
+  z.trim = P(z, { color: 0xcfc59a, roughness: .55 });
 }
 zones.bA.mats.push(lampOff);
 { // backrooms A: the first maze. x[-9,9] z[1,21]

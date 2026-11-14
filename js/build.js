@@ -29,10 +29,10 @@ const onSun = []; // f(sun): run once the sun exists, for things built before it
 // props: chrome ladder, floating rings, water slide spiralling round a column
 const ladders = []; // [x1, z1, x2, z2] zones in the water where facing the ladder and pressing forward climbs it
 const rings = []; // floating rings: bob on the water (see frame)
-function add(mat, g) {
+function add(mat, g, ownUV = false) { // ownUV: keep the geometry's own UVs (a library material's `uv` option says how many metres one unit is)
   g = g.index ? g.toNonIndexed() : g;
   const p = g.attributes.position, n = g.attributes.normal, uv = g.attributes.uv;
-  for (let i = 0; i < p.count; i++) {
+  if (!ownUV) for (let i = 0; i < p.count; i++) {
     if (Math.abs(n.getY(i)) > .5) uv.setXY(i, p.getX(i), p.getZ(i));
     else if (Math.abs(n.getX(i)) > .5) uv.setXY(i, p.getZ(i), p.getY(i));
     else uv.setXY(i, p.getX(i), p.getY(i));

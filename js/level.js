@@ -4,6 +4,7 @@
 // in `skyOnly` (build.js) for a new sky; its zone id in a neighbouring pool's seen-from list (that pool's place file) if the
 // pool shows through a doorway from it.
 import { merge } from './build.js';
+import { bakeLibrary } from './tex.js';
 import './zones/backrooms.js';
 import './zones/poolhall.js';
 import './zones/arcade.js';
@@ -20,5 +21,7 @@ import './zones/field.js';
 import './zones/carpark.js';
 import './zones/terrace.js';
 import './zones/sea.js';
+if (new URLSearchParams(location.search).has('dev')) await import('./zones/showroom.js'); // the material showroom: test builds only
 
 merge();
+await bakeLibrary(); // every library texture the places asked for, on the GPU, before anything is drawn
