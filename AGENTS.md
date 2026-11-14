@@ -23,6 +23,16 @@ When the two pull against each other, quality wins: one place finished properly 
 - It must run smoothly. Never trade visible quality for speed; find the waste instead.
 - 16 texture units is the hard limit per material: 9 lamp shadow maps and 1 sun shadow map are always bound, leaving 6.
 
+## Working economically
+
+Quality is not negotiable; waste is. Measured on this project: half of what a subagent costs is re-reading its own growing conversation on every step, a third is tool output entering it, and a photo read early in a long job is paid for again on every later step.
+
+- **Fewer, fuller steps.** One command that does several things, one script that takes all the photos, instead of many small steps. A job that would run past about 60 steps is two jobs: stop at a clean point and report what the next agent needs.
+- **Do not print what you will not read.** `node tools/test.mjs` prints only failures and a count (`--all` for every line). Cut long output with `tail` or `grep`; read files by line range.
+- **Numbers before eyes.** What a script can check (tests, pixel differences, timings, counts) a script checks, and its numbers are trusted. `python tools/compare.py <before> <after>` prints the difference per view and writes side-by-sides only for the largest: look at those, not at every view.
+- **Photos in batches, sheets before singles.** Take many photos in one run with `node tools/shots.mjs <outDir> --views <file.json>`. See many at once with `python tools/sheet.py`; open a full-size photo only to judge fine detail up close or when the sheet raises a doubt. Never read the same photo twice. Judging a material or an object at arm's length still needs full-size close-ups: do not skimp there.
+- **Focused reviews.** A reviewer gets one question and the diff, not "check everything", and two reviewers never check the same thing. After a fix, verification re-runs the failing cases and reads the fix's diff; it does not repeat the whole review.
+
 ## Testing (subagents: use this, do not use the shared Browser pane)
 
 - Serve your working copy: `node tools/serve.mjs <port>` from the root of the copy you are working in (in the background), on the port your brief gives you. Stop it when you are done.
