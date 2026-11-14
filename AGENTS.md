@@ -3,14 +3,14 @@
 This is a browser dreamcore walking game (three.js, no build step, served as static files, live at https://dan-k391.github.io/dreamcore/). The bar for everything in it:
 
 - **Insanely detailed quality.** It should look like it can keep up with AAA: impressive, photorealistic graphics. Every object counts, not only the rooms: a bench, a lamp post, a pillar, a palm, a slide each need believable shape, material and texture up close.
-- **Small in scope.** A tiny level, not a big game. Spend the effort on how it looks, not on how much there is.
+- **Small in scope.** Several tiny levels, not a big game. Each place is small; spend the effort on how it looks, not on how much there is.
 
 When the two pull against each other, quality wins: one place finished properly beats three that are plain.
 
 ## Who does what
 
 - The lead session is the **head manager and art director**. It decides what gets built, writes the briefs, judges the results against the bar above, and commits and pushes. It does not write game code itself.
-- **Coding, code review and testing are done by subagents: Opus 5.5 at medium effort.** Every change is written by one subagent and then checked by others (a code review and a test run) before the lead accepts it.
+- **Coding, code review and testing are done by subagents, at medium effort.** Opus 5.5 for the tough work: engines and shared systems (rendering, materials, physics), building or rebuilding a place or its objects, art review, and review of that code. Sonnet 5.5 for the easier work: running the test suite and photo comparisons, taking audit photos and contact sheets, mechanical edits, small well-specified fixes, merging branches. Every change is written by one subagent and then checked by others (a code review and a test run) before the lead accepts it.
 - The owner has put the lead fully in charge: no questions back to the owner, commit and push whenever it makes sense. Subagents never push and never ask the owner anything; they report to the lead.
 
 ## Standing rules for the game
