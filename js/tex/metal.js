@@ -31,7 +31,10 @@ set('smudge', .5, 512, 512, .06, 0, `
   float w = mtWipe(uv, 4., 1), pr = mtPrints(uv, 5., .5, 11);
   float sc = st(vn(uv * vec2(3., 160.), vec2(3., 160.), 21), 3.) * .5; // faint polishing lines
   c = vec3(.68, .685, .69) * (1. - .04 * pr); m = 1. - .22 * max(.7 * w, pr); t = 1.; // the oil film hazes: a little light scatters off it
-  r = .025 + .14 * w + .2 * pr + .05 * sc + .015 * fbm(uv * 6., vec2(6), 3, 9); h = -.004 * sc + .002 * pr;`, MT);
+  r = .025 + .14 * w + .2 * pr + .05 * sc + .015 * fbm(uv * 6., vec2(6), 3, 9); h = -.004 * sc + .002 * pr;
+  vec4 sp = vor(uv * 30., vec2(30), 61, 1.); float sr = (.6 + 1.6 * sp.w) * SZ * 1000. / 30. * .06, sd = sp.x * SZ * 1000. / 30.; // dried drops: a ring of scale, a clearer middle
+  float spot = step(.55, sp.z) * (1. - ss(sr * .75, sr, sd)) * (.35 + .65 * ss(sr * .4, sr * .9, sd));
+  c = mix(c, vec3(.74, .73, .7), spot * .25); r += .22 * spot; m -= .15 * spot;`, MT);
 set('brass', .5, 256, 512, .2, 0, `
   float sw = st(vn(uv * vec2(4., 90.), vec2(4., 90.), 3), 2.5), pr = mtPrints(uv, 4., .55, 13); // polishing swirls; fingertips that oxidise darker
   float tn = st(fbm(uv * 6. + .3 * vec2(fbm(uv * 18., vec2(18), 3, 5), 0.), vec2(6), 5, 17), 1.7); // tarnish: where cloths and hands did not reach
@@ -48,7 +51,7 @@ set('brushed', .5, 256, 1024, .23, 0, `
   r = .27 + .09 * (g1 - .5) + .07 * (g2 - .5) + .04 * (pass - .5) + .06 * sc; h = .12 * g1 + .05 * g2 + .02 * g3 + .07 * g4 - .01 * sc;`);
 set('galvanised', .5, 512, 1024, .32, 0, `
   // hot-dip spangle: zinc crystals 5-20 mm, each grown out from a nucleus in six feathered arms, each a slightly different plane and gloss
-  float K = 40., cm = SZ * 1000. / K; vec2 q = uv * K + .5 * (vec2(fbm(uv * 80., vec2(80), 3, 21), fbm(uv * 80., vec2(80), 3, 23)) - .5);
+  float K = 64., cm = SZ * 1000. / K; vec2 q = uv * K + .5 * (vec2(fbm(uv * 80., vec2(80), 3, 21), fbm(uv * 80., vec2(80), 3, 23)) - .5);
   vec4 v = vor(q, vec2(K), 1, 1.); vec3 nv = vorv(q, vec2(K), 1, 1.); vec2 d = -nv.xy * cm; // mm from the nucleus
   vec4 ch = hr(vec2(nv.z * 977., 3.), 9); float den = 0.;
   for (int k = 0; k < 3 * uOne; k++) { float a = ch.x * 1.0472 + float(k) * 1.0472; vec2 dr = vec2(cos(a), sin(a)); float al = dot(d, dr), pe = abs(dot(d, vec2(-dr.y, dr.x)));
@@ -56,8 +59,8 @@ set('galvanised', .5, 512, 1024, .32, 0, `
     den = max(den, exp(-pe / .5) + .55 * fe * exp(-pe / 2.5)); }
   den = sat(den); float edge = 1. - ss(.0, .035, v.y - v.x), age = ss(.4, .75, fbm(uv * 3., vec2(3), 4, 25)); // dull weathered areas
   vec2 tilt = ch.yz - .5;
-  c = vec3(.72, .73, .74) * (.92 + .1 * ch.w + .05 * den) * (1. - .08 * edge); m = 1.; t = 1.;
-  r = mix(.12 + .3 * ch.w - .08 * den, .42, .55 * age) + .1 * edge; h = dot(d, tilt) * .045 + .012 * den - .05 * edge;
+  c = vec3(.72, .73, .74) * (.95 + .04 * ch.w + .025 * den) * (1. - .04 * edge); m = 1.; t = 1.;
+  r = mix(.22 + .12 * ch.w - .04 * den, .42, .55 * age) + .05 * edge; h = dot(d, tilt) * .018 + .006 * den - .025 * edge;
   vec2 wr = stain(uv, 3., .2, 31); float wh = wr.x * (.6 + .4 * fbm(uv * 60., vec2(60), 3, 33)); // white rust where water stood
   c = mix(c, vec3(.8, .8, .77), wh * .85); c *= 1. - .12 * wr.y; r = mix(r, .8, wh); m = 1. - .7 * wh; h += .02 * wh;`);
 set('anodised', .5, 256, 512, .3, 0, `
@@ -78,24 +81,38 @@ set('castIron', .35, 256, 512, .45, .3, `
   c = mix(c, vec3(.075, .04, .022), bloom * .7); r = mix(r, .6, bloom * .6); h += .03 * bloom;
   c = mix(c, vec3(.2, .085, .035) * (.8 + .4 * sand), chp); r = mix(r, .85, chp); t *= 1. - chp; h -= .12 * chp;
   c = mix(c, vec3(.1, .095, .09), core * .8); m = core * .7; r = mix(r, .5, core * .8);`);
-set('paintedSteel', 1, 1024, 1024, .32, .3, `
+// Paint on steel: an even colour with a soft gloss and an orange peel, chips rare (the kit models where hands, feet and chains rub).
+// chipD(cell centre in set units) says how often a chip falls; a chip shows grey primer, its core bare steel going brown.
+const PAINT = `
   float peel = gn(uv * 250., vec2(250), 1) * .65 + gn(uv * 160., vec2(160), 3) * .35; // orange peel, 4-6 mm
-  float zone = ss(.5, .72, vn(uv * 3., vec2(3), 19)); // where it gets knocked: chips gather there
-  c = vec3(.8) * (.98 + .03 * peel) * (.95 + .07 * (2. * fbm(uv * 2., vec2(2), 6, 17) - 1.)); r = .3 + .05 * peel; h = .02 * peel; t = 1.; m = 0.;
+  c = vec3(.8) * (.985 + .025 * peel) * (.99 + .02 * (2. * fbm(uv * 2., vec2(2), 6, 17) - 1.)); r = .26 + .06 * peel; h = .025 * peel; t = 1.; m = 0.;
   float chp = 0., core = 0., run = 0., K = 14.; vec2 p = uv * K + .3 * vec2(gn(uv * 40., vec2(40), 13), gn(uv * 40., vec2(40), 15)), i = floor(p);
   for (int y = -2; y <= uOne; y++) for (int x = -1; x <= uOne; x++) { vec2 o = vec2(x, y), id = mod(i + o, vec2(K)); vec4 hh = hr(id, 5);
-    if (hh.x > .003 + .05 * ss(.6, .85, vn((id + .5) / K * 3., vec2(3), 19))) continue; // rare, and gathered where it gets knocked
-    vec2 dd = (p - i - o - .2 - .6 * hh.yz) * 1000. / K; float rd = 3. + 9. * hh.w * hh.w, l = length(dd);
-    chp = max(chp, 1. - ss(rd - .8, rd, l)); core = max(core, (1. - ss(rd * .55 - .8, rd * .55, l)) * step(.35, hh.z));
-    float dn = -dd.y - rd * .5, L = 5. + 55. * hf(id, 7) * hf(id, 8); // rust runs down from it
-    if (dn < 0. || dn > L || hh.z < .6) continue;
-    run = max(run, step(0., dn) * (1. - ss(.4, 1., abs(dd.x) / (rd * .55 * (1. - .6 * sat(dn / L)) + .5))) * (1. - sat(dn / L)) * (.5 + .5 * vn(vec2(dd.x / 1.5, dn / 6.), vec2(4096), 9)) * step(.35, hh.z)); }
-  float scr = scratches(uv, 3., .25, .012, 41) * ss(.7, .9, vn(uv * 3., vec2(3), 19)); // only where it gets knocked // through the top coat: lighter scuffs, not the primer
-  c = mix(c, vec3(.3, .14, .07), run * .55); t *= 1. - run * .55; r = mix(r, .55, run * .5);
-  c = mix(c, vec3(.36, .36, .35), scr * .7); t *= 1. - scr * .7; r = mix(r, .55, scr); h -= .02 * scr;
+    if (hh.x > chipD((id + .5) / K)) continue;
+    vec2 dd = (p - i - o - .2 - .6 * hh.yz) * SZ * 1000. / K; float rd = 1.5 + 5. * hh.w * hh.w, l = length(dd) + .8 * rd * (gn(uv * 400., vec2(400), 3) - .5);
+    chp = max(chp, 1. - ss(rd - .5, rd, l)); core = max(core, (1. - ss(rd * .5 - .5, rd * .5, l)) * step(.4, hh.z));
+    float dn = -dd.y - rd * .5, L = 4. + 25. * hf(id, 7) * hf(id, 8); // a short tea-coloured run below the odd bare one
+    if (dn < 0. || dn > L || hh.z < .8) continue;
+    run = max(run, (1. - ss(.4, 1., abs(dd.x) / (rd * .5 * (1. - .6 * sat(dn / L)) + .5))) * (1. - sat(dn / L)) * (.5 + .5 * vn(vec2(dd.x / 1.5, dn / 6.), vec2(4096), 9))); }
+  c = mix(c, vec3(.32, .18, .1), run * .35); t *= 1. - run * .35; r = mix(r, .5, run * .4);
   float prim = chp - core;
-  c = mix(c, vec3(.42, .2, .14), prim); r = mix(r, .7, prim); t *= 1. - prim; h -= .06 * prim;
-  c = mix(c, vec3(.27, .12, .055), core); r = mix(r, .8, core); t *= 1. - core; h -= .1 * core;`);
+  c = mix(c, vec3(.46, .46, .44), prim); r = mix(r, .55, prim); t *= 1. - prim; h -= .05 * prim;
+  c = mix(c, vec3(.3, .22, .16), core); r = mix(r, .6, core); t *= 1. - core; h -= .08 * core; m = core * .5;`;
+set('paintedSteel', 1, 1024, 1024, .3, .3, PAINT + `
+  float scr = scratches(uv, 3., .2, .01, 41) * ss(.75, .92, vn(uv * 3., vec2(3), 19)); // a few light scuffs through the top coat
+  c = mix(c, c * .8 + .1, scr * .5); r = mix(r, .45, scr * .7); h -= .015 * scr;`, `float chipD(vec2 c) { return .0006 + .01 * ss(.6, .85, vn(c * 3., vec2(3), 19)); }`);
+// A painted bollard, own UVs: u round it and v up it in metres, so the set (1 m) covers it from the floor to the cap. Scuffs and
+// chips gather in the band a bumper or a trolley reaches (300-600 mm): short sideways strokes to grey steel, black rubber transfer.
+set('bollardPaint', 1, 1024, 1024, .3, .3, PAINT + `
+  float band = ss(.26, .34, uv.y) * (1. - ss(.6, .68, uv.y)), sc = 0., rb = 0.; vec2 q = uv * vec2(10., 60.), j = floor(q);
+  for (int y = -1; y <= uOne; y++) for (int x = -1; x <= uOne; x++) { vec2 o = vec2(x, y), id = mod(j + o, vec2(10., 60.)); vec4 hh = hr(id, 51);
+    float bd = ss(.26, .34, (id.y + .5) / 60.) * (1. - ss(.6, .68, (id.y + .5) / 60.)); if (hh.x > .12 * bd) continue;
+    vec2 d = q - j - o - hh.yz; d.y += d.x * (hh.z - .5) * .25; float L = .15 + .35 * hh.w, w = .12 + .18 * hf(id, 53);
+    float s1 = (1. - ss(.4, 1., abs(d.y) / w)) * (1. - ss(.6, 1., abs(d.x) / L)) * ss(.3, .7, vn(vec2(d.x * 12., d.y * 2.), vec2(4096), 55));
+    if (hf(id, 52) < .45) rb = max(rb, s1); else sc = max(sc, s1); }
+  sc = ss(.25, .6, sc); rb = ss(.2, .7, rb) * .8;
+  c = mix(c, vec3(.05, .048, .046), rb); t *= 1. - rb; r = mix(r, .55, rb);
+  c = mix(c, vec3(.4, .4, .39), sc); t *= 1. - sc; r = mix(r, .4, sc); m = max(m, sc * .8); h -= .03 * sc;`, `float chipD(vec2 c) { return .001 + .1 * ss(.26, .34, c.y) * (1. - ss(.6, .68, c.y)); }`);
 
 // materials: name, texture set, shader options (see mat.js)
 mat('chrome', 'smudge', { dirt: .2, dirtCol: [.7, .68, .64] });
@@ -104,4 +121,6 @@ mat('galvanised', 'galvanised', { detail: .1, dirt: .5, dirtCol: [.72, .7, .64],
 mat('anodised', 'anodised', { color: 0x7f9cc4, roughness: .36, dirt: .2, wear: .6, edgeCol: [.8, .8, .82] });
 mat('brass', 'brass', { color: 0xf0d48c, macro: .1, dirt: .6, dirtCol: [.5, .42, .3] });
 mat('castIron', 'castIron', { detail: .2, macro: .06, dirt: .5, dirtCol: [.9, .55, .35], wear: .4, edgeCol: [.2, .19, .18], vary: 1 });
-mat('paintedSteel', 'paintedSteel', { color: 0x2b5d8a, detail: .1, macro: .04, dirt: .6, dirtCol: [.62, .4, .26], wear: .6, edgeCol: [.5, .5, .52] });
+// no edge wear by default: on a thin tube every texel counts as an edge and the wear mask turns it to camouflage; chips are modelled where hands rub
+mat('paintedSteel', 'paintedSteel', { color: 0x2b5d8a, detail: .08, macro: .025, dirt: .3, dirtCol: [.5, .47, .42], wear: 0, edgeCol: [.6, .6, .6] });
+mat('bollardPaint', 'bollardPaint', { color: 0x34383c, detail: .08, macro: .03, dirt: .5, dirtCol: [.5, .46, .4], wear: .12, edgeCol: [.62, .62, .6], roughness: .5 });
