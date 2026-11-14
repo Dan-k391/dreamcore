@@ -47,23 +47,30 @@ set('hardwood', 1.2, 1024, 1024, .26, .3, `
   r = cellGloss(.18, bh, .3) + .16 * lane + .16 * scr + .08 * g.y - .04 * fl + .3 * (1. - jm); t = 1.;`, WD);
 
 set('benchWood', 1, 1024, 1024, .4, .3, `
-  // straight grain drifting a few degrees, with long gentle swells, and knots the rings swirl round
-  float D = 22. * (gn(uv * vec2(1., 2.), vec2(1., 2.), 1) - .5) + 9. * (gn(uv * vec2(3., 5.), vec2(3., 5.), 2) - .5);
-  Cell k = tiles(uv, vec2(2., 3.), .5, 3); vec2 kp = (k.f - (.3 + .4 * k.r.xy)) * k.mm;
-  float kr = 3. + 6. * k.r.z, kd = length(kp * vec2(.6, 1.)), kon = step(.45, k.r.w), sw = kon * 7. * kr * exp(-kd * kd / (kr * kr * 10.));
-  float Y = uv.y + (D + sw) / 1000., ph = Y * 200. + 2. * gn(vec2(Y * 40., .5), vec2(40., 4096.), 4); // rings 3-9 mm
-  vec4 g = wd_rings(ph, 5., vec2(uv.x, Y) * 1000., vec2(160., 500.), 0., 5);
-  float knot = kon * (1. - ss(kr - .8, kr + .8, kd)), krim = kon * (1. - ss(.0, 1.2, abs(kd - kr)));
-  vec3 col = mix(vec3(.5, .31, .16), vec3(.2, .1, .045), g.x) * (1. - .35 * g.y);
-  col *= .82 + .34 * gn(vec2(uv.x * 2., Y * 7.), vec2(2., 7.), 9); // heart and sap, a different tone a slat or two away
-  col = mix(col, vec3(.17, .08, .035) * (.8 + .4 * fract(kd / 1.4)), knot); col *= 1. - .5 * krim;
-  // the varnish: worn through to bare, greying wood where hands and weather have been, flaking at its edge, scratched
-  float bf = fbm(uv * vec2(2., 4.), vec2(2., 4.), 4, 31), bare = ss(.46, .66, bf); vec2 sv = vec2(bare, (1. - ss(0., .01, abs(bf - .49))) * .3); float scr = wd_scr(uv, 4., .7, 33) * (1. - bare);
-  vec3 grey = vec3(.3, .25, .19) * (.75 + .5 * (1. - g.x)) * (1. - .3 * g.y);
-  col = mix(col, mix(grey, col * .75, .35 * g.x + .5 * g.y), bare * .7);
-  c = col * (1. - .25 * sv.y) * (1. + .1 * scr);
-  h = .1 * g.x * (.3 + bare) - .06 * g.y + .15 * knot - .35 * krim + .03 * sv.y - .02 * scr + .04 * (1. - bare);
-  r = mix(.24 + .06 * g.y, .62 + .12 * g.y - .08 * g.x, bare) + .12 * sv.y + .14 * scr - .1 * knot * (1. - bare); t = 1.;`, WD);
+  // six boards a metre across (js/props/garden.js cuts each piece of timber from one), each sawn from its own log: on half of
+  // them the pith lies just under the face (flat-sawn: cathedral arches where the rings run out through it), on the rest well off
+  // to one side (rift: near-straight lines). Rings 2.6-5 mm, wandering; knots 15-30 mm with the rings swirling round them.
+  float row = mod(floor(uv.y * 6.), 6.), across = (fract(uv.y * 6.) - .5) * 166.7; vec4 bh = hr(vec2(row, 3.), 2);
+  float cath = step(.67, bh.w), y0 = mix((bh.y > .5 ? 1. : -1.) * (120. + 200. * bh.x), (bh.y - .5) * 50., cath);
+  float zz = mix(60. + 120. * bh.z, 14. + 30. * bh.z, cath) + mix(4., 9., cath) * sin(6.2832 * (uv.x + bh.x)) + 5. * sin(6.2832 * (2. * uv.x + bh.y))
+    + 6. * (gn(vec2(uv.x * 3., row * 1.7), vec2(3., 4096.), 3) - .5);
+  Cell k = tiles(uv, vec2(2., 6.), .5, 3); vec2 kp = (k.f - (.3 + .4 * k.r.xy)) * k.mm;
+  float kr = 7.5 + 7.5 * k.r.z, kd = length(kp * vec2(.55, 1.)), kon = step(.55, k.r.w);
+  float d = length(vec2(across - y0, zz)) + kon * 1.4 * kr * exp(-kd * kd / (kr * kr * 7.)) + 1.2 * (gn(vec2(uv.x * 40., across / 7.), vec2(40., 4096.), 4) - .5);
+  float w = 2.6 + 2.4 * bh.x, ph = d / w + 1.5 * gn(vec2(d / (w * 5.), bh.y * 50.), vec2(4096.), 5);
+  vec4 g = wd_rings(ph, w, uv * 1000., vec2(160., 500.), row, 6);
+  float knot = kon * (1. - ss(kr - .8, kr + .8, kd)), krim = kon * (1. - ss(0., 1.4, abs(kd - kr)));
+  vec3 col = mix(vec3(.4, .225, .115), vec3(.2, .1, .045), g.x) * (1. - .3 * g.y); // a mid-brown tropical hardwood, not pine
+  col *= .86 + .28 * gn(vec2(uv.x * 2., row * 3.1), vec2(2., 4096.), 9); // heart and sap streaks along the board
+  col = cellCol(col, bh, .1);
+  col = mix(col, vec3(.2, .095, .04) * (.8 + .4 * fract(kd / 1.6)), knot) * (1. - .45 * krim);
+  // the varnish: worn through to bare, greying, raised grain where hands and weather have been, flaking at its edge, scratched
+  float bf = fbm(uv * vec2(2., 4.), vec2(2., 4.), 4, 31), bare = ss(.5, .7, bf), flk = (1. - ss(0., .012, abs(bf - .53))) * .3, scr = wd_scr(uv, 4., .7, 33) * (1. - bare);
+  vec3 grey = vec3(.32, .27, .21) * (.8 + .4 * (1. - g.x)) * (1. - .25 * g.y);
+  col = mix(col, mix(grey, col * .8, .35 * g.x + .4 * g.y), bare * .7);
+  c = col * (1. - .25 * flk) * (1. + .1 * scr);
+  h = .12 * g.x * (.25 + bare) - .07 * g.y + .12 * knot - .3 * krim + .03 * flk - .02 * scr + .04 * (1. - bare);
+  r = mix(.3 + .06 * g.y, .64 + .1 * g.y - .08 * g.x, bare) + .1 * flk + .12 * scr - .08 * knot * (1. - bare); t = 1.;`, WD);
 
 set('weatheredWood', 1, 1024, 1024, .8, .4, `
   // grey, sun- and rain-worn boards: the soft earlywood eroded away, leaving the latewood as sharp ridges
@@ -90,43 +97,45 @@ set('weatheredWood', 1, 1024, 1024, .8, .4, `
   h = ridge - 2.5 * chk - .4 * nh + .3 * lich + .1 * fib + .25 * fbm(uv * vec2(20., 200.), vec2(20., 200.), 2, 21);
   r = .74 + .16 * fbm(uv * vec2(4., 30.), vec2(4., 30.), 2, 23) - .08 * x * ex + .2 * chk + .1 * lich - .2 * nh; m = .6 * nh; t = 1.;`, WD);
 
-set('palmTrunk', 1, 512, 1024, .88, .35, `
-  // the stem: rings of leaf scars 6 cm apart, tilted and wavy, each a shadowed groove with a raised lip above it;
-  // fibrous striation running up between them, shallow vertical cracks
-  float rv = uv.y * 16. + .15 * sin(2. * PI * uv.x + 1.3) + .22 * (gn(uv * vec2(2., 3.), vec2(2., 3.), 1) - .5) + .1 * (gn(uv * vec2(8., 16.), vec2(8., 16.), 2) - .5);
-  float ri = mod(floor(rv), 16.), y = fract(rv) * 62.5; vec4 sr = hr(vec2(ri, 0.), 3);
-  float amp = .15 + .85 * ss(.3, .7, gn(vec2(uv.x * 7., ri), vec2(7., 4096.), 4)), gy = 7. + 4. * sr.x;
-  float groove = 1. - ss(0., 4. + 2. * sr.y, abs(y - gy)), lip = ss(gy + 2., gy + 6., y) * (1. - ss(gy + 10., gy + 24. + 8. * sr.z, y));
-  float band = sin(PI * fract(rv)); band *= band;
-  float q = uv.x * 14. + .6 * (gn(uv * vec2(3., 4.), vec2(3., 4.), 5) - .5), ci = mod(floor(q + .5), 14.), dx = (q - floor(q + .5)) * 71.;
-  float cw = 1.4 * sat((gn(vec2(ci * 7.3, uv.y * 5.), vec2(4096., 5.), 6) - .58) * 6.), crk = aa(abs(dx), cw * .5) * step(.05, cw);
-  float fib = ridged(vec2(uv.x * 300., uv.y * 12.), vec2(300., 12.), 2, 7), fn = vn(vec2(uv.x * 150., uv.y * 6.), vec2(150., 6.), 8);
-  float pat = st(fbm(uv * vec2(4., 6.), vec2(4., 6.), 3, 9), 1.8);
-  h = amp * (-3.5 * groove + 3. * lip + 2. * band) + .7 * fib + .5 * fn - 1.2 * crk + 1.4 * (fbm(uv * vec2(24., 32.), vec2(24., 32.), 3, 10) - .5) * 2.;
-  vec3 col = mix(vec3(.06, .052, .045), vec3(.17, .155, .135), .2 + .45 * lip + .25 * band) * (.6 + .5 * fib + .35 * fn) * (.6 + .7 * pat);
-  col = mix(col, vec3(.2, .13, .075) * (.8 + .4 * fn), .5 * sr.w * band); // a few rings keep the brown of the old leaf bases
-  c = col * (1. - .55 * groove * amp) * (1. - .7 * crk);
-  r = .86 + .08 * groove - .06 * lip + .06 * crk; t = 1.;`);
+set('palmTrunk', 1, 512, 1024, .86, .35, `
+  // the stem: leaf-scar rings 28-80 mm apart (24 a metre on average, bunching and spreading), tilted, each a groove with a raised
+  // lip above it and a gentle swell between; vertical fibre between the rings, shallow cracks; grey-brown and matte.
+  // trunkRing() in js/props/garden.js repeats this ring profile in the stem's silhouette: keep the two in step.
+  float rv = uv.y * 24. + .6 * sin(6.2832 * 3. * uv.y) + .15 * sin(6.2832 * uv.x + 1.3);
+  float ri = mod(floor(rv), 24.), f = fract(rv); vec4 sr = hr(vec2(ri, 0.), 3);
+  float amp = .4 + .6 * ss(.3, .7, gn(vec2(uv.x * 7., ri * 1.7), vec2(7., 4096.), 4));
+  float groove = 1. - ss(0., .09 + .03 * sr.y, abs(f - .15)), lip = ss(.2, .3, f) * (1. - ss(.36, .62 + .1 * sr.z, f));
+  float band = sin(PI * f); band *= band;
+  float q = uv.x * 14. + .6 * (gn(uv * vec2(3., 4.), vec2(3., 4.), 5) - .5), ci = mod(floor(q + .5), 14.), dx = (q - floor(q + .5)) * 67.;
+  float cw = 1.2 * sat((gn(vec2(ci * 7.3, uv.y * 5.), vec2(4096., 5.), 6) - .58) * 6.), crk = aa(abs(dx), cw * .5) * step(.05, cw) * (1. - groove);
+  float fib = ridged(vec2(uv.x * 380., uv.y * 9.), vec2(380., 9.), 2, 7), fn = vn(vec2(uv.x * 160., uv.y * 5.), vec2(160., 5.), 8);
+  float pat = st(fbm(uv * vec2(4., 6.), vec2(4., 6.), 3, 9), 1.6);
+  h = amp * (-2.6 * groove + 2.2 * lip + 1.4 * band) + .35 * fib + .3 * fn - crk + .8 * (fbm(uv * vec2(24., 32.), vec2(24., 32.), 3, 10) - .5);
+  vec3 col = mix(vec3(.1, .088, .075), vec3(.25, .22, .185), .3 + .35 * lip + .2 * band) * (.72 + .38 * fib + .22 * fn) * (.72 + .5 * pat);
+  col = mix(col, vec3(.21, .14, .085) * (.8 + .4 * fn), .45 * sr.w * (1. - groove)); // a few rings keep the brown of the old leaf bases
+  c = col * (1. - .5 * groove * amp) * (1. - .6 * crk);
+  r = .86 + .06 * groove - .03 * lip + .05 * crk; t = 1.;`);
 
-set('palmLeaf', .5, 512, 512, .38, .2, `
-  // leaflets 4 cm wide side by side, each folded along its raised midrib, fine parallel veins; on some, dry brown patches
-  // that start at the margins and creep in, and margins browned where the wind frayed them
-  float ln = uv.y * 12. + .25 * (gn(uv * vec2(2., 12.), vec2(2., 12.), 1) - .5), li = mod(floor(ln), 12.), am = (fract(ln) - .5) * 41.7;
-  vec4 lr = hr(vec2(li, 0.), 2); float aw = abs(am), face = 1. - ss(18.6, 20.4, aw), mid = 1. - ss(.8, 2.4, aw);
-  float sp = 2.4 * (.85 + .3 * gn(vec2(uv.x * 3., li), vec2(3., 4096.), 3)), vv = .5 + .5 * cos(2. * PI * am / sp);
-  float g = fract(uv.x + lr.x), nz = vn(vec2(uv.x * 40., ln * 6.), vec2(40., 72.), 5);
-  float pd = abs(g - .5) * 500. + (19. - aw) * .8 + 45. * nz, dry = step(lr.y, .2) * (1. - ss(20. + 60. * lr.z, 40. + 60. * lr.z, pd));
-  float edge = step(.55, lr.z) * ss(14.5 + 3. * nz, 18.5, aw);
-  vec3 col = cellCol(vec3(.055, .13, .032), lr, .12) * (.82 + .36 * gn(vec2(uv.x * 3., li * 1.7), vec2(3., 4096.), 7)) * (1. + .12 * vv);
-  col = mix(col, vec3(.15, .2, .06), mid * .75);
-  col = mix(col, vec3(.3, .2, .09) * (.75 + .4 * nz), max(dry, .75 * edge)) * (1. - 1.6 * dry * (1. - dry)); // a darker line where green turns dry
-  c = mix(col * .3, col, face);
-  h = .9 * (1. - aw * aw / 400.) + .3 * mid - .05 * vv - .6 * (1. - face) + .04 * fbm(uv * 100., vec2(100.), 2, 6) - .1 * dry;
-  r = mix(.3 + .06 * vv, .68, max(dry, edge)) + .3 * (1. - face); t = 1.;`);
+set('palmLeaf', .5, 512, 512, .45, .2, `
+  // one leaflet a twelfth of the set across (js/props/garden.js maps each modelled leaflet onto one, so the midrib runs down its
+  // fold), its length along u: a raised midrib 2-4 mm wide, parallel veins 1.4 mm apart, a paler margin; on some, dry patches
+  // creeping in from the edge
+  float ln = uv.y * 12., li = mod(floor(ln), 12.), am = (fract(ln) - .5) * 41.7, aw = abs(am);
+  vec4 lr = hr(vec2(li, 0.), 2); float mid = 1. - ss(.9, 2., aw);
+  float vv = .5 + .5 * cos(6.2832 * am / 1.4), g = fract(uv.x + lr.x), nz = vn(vec2(uv.x * 40., ln * 6.), vec2(40., 72.), 5);
+  float pd = abs(g - .5) * 500. + (21. - aw) * .9 + 40. * nz, dry = step(lr.y, .18) * (1. - ss(15. + 50. * lr.z, 30. + 50. * lr.z, pd));
+  float edge = ss(17.5 + 2. * nz, 20.8, aw);
+  vec3 col = cellCol(vec3(.075, .16, .042), lr, .14) * (.84 + .32 * gn(vec2(uv.x * 3., li * 1.7), vec2(3., 4096.), 7)) * (1. + .1 * vv);
+  col = mix(col, vec3(.2, .24, .085), mid * .7);
+  col = mix(col, col * vec3(1.25, 1.15, .9), .5 * edge); // the paler margin
+  col = mix(col, vec3(.29, .23, .13) * (.75 + .4 * nz), dry) * (1. - 1.4 * dry * (1. - dry)); // a darker line where green turns dry
+  c = col;
+  h = .35 * (1. - aw * aw / 435.) + .35 * mid - .05 * vv + .04 * fbm(uv * 100., vec2(100.), 2, 6) - .1 * dry;
+  r = mix(.42 + .06 * vv - .06 * mid, .7, dry) + .06 * edge; t = 1.;`);
 
 // materials: name, texture set, shader options (see mat.js)
 mat('hardwood', 'hardwood', { detail: .08, macro: .05, fine: .002, dirt: .3, wear: .3, edgeCol: [.62, .45, .3] });
 mat('benchWood', 'benchWood', { detail: .08, macro: .06, fine: .002, dirt: .3, wear: .5, edgeCol: [.72, .56, .4] });
 mat('weatheredWood', 'weatheredWood', { detail: .2, macro: .08, fine: .003 });
-mat('palmTrunk', 'palmTrunk', { detail: .2, macro: .1 });
+mat('palmTrunk', 'palmTrunk', { detail: .2, macro: .1, fine: .003 });
 mat('palmLeaf', 'palmLeaf', { detail: .04, back: 1.6, fine: .003, side: THREE.DoubleSide });
