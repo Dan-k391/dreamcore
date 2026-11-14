@@ -1,32 +1,50 @@
 // The mall atrium.
-import * as THREE from 'three';
 import { dry, zones, defZone } from '../core.js';
 import { M as lib, P, neon, wallMat } from '../mat.js';
-import { add, block, box, round, lit } from '../build.js';
+import { box, block, lit } from '../build.js';
+import { mallBench, palmPlanter, pottedPlant } from '../props/garden.js';
+import { door, railing } from '../props/metalwork.js';
+import { beam, skirting } from '../props/structure.js';
+import { troffer } from '../props/lights.js';
 
 defZone('mL', { ...dry, grp: 'm', k: 1.15, exp: .3, fog: [.4, .38, .4, .0008], bloom: .25, wet: .7, box: [-27, 24, 2.4, 50], probe: [-12.5, 3.4, 41] }); // off the palms' line: from between them their leaves filled the floor's reflection with a green blob
-{ // mall atrium x[-26.6,1.8] z[24.4,49.6], 7m tall: polished chequered floor, shuttered shops under glowing signs, a skylight, palms
-  const z = zones.mL, h = 7, F = lib(z, 'marble'), W = wallMat(z, 0xe6dcd6), soft = neon(0xfff0d8, 2.2), M = P(z, { metalness: 1, roughness: .25 }), sh = P(z, { color: 0x8d9296, metalness: .6, roughness: .45 }),
-    leaf = P(z, { color: 0x2f6b3a, roughness: .6, side: THREE.DoubleSide }), bark = P(z, { color: 0x6b5138, roughness: .9 }), soil = P(z, { color: 0x2a1d14, roughness: 1 });
+{ // mall atrium x[-26.6,1.8] z[24.4,49.6], 7m tall: polished chequered floor, shop fronts between piers under fascias with neon signs, a gallery, a skylight, palms
+  const z = zones.mL, h = 7, F = lib(z, 'marble'), W = wallMat(z, 0xe6dcd6), soft = neon(0xfff0d8, 2.2), sh = P(z, { color: 0x8d9296, metalness: .6, roughness: .45 }), Bk = lib(z, 'terrazzo'), skirt = pts => skirting(z, pts, { color: 0x5e564d }); // skirting darker than the wall, as the fascias
   box(F, -27, -.2, 24, 2.2, 0, 50); box(W, -27, h, 24, 2.2, h + .3, 50);
   box(W, -27, 0, 24, 2.2, h, 24.4); box(W, -27, 0, 49.6, 2.2, h, 50); // north and south walls
   box(W, 1.8, 0, 24.4, 2.2, h, 44); box(W, 1.8, 0, 46, 2.2, h, 49.6); box(W, 1.8, 2.3, 44, 2.2, h, 46); // east, door to the hotel hallway
+  box(W, 1.8, 0, 44, 2.2, 2.3, 44.5); box(W, 1.8, 0, 45.5, 2.2, 2.3, 46); // the hole narrowed to the door frame's 1 m
+  door(z, 1.82, 0, 45, Math.PI / 2, { open: 1.85, color: 0x7a5a3c, frame: 0xd9d2c4 }); // swings into the mall, held back against the wall north of it
   box(W, -27, 0, 24.4, -26.6, h, 34); box(W, -27, 0, 38, -26.6, h, 49.6); box(W, -27, 3, 34, -26.6, h, 38); // west, opening to the soft play room
-  const signs = [0xff8fb8, 0x8fd8ff, 0xffe08a, 0xb9a2ff, 0x9dffc8];
-  for (let i = 0; i < 5; i++) for (const [zw, k] of [[24.4, 1], [49.6, -1]]) { // shop fronts: k is which way the wall faces
-    const x0 = -25.6 + 5.4 * i, f = (a, b) => [Math.min(zw + k * a, zw + k * b), Math.max(zw + k * a, zw + k * b)], open = (i + (k > 0)) % 3 === 0;
-    let [z1, z2] = f(0, .06);
-    if (open) { block(soft, x0, .1, z1, x0 + 4.6, 3, z2); lit(z, x0 + 2.3, 1.8, zw + k * .3, 40, [x0 + 2.3, 0, zw + k * 6], 1.3, 14); } // a few are lit, and empty
-    else for (let y = .08; y < 3; y += .24) block(sh, x0, y, z1, x0 + 4.6, y + .2, z2); // the rest are shuttered
-    [z1, z2] = f(0, .09); block(neon(signs[(i + (k > 0) * 2) % 5], 3.5), x0 + .9, 3.3, z1, x0 + 3.7, 3.75, z2);
-    [z1, z2] = f(0, 1.3); box(W, x0 - .4, 4.1, z1, x0 + 5, 4.35, z2); // upper gallery
-    [z1, z2] = f(1.24, 1.28); block(M, x0 - .4, 5.3, z1, x0 + 5, 5.34, z2); for (let j = 0; j < 4; j++) block(M, x0 + 1.5 * j, 4.35, z1, x0 + 1.5 * j + .04, 5.3, z2);
+  const signs = [0xff8fb8, 0x8fd8ff, 0xffe08a, 0xb9a2ff, 0x9dffc8], PD = .25; // PD: how far the piers and fascias stand off the wall
+  for (const [zw, k] of [[24.4, 1], [49.6, -1]]) {
+    const Z = (a, b) => [Math.min(zw + k * a, zw + k * b), Math.max(zw + k * a, zw + k * b)];
+    const pier = (xa, xb) => { const [p1, p2] = Z(0, PD); box(W, xa, 0, p1, xb, 4.1, p2); // a pier between two shops, skirted round its three faces
+      skirt((k > 0 ? [[xb, zw], [xb, zw + PD], [xa, zw + PD], [xa, zw]] : [[xa, zw], [xa, zw - PD], [xb, zw - PD], [xb, zw]]).map(([a, b]) => [a, 0, b])); };
+    pier(-26, -25.6);
+    for (let i = 0; i < 5; i++) { // shop fronts
+      const x0 = -25.6 + 5.4 * i, cx = x0 + 2.3, open = (i + (k > 0)) % 3 === 0;
+      pier(x0 + 4.6, x0 + 5);
+      beam(z, [[x0, 4.1, zw + k * PD / 2], [x0 + 4.6, 4.1, zw + k * PD / 2]], { w: PD, d: .8, color: 0x57514a }); // the fascia, 3.3 to 4.1
+      let [z1, z2] = Z(PD, PD + .04); block(neon(signs[(i + (k > 0) * 2) % 5], 3.5), x0 + .9, 3.5, z1, x0 + 3.7, 3.9, z2); // the sign on the fascia
+      [z1, z2] = Z(0, .06);
+      if (open) { // lit and empty: a terrazzo stall riser either side of a recessed entrance in a bronze frame
+        block(soft, x0, .1, z1, x0 + 4.6, 3.3, z2); lit(z, cx, 1.8, zw + k * .3, 40, [cx, 0, zw + k * 6], 1.3, 14);
+        [z1, z2] = Z(0, .14); box(Bk, x0, 0, z1, cx - .6, .45, z2); box(Bk, cx + .6, 0, z1, x0 + 4.6, .45, z2);
+        door(z, cx, 0, zw + k * .075, k > 0 ? 0 : Math.PI, { leaf: false, frame: 0x3b332b });
+      } else for (let y = .08; y < 3.2; y += .24) block(sh, x0, y, z1, x0 + 4.6, y + .2, z2); // shuttered (the roller shutter kit goes here: x0..x0+4.6, under the fascia)
+      [z1, z2] = Z(0, 1.3); box(W, x0 - .4, 4.1, z1, x0 + 5, 4.35, z2); // upper gallery
+      troffer(z, cx, 4.1, zw + k * .85, 0, { w: .6, l: .6, on: false }); // dead fittings in the gallery's soffit
+      if (i === 1 || i === 3) door(z, cx, 4.35, zw, k > 0 ? 0 : Math.PI, { color: 0x6f7c80, frame: 0xd9d2c4 }); // service doors on the gallery
+    }
+    railing(z, [[-26, 4.35, zw + k * 1.24], [1, 4.35, zw + k * 1.24]]); // the gallery's edge
   }
+  skirt([[-26, 0, 24.4], [-26.6, 0, 24.4], [-26.6, 0, 34]]); skirt([[-26.6, 0, 38], [-26.6, 0, 49.6], [-26, 0, 49.6]]); // west wall
+  skirt([[1.8, 0, 44.4], [1.8, 0, 24.4], [1, 0, 24.4]]); skirt([[1, 0, 49.6], [1.8, 0, 49.6], [1.8, 0, 45.6]]); // east wall, stopping at the door frame
   block(neon(0xffedc0, 4), -20, h - .02, 35.5, -5, h + .01, 38.5); for (const x of [-19, -12.4, -5.8]) lit(z, x, h - .1, 37, 170, [x, 0, 37], 1.1, 16, 0xffedc4); // skylight
-  for (const x of [-18, -7]) { // planters with a palm each, benches on two sides
-    box(W, x - 1.5, 0, 35.5, x + 1.5, .5, 38.5); block(soil, x - 1.3, .5, 35.7, x + 1.3, .52, 38.3);
-    add(bark, new THREE.CylinderGeometry(.11, .16, 3.2, 10).translate(x, 2.1, 37)); round(x, 37, .15, .5, 3.7);
-    for (let j = 0; j < 9; j++) add(leaf, new THREE.BoxGeometry(1.9, .015, .42).translate(1, 0, 0).rotateZ(-.25 - .3 * (j % 3)).rotateY(j * .7).translate(x, 3.7, 37));
-    for (const zc of [34.7, 39.3]) { box(bark, x - 1.2, .38, zc - .22, x + 1.2, .45, zc + .22); box(M, x - 1.1, 0, zc - .03, x - 1.04, .4, zc + .03); box(M, x + 1.04, 0, zc - .03, x + 1.1, .4, zc + .03); }
+  for (const x of [-18, -7]) { // a palm in a round planter under the skylight, a bench either side
+    palmPlanter(z, x, 0, 37, 0, { radius: 1.05 });
+    for (const zc of [34.7, 39.3]) mallBench(z, x, 0, zc, 0, { length: 2 });
   }
+  pottedPlant(z, 1.3, 0, 43.75); pottedPlant(z, -26.15, 0, 33.55); pottedPlant(z, -26.15, 0, 38.45, 2); // by the hotel door and the soft play opening
 }

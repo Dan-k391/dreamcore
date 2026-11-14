@@ -25,7 +25,7 @@ const walks = [
   ['cinemaBack', [15, 31, P / 2, R, 3], { zone: 'hT', x: 3, y: 0 }],
   ['toPlay', [-25, 36, P / 2, R, 3.5], { zone: 'sP', x: -36.9, y: -.85 }], // the pit is 85 cm deep since its balls became real (was 55)
   ['pitOut', [-36, 34, -P / 2, R, 2], { zone: 'sP', x: -30.1, y: 0 }],
-  ['softWall', [-30, 36, -P / 2, R, 3], { zone: 'mL', x: -19.8 }],
+  ['softWall', [-30, 37, -P / 2, R, 3], { zone: 'mL', x: -19.37 }],
   ['toGarage', [35, 10.9, -P / 2, R, 1.5], { zone: 'pK', x: 41 }],
   ['toLot', [64, 14, -P / 2, R, 5.5], { zone: 'nL', sky: 'night', x: 686 }],
   ['lotBack', [683, 14, P / 2, R, 5], { zone: 'pK', sky: 'day', x: 63 }],
@@ -56,7 +56,7 @@ const PIT = 'dev.go(-31.6, 30.6, P / 2); dev.key("KeyW", true); dev.key("ShiftLe
 const near = (a, b, e = .05) => Math.abs(a - b) <= e;
 const solids = [
   ['jump onto the mall bench: standing on its seat', 'return dev.go(-18, 33.9, P, ["KeyW", "Space"], .35)', s => near(s.y, .45, .02) && !s.air && near(s.z, 34.6, .2)],
-  ['walk into the bench from the front, west and east', 'return [dev.go(-18, 33.4, P, ["KeyW"], 1.5).z, dev.go(-20.2, 34.7, -P / 2, ["KeyW"], 1.5).x, dev.go(-15.8, 34.7, P / 2, ["KeyW"], 1.5).x]', ([s, w, e]) => near(s, 34.18) && near(w, -19.5) && near(e, -16.5)],
+  ['walk into the bench from the front, west and east', 'return [dev.go(-18, 33.4, P, ["KeyW"], 1.5).z, dev.go(-20.2, 34.7, -P / 2, ["KeyW"], 1.5).x, dev.go(-15.8, 34.7, P / 2, ["KeyW"], 1.5).x]', ([s, w, e]) => near(s, 34.18) && near(w, -19.3) && near(e, -16.7)],
   ['walk into the field bench from behind: its back stops you', 'return dev.go(-9.5, 705.4, P / 2, ["KeyW"], 1.5)', s => near(s.x, -9.88) && s.y < 3.3],
   ['walk under the bus shelter roof to its bench', 'return dev.go(688, 31.6, 0, ["KeyW"], 2)', s => near(s.z, 30.15) && near(s.y, 0, .01)],
   ['a jump under the shelter roof stops at it', 'dev.go(688, 30.4, 0); dev.key("Space", true); dev.step(1); dev.key("Space", false); let hi = 0; for (let i = 0; i < 60; i++) { dev.step(1); hi = Math.max(hi, dev.state().y); } return hi', hi => hi > .5 && hi <= 2.4 - 1.75 + .01],
