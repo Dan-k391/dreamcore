@@ -144,6 +144,14 @@ const wn0 = makeTex(512, 6, waves(1), 2).normalMap, wn1 = makeTex(512, 6, waves(
 // Budget: 16 texture units. 9 lamp shadows + 1 sun shadow leave 6: tiles use 5 (3 maps, env, ripple sim), nothing else may use more.
 const S = o => new THREE.MeshStandardMaterial(o);
 const dirt = { aoMap: grime, aoMapIntensity: .7 };
+const causticsGLSL = `
+  vec2 h2(vec2 p) { return fract(sin(vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)))) * 43758.5453); }
+  float cell(vec2 p, float t) { vec2 i = floor(p), f = fract(p); float a = 8., b = 8.;
+    for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) { vec2 g = vec2(x, y); float d = length(g + .5 + .42 * sin(t + 6.2831 * h2(i + g)) - f); if (d < a) { b = a; a = d; } else b = min(b, d); }
+    return b - a; }
+  float caus(vec3 w) { vec2 p = w.xz * 1.5 + w.y * .9; p += .3 * sin(p.yx * 1.3 + uTime * .6) + .14 * sin(p.yx * 3.3 - uTime * .9); // warped so the cells don't read as straight-edged polygons
+    return pow(1. - smoothstep(0., .5, min(cell(p, uTime * .8), cell(p * 1.63 + 7.3, uTime * 1.1))), 3.); } // thin bright lines; averages about .22
+`; // the moving light pattern under water. Used by the tiles themselves and by the water, for floor it draws from the still plan
 for (const z of [zones.bA, zones.bB, zones.bC]) {
   z.carpet = S({ map: carpetTex.map, normalMap: carpetTex.normalMap, ...dirt });
   z.paper = S({ map: paperTex.map, normalMap: paperTex.normalMap, roughness: .88, ...dirt });
@@ -174,12 +182,7 @@ function tileFX(m, z) {
       #ifdef NL
         uniform vec4 uLamp[NL]; uniform vec3 uLampCol;
       #endif
-      vec2 h2(vec2 p) { return fract(sin(vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)))) * 43758.5453); }
-      float cell(vec2 p, float t) { vec2 i = floor(p), f = fract(p); float a = 8., b = 8.;
-        for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) { vec2 g = vec2(x, y); float d = length(g + .5 + .42 * sin(t + 6.2831 * h2(i + g)) - f); if (d < a) { b = a; a = d; } else b = min(b, d); }
-        return b - a; }
-      float caus(vec3 w) { vec2 p = w.xz * 1.5 + w.y * .9; p += .3 * sin(p.yx * 1.3 + uTime * .6) + .14 * sin(p.yx * 3.3 - uTime * .9); // warped so the cells don't read as straight-edged polygons
-        return pow(1. - smoothstep(0., .5, min(cell(p, uTime * .8), cell(p * 1.63 + 7.3, uTime * 1.1))), 3.); } // thin bright lines; averages about .22
+      ${causticsGLSL}
       vec3 boxProj(vec3 d) { vec3 m = max((uBoxMax - vW) / d, (uBoxMin - vW) / d); return vW + d * min(min(m.x, m.y), m.z) - uProbe; }
     ` + s.fragmentShader
       .replace('#include <envmap_physical_pars_fragment>', THREE.ShaderChunk.envmap_physical_pars_fragment.replace(
@@ -402,7 +405,8 @@ const simMat = new THREE.ShaderMaterial({ uniforms: { tSim: { value: null }, uPx
 const simQuad = new FullScreenQuad(simMat);
 const waterVS = 'varying vec3 vW; void main() { vec4 w = modelMatrix * vec4(position, 1.); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }';
 const waterFS = `uniform sampler2D tMirror, tUnder, tUnderZ, tPlan, tGround, tNormalMap0, tNormalMap1, tSim;
-    uniform mat4 projectionMatrix, uLens; uniform vec4 uPond; uniform vec2 uPx; uniform vec3 uScatter; uniform float uFloor, uTime, uMain; varying vec3 vW;
+    uniform mat4 projectionMatrix, uLens; uniform vec4 uPond; uniform vec2 uPx; uniform vec3 uScatter; uniform float uFloor, uTime, uMain, uCaus; varying vec3 vW;
+    ${causticsGLSL}
     vec4 clip(vec3 p) { return projectionMatrix * viewMatrix * vec4(p, 1.); } // .w is the distance from the camera
     vec2 wide(vec4 c) { return c.xy / c.w * ${(.5 / OVER).toFixed(5)} + .5; } // a clip position's place in the two wider pictures
     float seen(vec2 u) { // distance to the nearest underwater surface at that place. The underwater picture's projection is skewed so its near
@@ -431,8 +435,13 @@ const waterFS = `uniform sampler2D tMirror, tUnder, tUnderZ, tPlan, tGround, tNo
         if (found) { for (int i = 0; i < 6; i++) { float tm = .5 * (lo + hi); vec3 q = vW + T * tm; if (q.y < ground(q.xz)) hi = tm; else lo = tm; } t = hi; }
       }
       vec3 hit = vW + T * t; vec4 ch = clip(hit); vec2 hu = wide(ch);
-      float live = off(hu) ? 0. : uMain * (1. - smoothstep(.04 + .012 * ch.w, .1 + .03 * ch.w, abs(ch.w - seen(hu)))); // can the camera see the point the ray reached? (its depth there must match)
-      vec3 refr = mix(texture2D(tPlan, plan(hit.xz)).rgb, texture2D(tUnder, hu).rgb, live) * exp(-vec3(.42, .085, .06) * t); // red is absorbed first
+      float live = off(hu) ? 0. : uMain * (1. - smoothstep(.05 + .02 * ch.w, .14 + .05 * ch.w, abs(ch.w - seen(hu)))); // can the camera see the point the ray reached? (its depth there must match)
+      vec3 still = texture2D(tPlan, plan(hit.xz)).rgb; // the plan is a still, so it gets the same moving light the tiles give the live picture: drifting pattern plus the real ripples
+      vec2 hs = (hit.xz - uPond.xy) / (uPond.zw - uPond.xy), e = uPx * 2.;
+      float lap = texture2D(tSim, hs - vec2(e.x, 0.)).r + texture2D(tSim, hs + vec2(e.x, 0.)).r + texture2D(tSim, hs - vec2(0., e.y)).r + texture2D(tSim, hs + vec2(0., e.y)).r - 4. * texture2D(tSim, hs).r;
+      float cz = (max(caus(hit) + clamp(-lap * 30., -.6, 2.5), 0.) - .22) * smoothstep(${WY}, ${WY} - .3, hit.y);
+      still *= max(.3, 1. + mix(.9, 2.2, smoothstep(.25, 1., max(still.r, max(still.g, still.b)))) * uCaus * cz); // stronger where the floor is in direct light, as on the tiles
+      vec3 refr = mix(still, texture2D(tUnder, hu).rgb, live) * exp(-vec3(.42, .085, .06) * t); // red is absorbed first
       refr += uScatter * (1. - exp(-.3 * t)); // and the water itself scatters the room's light back, giving deep water a pale body
       vec3 col = mix(refr, refl, .02 + .98 * pow(1. - max(dot(V, n), 0.), 5.));
       col = mix(texture2D(tUnder, here).rgb, col, body); // thin water shows what is under it, unbent and untinted
@@ -461,7 +470,7 @@ const ponds = [ // x1, z1, x2, z2, floor height, zone, zones it is drawn from, s
   const ground = new THREE.DataTexture(heights, gw, gh, THREE.RedFormat, THREE.FloatType); ground.needsUpdate = true;
   const planCam = new THREE.OrthographicCamera((x1 - x2) / 2, (x2 - x1) / 2, (z2 - z1) / 2, (z1 - z2) / 2, .001, 1.6); // looking straight down from the surface
   planCam.position.set((x1 + x2) / 2, WY, (z1 + z2) / 2); planCam.up.set(0, 0, -1); planCam.lookAt((x1 + x2) / 2, WY - 1, (z1 + z2) / 2);
-  const U = { tMirror: { value: mirror.getRenderTarget().texture }, tPlan: { value: planRT.texture }, tGround: { value: ground }, tUnder: { value: under.texture }, tUnderZ: { value: under.depthTexture }, uLens: { value: lens.camera.projectionMatrix }, tNormalMap0: { value: wn0 }, tNormalMap1: { value: wn1 },
+  const U = { uCaus: zones[zid].tileU.uCaus, tMirror: { value: mirror.getRenderTarget().texture }, tPlan: { value: planRT.texture }, tGround: { value: ground }, tUnder: { value: under.texture }, tUnderZ: { value: under.depthTexture }, uLens: { value: lens.camera.projectionMatrix }, tNormalMap0: { value: wn0 }, tNormalMap1: { value: wn1 },
               tSim: { value: sim[0].texture }, uPond: { value: rect }, uPx: { value: px }, uFloor: { value: floor }, uScatter: { value: V(...scatter) }, uMain: { value: 0 }, uTime };
   const w = new THREE.Mesh(g, new THREE.ShaderMaterial({ uniforms: U, vertexShader: waterVS, fragmentShader: waterFS, transparent: true }));
   Object.assign(w, { seen, rect, px, sim, tileU: zones[zid].tileU, zone: zones[zid] });
