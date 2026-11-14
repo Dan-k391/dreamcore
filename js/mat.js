@@ -74,6 +74,15 @@ const label = (text, w, h, color = '#fff', bg = '#000', k = 3) => { // glowing l
   return new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: t, color: new THREE.Color(k, k, k) }));
 };
 const sign = (text, x, y, z, ry, w, h, ...style) => { const m = label(text, w, h, ...style); m.position.set(x, y, z); m.rotation.y = ry; scene.add(m); return m; };
+// A ball painted by direction: paint(x, y, z) of a unit vector -> colour, one colour per face so the edges between colours are crisp.
+// Its own mesh, casting and taking shadows, in a material that takes the zone's ambient light.
+function paintedBall(z, r, paint, o) {
+  const g = new THREE.SphereGeometry(r, 48, 32).toNonIndexed(), p = g.attributes.position, col = new Float32Array(p.count * 3), c = new THREE.Color();
+  for (let i = 0; i < p.count; i += 3) { c.set(paint(...[0, 1, 2].map(k => (p.getComponent(i, k) + p.getComponent(i + 1, k) + p.getComponent(i + 2, k)) / (3 * r)))); for (let j = 0; j < 3; j++) c.toArray(col, (i + j) * 3); }
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  const m = new THREE.Mesh(g, P(z, { vertexColors: true, ...o })); m.castShadow = m.receiveShadow = true; scene.add(m); return m;
+}
+const beachBall = z => paintedBall(z, .25, (x, y, zc) => Math.abs(y) > .93 ? 0xf4f0e6 : [0xe8402e, 0xf4f0e6, 0xf6c22b, 0xf4f0e6, 0x2f7fd8, 0xf4f0e6][Math.floor((Math.atan2(zc, x) / Math.PI + 1) * 3) % 6], { roughness: .28 }); // six vinyl gores, white caps
 const wallMat = (z, color, o) => P(z, { map: plaster.map, normalMap: plaster.normalMap, color, roughness: .9, ...dirt, ...o });
 
-export { S, dirt, causticsGLSL, lampOn, lampOff, glow, seaMat, noCast, tileFX, poolMats, P, neon, voidMat, aisle, label, sign, wallMat };
+export { S, dirt, causticsGLSL, lampOn, lampOff, glow, seaMat, noCast, tileFX, poolMats, P, neon, voidMat, aisle, label, sign, wallMat, paintedBall, beachBall };

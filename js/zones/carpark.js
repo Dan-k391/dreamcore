@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { dry, zones, defZone } from '../core.js';
 import { concrete } from '../tex.js';
 import { dirt, P, neon } from '../mat.js';
-import { add, block, box, lit, post } from '../build.js';
+import { add, block, box, round, lit, post } from '../build.js';
 
 defZone('nL', { ...dry, sky: 'night', air: .5, grp: 'n', k: 1, exp: .36, fog: [.012, .016, .03, .004], bloom: .4, wet: .15, box: [681, -20, 745, 50], probe: [712, 2.5, 15] });
 { // car park at night x[681,745] z[-20,50], out of the parking level's far door: pools of lamplight on wet asphalt, a bus shelter, vending machines, the moon
@@ -15,7 +15,7 @@ defZone('nL', { ...dry, sky: 'night', air: .5, grp: 'n', k: 1, exp: .36, fog: [.
   block(neon(0xffe2b0, 5), 681.05, 2.55, 13.6, 681.09, 2.7, 14.4); lit(z, 681.4, 2.6, 14, 30, [684, 0, 14], 1.3, 9);
   for (const zc of [-8, 15, 38]) { for (const x of [695, 713, 731]) post(iron, lampG, x, 0, zc, .7, 0, 520, z);
     for (let x = 686; x < 741; x += 2.6) for (const k of [-1, 1]) if (Math.abs(x - 713) > 20 || zc !== 15 || k > 0) block(paint, x, 0, zc + k * .6 - (k < 0 ? 5 : 0), x + .12, .004, zc + k * .6 + (k > 0 ? 5 : 0)); } // bays either side of each row of lamps
-  for (const [x, zc] of [[703, 3.5], [704.2, 4.4], [703.4, 5.6], [728, 27], [729, 26.2]]) { add(cone, new THREE.CylinderGeometry(.025, .13, .5, 16).translate(x, .27, zc)); block(cone, x - .17, 0, zc - .17, x + .17, .03, zc + .17); block(paint, x - .075, .2, zc - .075, x + .075, .3, zc + .075); }
+  for (const [x, zc] of [[703, 3.5], [704.2, 4.4], [703.4, 5.6], [728, 27], [729, 26.2]]) { add(cone, new THREE.CylinderGeometry(.025, .13, .5, 16).translate(x, .27, zc)); block(cone, x - .17, 0, zc - .17, x + .17, .03, zc + .17); block(paint, x - .075, .2, zc - .075, x + .075, .3, zc + .075); round(x, zc, .13, 0, .25); round(x, zc, .07, .25, .52); }
   { const x = 688, zc = 30; // bus shelter: a lit panel, a bench, a glass back
     for (const [a, b] of [[x - 2, zc - .7], [x + 2, zc - .7], [x - 2, zc + .7], [x + 2, zc + .7]]) box(iron, a - .04, 0, b - .04, a + .04, 2.4, b + .04);
     box(iron, x - 2.2, 2.4, zc - .9, x + 2.2, 2.48, zc + .9); box(glass, x - 2, .3, zc - .72, x + 2, 2.3, zc - .7); box(iron, x - 1.2, .42, zc - .5, x + 1.2, .47, zc - .15);

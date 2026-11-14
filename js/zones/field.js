@@ -2,8 +2,8 @@
 import * as THREE from 'three';
 import { scene, camera, uTime, sunDir, dry, zones, defZone } from '../core.js';
 import { hash, noise, fbm, ss, makeTex, concrete } from '../tex.js';
-import { P, wallMat } from '../mat.js';
-import { colliders, flats, seeThrough, skyOnly, onSun, add, block, box, flight, tube, lit, post, doorway } from '../build.js';
+import { P, wallMat, paintedBall } from '../mat.js';
+import { colliders, flats, seeThrough, skyOnly, onSun, loose, add, block, box, solid, round, flight, tube, lit, post, doorway } from '../build.js';
 
 defZone('fD', { ...dry, step: 'carpet', sky: 'hill', air: 1, grp: 'f', k: 1, exp: .3, fog: [.72, .82, .95, .002], sat: 1.15, bloom: .07, shaft: .04, wet: 0, box: [-50, 665.6, 58, 760], probe: [4, 6, 690] });
 const grassTex = makeTex(512, 4, (u, v) => { const n = fbm(u, v, 6, 5), b = noise(u * 256, v * 64, 64) * noise(u * 128, v * 256, 128), k = .55 + .9 * b; return [(.26 + .2 * n) * k, (.6 + .25 * n) * k, (.12 + .08 * n) * k, b * 2 + n, .95]; }, 1.2);
@@ -26,22 +26,29 @@ let grass;
   block(stone, 2, -.2, 665.65, 5.6, .03, 668.6);
   for (let i = 0; i < 5; i++) { const x = 1.2 - 3.6 * i, zc = 672 + 6.6 * i; post(iron, frost, x, hill(x, zc), zc, .6, -.8); } // lamps leading to the playground
   // playground on its patch of sand: swings, a roundabout, a seesaw
-  add(sand, new THREE.CylinderGeometry(7.3, 7.3, .08, 64).translate(-18, y0 + .02, 705));
-  for (const x of [-22.2, -18.6]) for (const k of [-1, 1]) tube([[x, y0 + 2.5, 702], [x, y0 - .3, 702 + k * 1.1]], .04, 8, red);
+  add(sand, new THREE.CylinderGeometry(7.3, 7.3, .08, 64).translate(-18, y0 + .02, 705)); round(-18, 705, 7.3, y0 - .5, y0 + .06);
+  for (const x of [-22.2, -18.6]) for (const k of [-1, 1]) { tube([[x, y0 + 2.5, 702], [x, y0 - .3, 702 + k * 1.1]], .04, 8, red); // the swing frame's legs, solid in five lengths down their slant
+    for (let i = 0; i < 5; i++) round(x, 702 + k * 1.1 * (i + .5) / 5, .05, y0 - .3 + 2.8 * (1 - (i + 1) / 5), y0 - .3 + 2.8 * (1 - i / 5) + .05); }
+  solid(-22.25, y0 + 2.45, 701.95, -18.55, y0 + 2.55, 702.05); // the top bar
   tube([[-22.2, y0 + 2.5, 702], [-18.6, y0 + 2.5, 702]], .04, 8, red);
-  for (const x of [-21.3, -19.5]) { for (const k of [-.22, .22]) block(iron, x + k - .006, y0 + .55, 701.994, x + k + .006, y0 + 2.5, 702.006); block(blue, x - .26, y0 + .5, 701.9, x + .26, y0 + .55, 702.1); }
+  for (const x of [-21.3, -19.5]) { for (const k of [-.22, .22]) block(iron, x + k - .006, y0 + .55, 701.994, x + k + .006, y0 + 2.5, 702.006); block(blue, x - .26, y0 + .5, 701.9, x + .26, y0 + .55, 702.1); solid(x - .26, y0 + .5, 701.9, x + .26, y0 + 2.45, 702.1); } // a seat on its chains: too narrow to stand between them
   add(yel, new THREE.CylinderGeometry(1.25, 1.25, .08, 40).translate(-14.5, y0 + .42, 707.5)); add(iron, new THREE.CylinderGeometry(.06, .06, 1.2, 12).translate(-14.5, y0 + .6, 707.5));
   for (let i = 0; i < 4; i++) add(red, new THREE.TorusGeometry(.55, .022, 8, 24, Math.PI).translate(.6, .46, 0).rotateY(i * Math.PI / 2 + .4).translate(-14.5, y0, 707.5));
-  colliders.push([-15.6, 706.4, -13.4, 708.6]);
+  round(-14.5, 707.5, 1.25, y0, y0 + .46); round(-14.5, 707.5, .06, y0, y0 + 1.2); // the roundabout's deck, to stand on, and its middle pole
   add(blue, new THREE.BoxGeometry(3.4, .06, .26).rotateZ(.2).translate(-21, y0 + .55, 708.5)); add(iron, new THREE.CylinderGeometry(.05, .05, .5, 10).rotateX(Math.PI / 2).translate(-21, y0 + .52, 708.5));
   for (const k of [-.14, .14]) block(iron, -21.03, y0, 708.5 + k - .02, -20.97, y0 + .55, 708.5 + k + .02);
+  for (let i = 0; i < 6; i++) { const a = -21 - 1.665 + .555 * i, t = Math.tan(.2); solid(a, y0 + .55 + (a + 21) * t - .035, 708.37, a + .555, y0 + .55 + (a + .555 + 21) * t + .035, 708.63); } // the seesaw's plank in six steps up its slope
+  solid(-21.05, y0, 708.34, -20.95, y0 + .5, 708.66); // and its pivot
   // a white staircase that climbs to nothing, two doors standing open on the grass, a bench
   { const x = 22, zc = 694, y = hill(x, zc + .5) - .1; flight(W, x - 1, zc, x + 1, zc + 6.4, 'z', 1, y, 16, .25, y - 6); }
   doorway(W, red, 14, hill(14, 716), 716, .5); doorway(W, blue, -30, hill(-30, 728), 728, -.9, 1.2);
   { const x = 6, zc = 684, y = hill(x, zc); for (let i = 0; i < 4; i++) block(wood, x - .9, y + .44, zc - .22 + .12 * i, x + .9, y + .47, zc - .13 + .12 * i);
     for (let i = 0; i < 2; i++) block(wood, x - .9, y + .62 + .14 * i, zc - .27, x + .9, y + .72 + .14 * i, zc - .24);
     for (const k of [-.75, .75]) { block(iron, x + k - .025, y - .2, zc - .28, x + k + .025, y + .9, zc - .23); block(iron, x + k - .025, y - .2, zc + .2, x + k + .025, y + .44, zc + .25); block(iron, x + k - .025, y + .4, zc - .25, x + k + .025, y + .44, zc + .22); }
-    colliders.push([x - .9, zc - .3, x + .9, zc + .26]); }
+    solid(x - .9, y + .4, zc - .25, x + .9, y + .47, zc + .25); solid(x - .9, y + .47, zc - .28, x + .9, y + .9, zc - .23); // the seat and the back
+    for (const k of [-.75, .75]) solid(x + k - .025, y - .2, zc - .28, x + k + .025, y + .4, zc + .25); }
+  { const x = -10.6, zc = 700.4, r = .17; // a rubber ball left on the grass by the playground: red, with a darker seam round it each way
+    loose.push({ mesh: paintedBall(z, r, (a, b, c) => Math.abs(b) < .045 || Math.abs(a) < .045 ? 0x7a1a14 : 0xc8322c, { roughness: .55 }), r, pos: [x, hill(x, zc) + r, zc], region: [-44, 665.7, 52, 757], bounce: .45, grip: 1.3, spin: 1, solid: 1, slope: 1 }); }
   // Grass: blades planted in a square that follows the camera (each blade draws its nearest copy), so it is dense underfoot without covering the whole field.
   const N = 430, seeds = new Float32Array(N * N * 3), blade = new THREE.InstancedBufferGeometry();
   for (let i = 0; i < N * N; i++) seeds.set([(i % N + hash(i, 1)) / N, (Math.floor(i / N) + hash(i, 2)) / N, hash(i, 3)], i * 3);

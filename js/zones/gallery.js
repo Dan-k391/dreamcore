@@ -1,7 +1,7 @@
 // The gallery pool off the corridor.
-import { zones, defZone } from '../core.js';
-import { glow, poolMats } from '../mat.js';
-import { flats, pools, box, fixture } from '../build.js';
+import { WY, zones, defZone } from '../core.js';
+import { glow, poolMats, beachBall } from '../mat.js';
+import { flats, pools, loose, box, fixture } from '../build.js';
 
 defZone('pG', { grp: 'g', k: .85, exp: .34, fog: [.75, .82, .8, .0015], tint: [.99, 1, .99], sat: 1, bloom: .3, shaft: 0, hum: 0, water: 1, wet: .7,
         box: [18.3, 12.4, 28.1, 39.4], probe: [23.2, 2.6, 25], env: [[18.7, -1.4, 12.8], [27.7, 6, 39]], band: -99, bandCol: [1, 1, 1], shimmer: .2, caus: .25 });
@@ -27,3 +27,4 @@ poolMats(zones.pG);
     for (let i = 0; i <= 10; i++) box(M, x - .02, 0, 16.18 + 1.86 * i, x + .02, .95, 16.22 + 1.86 * i);
   }
 }
+loose.push({ mesh: beachBall(zones.pG), r: .25, pos: [23.6, WY + .21, 27.5], region: [18.7, 12.8, 27.7, 39], float: .08, bounce: .6, grip: .6, spin: 1, solid: 1 }); // a beach ball on the water

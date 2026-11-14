@@ -1,12 +1,13 @@
 // The player: controls, collision and the frame step.
 import * as THREE from 'three';
 import { renderer, camera, uTime, V, WY, zones, inR } from './core.js';
-import { colliders, emitters, warps, ladders, rings, floorH } from './build.js';
+import { colliders, emitters, warps, ladders, floorH, clear, out, near } from './build.js';
 import { setSky } from './sky.js';
 import { ponds, ripple } from './water.js';
 import { relight, zone0 } from './lights.js';
 import { composer, look, atmos, bloom, film } from './post.js';
 import { sfx, startAudio } from './audio.js';
+import { wakes, stepLoose, drawLoose } from './physics.js';
 
 // ---------- walking ----------
 const canvas = renderer.domElement, o = document.getElementById('o'), keys = {}, eu = new THREE.Euler(0, 0, 0, 'YXZ');
@@ -43,16 +44,26 @@ addEventListener('keyup', e => keys[e.code] = 0);
 document.getElementById('s').textContent = 'click to enter  ·  wasd walk  ·  mouse look  ·  q / e turn  ·  space jump  ·  shift run  ·  c zoom  ·  m mute';
 let zone = zone0; // the zone you are in
 
-function collide(p, R = .3) { // push the player circle out of every wall box along the shallowest axis
-  for (const [x1, z1, x2, z2] of colliders) if (p.x > x1 - R && p.x < x2 + R && p.z > z1 - R && p.z < z2 + R) {
-    const dx = p.x - (x1 - R) < x2 + R - p.x ? x1 - R - p.x : x2 + R - p.x, dz = p.z - (z1 - R) < z2 + R - p.z ? z1 - R - p.z : z2 + R - p.z;
-    if (Math.abs(dx) < Math.abs(dz)) p.x += dx; else p.z += dz;
+// The body: an upright cylinder of radius R from the soles (feet) up 1.75 m. A solid blocks it sideways where it overlaps the body
+// above step height (so low things are stepped onto and high things walked under; the top 5 cm of the head ducks), its top is
+// ground wherever it is under the middle RS of the body, and its underside stops a jump.
+const R = .3, RS = .22, STEP = .35, TALL = 1.75;
+const blocks = (c, feet) => c[5] > feet + STEP && c[4] < feet + 1.7;
+function collide(p, feet = 0) { // push the body out of every solid it overlaps; a few passes settle corners between solids
+  for (let pass = 0; pass < 4; pass++) { let hit = false;
+    for (const c of colliders) if (near(c, p.x, p.z, R) && blocks(c, feet) && clear(c, p.x, null, p.z, R)) { p.x += out.x; p.z += out.z; hit = true; }
+    if (!hit) return true;
   }
-  return p;
+  return !colliders.some(c => near(c, p.x, p.z, R - .002) && blocks(c, feet) && clear(c, p.x, null, p.z, R - .002)); // false: still inside something
 }
+const groundAt = (x, z, feet) => { // the highest floor or solid top under the body that a step from `feet` reaches
+  let g = floorH(x, z);
+  for (const c of colliders) if (c[5] > g && c[5] <= feet + STEP && near(c, x, z, RS) && clear(c, x, null, z, RS)) g = c[5];
+  return g;
+};
 console.assert(floorH(0, -12) === -1.2 && floorH(0, -6.2) === -.3 && floorH(15, -12) === -.3 && floorH(24.2, -12) === -.6 && floorH(30, -12) === -1.2 && floorH(0, 10) === 0 && floorH(23, 25) === -1.2 && floorH(23, 34.8) === -.3 && floorH(24, 50) === -.6
-  && floorH(15, 31) === -1 && floorH(-36, 34) === -.55 && floorH(-33.3, 34) === -.28 && floorH(700, 649.4) === 5 && floorH(35.2, 49.4) === -.3 && Math.abs(floorH(3.8, 667)) < 1e-9
-  && collide(V(5, 0, .6)).z > 1.29 && Object.values(zones).every(z => inR(z.probe.x, z.probe.z, ...z.box)) && emitters.every(e => inR(e.p.x, e.p.z, ...e.zone.box)), 'level self-check failed');
+  && floorH(15, 31) === -1 && floorH(-36, 34) === -.85 && floorH(-33.3, 34) === -.29 && floorH(700, 649.4) === 5 && floorH(35.2, 49.4) === -.3 && Math.abs(floorH(3.8, 667)) < 1e-9
+  && (q => collide(q) && q.z > 1.29)(V(5, 0, .6)) && Object.values(zones).every(z => inR(z.probe.x, z.probe.z, ...z.box)) && emitters.every(e => inR(e.p.x, e.p.z, ...e.zone.box)), 'level self-check failed');
 
 const vel = new THREE.Vector2(), UP = new THREE.Vector3(0, 1, 0);
 let stride = 0, foot = 0, feet = floorH(camera.position.x, camera.position.z), vy = 0, air = false, grip = false, drop = 0, simT = 0; // feet: height of the player's soles
@@ -73,14 +84,14 @@ const frame = dt => { // one game frame of dt seconds: the loop below passes the
   const yaw = eu.setFromQuaternion(camera.quaternion).y, sn = Math.sin(yaw), cs = Math.cos(yaw);
   const warp = warps.find(w => inR(p.x, p.z, w[0], w[1], w[2], w[3]));
   if (warp) { p.x += warp[4]; p.z += warp[5]; }
-  const ox = p.x, oz = p.z;
-  p.x += (vel.x * cs - vel.y * sn) * dt; p.z += (-vel.x * sn - vel.y * cs) * dt;
-  collide(p);
+  const ox = p.x, oz = p.z, mx = (vel.x * cs - vel.y * sn) * dt, mz = (-vel.x * sn - vel.y * cs) * dt, n = Math.max(1, Math.ceil(Math.hypot(mx, mz) / .1));
+  let roomy = collide(p, feet); // false: squeezed somewhere a teleport put you, so any move is allowed until you are out
+  for (let i = 0; i < n; i++) { const sx = p.x, sz = p.z; p.x += mx / n; p.z += mz / n; if (!collide(p, feet) && roomy) { p.x = sx; p.z = sz; break; } } // in steps of 10 cm at most, so nothing thin is run through
   // A rise taller than a step is a wall. Pool sides can't be walked up: the ways out are the steps, or a jump onto something low enough.
   const lead = (to, from) => to + Math.sign(to - from) * .3, tall = (x, z) => { const here = floorH(x, z); return here - feet > .35 || floorH(lead(x, ox), lead(z, oz)) - Math.max(feet, here) > .35; }; // tested a body-width ahead, so the eye never reaches the wall face; measured from the step being stepped onto, or a fast climber would see two steps ahead as one wall
   if (tall(p.x, p.z)) { if (!tall(p.x, oz)) p.z = oz; else if (!tall(ox, p.z)) p.x = ox; else { p.x = ox; p.z = oz; } }
-  const ground = floorH(p.x, p.z), was = feet;
-  let landed = false;
+  const ground = groundAt(p.x, p.z, feet), was = feet;
+  let landed = false, hit = 0;
   // Ladders: in the water at one, facing it, forward (or jump) climbs and back descends; once holding on, gravity lets go of you.
   const at = feet < 0 && -sn > .3 && ladders.some(l => inR(p.x, p.z, ...l)), climb = at ? (k('KeyW') | k('ArrowUp') | k('Space')) - (k('KeyS') | k('ArrowDown')) : 0;
   grip = at && (grip || climb !== 0);
@@ -88,7 +99,8 @@ const frame = dt => { // one game frame of dt seconds: the loop below passes the
   else if (vy > 0 || feet > ground + (air ? .001 : .12)) { // off the ground: gravity, and drag once the legs are under water. Walking off a ledge is a fall; walking down a slope is not
     vy -= 11 * dt; if (pool && feet < WY) vy -= vy * Math.min(1, 4 * dt);
     feet += vy * dt;
-    if (feet <= ground) { feet = ground; vy = 0; landed = true; }
+    if (vy > 0) for (const c of colliders) if (c[4] >= was + TALL - .15 && c[4] < feet + TALL && near(c, p.x, p.z, R * .9) && clear(c, p.x, null, p.z, R * .9)) { feet = Math.max(was, c[4] - TALL); vy = 0; } // the head meets an underside
+    if (feet <= ground) { hit = -vy; feet = ground; vy = 0; landed = true; }
   } else feet = Math.min(ground, feet + 4 * dt); // a step up is climbed, not jumped to
   air = feet > ground + .001;
   if (k('Space') && !air) vy = deep ? 2.8 : 4.3; // deep water weighs a jump down
@@ -106,13 +118,24 @@ const frame = dt => { // one game frame of dt seconds: the loop below passes the
   relight(p, zone, warp ? 1 : dt * 3);
   for (const w of ponds) w.visible = w.seen.includes(zone.id);
   const wake = pool && ground < 0 && !air ? Math.min(vel.length(), 4) * .006 : 0; // wading leaves a wake; `drop` is a pending splash
-  for (simT += dt; simT > 1 / 60; simT = simT > .05 ? 0 : simT - 1 / 60) { for (const w of ponds) if (w.visible) ripple(w, p.x, p.z, wake + drop); drop = 0; }
+  // 60 Hz: the loose things, then the waves, with the ripples both leave
+  simT += dt; const steps = Math.min(4, Math.floor(simT * 60 + 1e-6)); simT = steps === 4 ? 0 : simT - steps / 60; // as many as the frame's time holds; a long stall is dropped, not caught up
+  const me = { x: p.x, z: p.z, feet, vx: (p.x - ox) / dt, vz: (p.z - oz) / dt, vy, hit, splash };
+  for (let i = 1; i <= steps; i++) { // the body moves through the frame's steps, so a slow frame doesn't hit things harder
+    if (!me.shoved) { me.x = ox + (p.x - ox) * i / steps; me.z = oz + (p.z - oz) * i / steps; }
+    stepLoose(me); me.hit = 0; me.splash = false;
+    for (const w of ponds) if (w.visible) ripple(w, [[p.x, p.z, wake + drop], ...wakes.filter(k => k[0] === w).map(k => k.slice(1))]);
+    drop = 0;
+  }
+  if (me.shoved) { const sx = p.x, sz = p.z; p.x = me.x; p.z = me.z; if (!collide(p, feet)) { p.x = sx; p.z = sz; } } // a ring or ball held against something stops the body
+  looseCost.ms = drawLoose(zone.id);
   const a = 1 - Math.exp(-dt * 1.5); // eye adaptation and mood drift between zones
   for (const key of ['exp', 'shaft', 'sat', 'bloom']) look[key] += (zone[key] - look[key]) * a;
   look.fog.lerp(zone.fog, a); look.tint.lerp(zone.tint, a);
   renderer.toneMappingExposure = look.exp; bloom.strength = look.bloom; atmos.uniforms.uShaft.value = look.shaft; film.uniforms.uSat.value = look.sat;
-  rings.forEach((r, i) => { r.position.y = WY + .05 + .012 * Math.sin(uTime.value * 1.1 + i * 2); r.rotation.z = .03 * Math.sin(uTime.value * .7 + i); });
   composer.render(dt);
 };
 
-export { o, zone, feet, air, frame, place };
+const looseCost = { ms: 0 }; // what the loose things cost the last frame, in ms
+
+export { o, zone, feet, air, frame, place, looseCost };

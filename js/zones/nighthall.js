@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { V, dark, zones, defZone } from '../core.js';
 import { S, glow, poolMats } from '../mat.js';
-import { emitters, flats, pools, box, slab, tube, ladder } from '../build.js';
+import { emitters, flats, pools, box, round, slab, tube, ladder } from '../build.js';
 
 defZone('pN', { ...dark, exp: .22, bloom: .34, wet: .8, box: [21, -24.4, 45.4, .4], probe: [33, 3, -12], env: [[21, -1.4, -24.4], [45, 7, .4]], shimmer: .25 });
 flats.push([24, -21, 42, -3, (x, z) => (z > -14 && z < -10 && x < 25 ? (x < 24.5 ? -.6 : -.9) : -1.2)]); // night pool
@@ -27,4 +27,6 @@ poolMats(zones.pN); zones.pN.mats.push(slideMat);
 ladder(42, -12, zones.pN.metal);
 const slide = [[40.4, 6, -.2], [40.4, 5.6, -3.5]];
 for (let i = 0; i <= 20; i++) slide.push([38 + 2.4 * Math.cos(-i * Math.PI / 8), 5.1 - 4.3 * i / 20, -7 + 2.4 * Math.sin(-i * Math.PI / 8)]);
-tube([...slide, [35.4, .5, -9.5], [33.4, .22, -9.7]], .55, 320, slideMat);
+const chute = tube([...slide, [35.4, .5, -9.5], [33.4, .22, -9.7]], .55, 320, slideMat);
+{ const pts = chute.geometry.parameters.path.getSpacedPoints(90); // its solid: a chain of short upright cylinders down its length
+  pts.forEach((q, i) => { const y = [pts[Math.max(0, i - 1)].y, q.y, pts[Math.min(90, i + 1)].y]; round(q.x, q.z, .5, Math.min(...y) - .55, Math.max(...y) + .5); }); }

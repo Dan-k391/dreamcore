@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { dry, zones, defZone } from '../core.js';
 import { fbm, ss, makeTex } from '../tex.js';
 import { dirt, P, neon, wallMat } from '../mat.js';
-import { add, block, box, lit } from '../build.js';
+import { add, block, box, round, lit } from '../build.js';
 
 defZone('mL', { ...dry, grp: 'm', k: .9, exp: .3, fog: [.4, .38, .4, .0008], bloom: .25, wet: .7, box: [-27, 24, 2.4, 50], probe: [-12, 3, 37] });
 const checkTex = makeTex(512, 1.2, (u, v) => { // 30cm polished floor tiles in two tones
@@ -29,7 +29,7 @@ const checkTex = makeTex(512, 1.2, (u, v) => { // 30cm polished floor tiles in t
   block(neon(0xffedc0, 4), -20, h - .02, 35.5, -5, h + .01, 38.5); for (const x of [-19, -12.4, -5.8]) lit(z, x, h - .1, 37, 170, [x, 0, 37], 1.1, 16, 0xffedc4); // skylight
   for (const x of [-18, -7]) { // planters with a palm each, benches on two sides
     box(W, x - 1.5, 0, 35.5, x + 1.5, .5, 38.5); block(soil, x - 1.3, .5, 35.7, x + 1.3, .52, 38.3);
-    add(bark, new THREE.CylinderGeometry(.11, .16, 3.2, 10).translate(x, 2.1, 37));
+    add(bark, new THREE.CylinderGeometry(.11, .16, 3.2, 10).translate(x, 2.1, 37)); round(x, 37, .15, .5, 3.7);
     for (let j = 0; j < 9; j++) add(leaf, new THREE.BoxGeometry(1.9, .015, .42).translate(1, 0, 0).rotateZ(-.25 - .3 * (j % 3)).rotateY(j * .7).translate(x, 3.7, 37));
     for (const zc of [34.7, 39.3]) { box(bark, x - 1.2, .38, zc - .22, x + 1.2, .45, zc + .22); box(M, x - 1.1, 0, zc - .03, x - 1.04, .4, zc + .03); box(M, x + 1.04, 0, zc - .03, x + 1.1, .4, zc + .03); }
   }

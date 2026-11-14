@@ -3,7 +3,9 @@ import * as THREE from 'three';
 import { renderer, scene, camera, uTime, zones } from './core.js';
 import { colliders, emitters, floorH } from './build.js';
 import { skyNow } from './sky.js';
-import { o, zone, feet, air, frame, place } from './player.js';
+import { o, zone, feet, air, frame, place, looseCost } from './player.js';
+import { groups, floaters } from './physics.js';
+import { composer } from './post.js';
 
 // ---------- test harness: with ?dev in the address, tools/test.mjs and tools/shots.mjs drive the game through window.dev ----------
 if (new URLSearchParams(location.search).has('dev')) {
@@ -23,6 +25,17 @@ if (new URLSearchParams(location.search).has('dev')) {
     },
     cost(n = 60) { const gl = renderer.getContext(), px = new Uint8Array(4), t = Date.now(); // real milliseconds per frame, reading a pixel back so the GPU has to finish
       for (let i = 0; i < n; i++) { frame(1 / 60); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); } return +((Date.now() - t) / n).toFixed(2); },
+    bodies() { // the loose things: each ball group (count, how many awake, the bounds of its balls, a single ball's place) and each ring
+      return { groups: groups.map(g => { const p = g.p, b = { n: g.n, awake: g.awake, lo: [1e9, 1e9, 1e9], hi: [-1e9, -1e9, -1e9] };
+          for (let i = 0; i < p.length; i++) { b.lo[i % 3] = Math.min(b.lo[i % 3], p[i]); b.hi[i % 3] = Math.max(b.hi[i % 3], p[i]); }
+          b.lo = b.lo.map(r2); b.hi = b.hi.map(r2); if (g.n === 1) b.at = [r2(p[0]), r2(p[1]), r2(p[2])]; return b; }),
+        rings: floaters.map(f => ({ x: r2(f.x), y: +f.y.toFixed(3), z: r2(f.z), tilt: +Math.hypot(f.ax, f.az).toFixed(3), v: +Math.hypot(f.vx, f.vz).toFixed(3), pool: [f.w.rect.x, f.w.rect.y, f.w.rect.z, f.w.rect.w] })) };
+    },
+    balls: (k = 0) => groups[k].p, // one group's ball positions, x y z each
+    view(x, y, z, yaw, pitch = 0) { // draw one picture from somewhere else without moving the player (for photos of what the player does)
+      const p = camera.position.clone(), q = camera.quaternion.clone(); camera.position.set(x, y, z); camera.rotation.set(pitch, yaw, 0, 'YXZ'); camera.updateMatrixWorld();
+      composer.render(0); camera.position.copy(p); camera.quaternion.copy(q); },
+    physics(n = 60) { let t = 0; for (let i = 0; i < n; i++) { frame(1 / 60); t += looseCost.ms; } return +(t / n).toFixed(3); }, // ms a frame the loose things cost, over n frames
     info() { renderer.info.reset(); this.step(1); return { ...renderer.info.render, ...renderer.info.memory, programs: renderer.info.programs.length }; }, // draw calls and triangles for one whole frame
   };
 }

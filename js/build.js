@@ -6,7 +6,21 @@ import { scene, V, H, inR } from './core.js';
 import { lampOn, lampOff, seaMat, noCast, voidMat, aisle } from './mat.js';
 
 // ---------- level builder: boxes and cut-out wall slabs with world-space UVs, merged into one mesh per material ----------
+// Solids, everything the player and loose bodies collide with: [x1, z1, x2, z2, y1, y2] is an upright box. A 7th entry makes it
+// another shape inside that rectangle: a number r, an upright cylinder of radius r round its middle; [cx, cz, cos, sin, hx, hz], a box
+// of half-size hx by hz turned about the vertical (see turned). A solid blocks the body sideways where it overlaps it above step
+// height, its top is ground, its underside stops a jump (player.js). box() adds one for itself; solid(), round() and turned() add one
+// for things built otherwise.
 const colliders = [], geo = new Map(), emitters = [];
+const solid = (x1, y1, z1, x2, y2, z2) => colliders.push([x1, z1, x2, z2, y1, y2]);
+const round = (x, z, r, y1, y2) => colliders.push([x - r, z - r, x + r, z + r, y1, y2, r]);
+const turned = (cx, cz, hx, hz, ry, y1, y2) => { // the solid of a box of half-size hx, hz centred at cx, cz and turned by rotateY(ry)
+  const c = Math.cos(ry), s = Math.sin(ry), ex = Math.abs(c) * hx + Math.abs(s) * hz, ez = Math.abs(s) * hx + Math.abs(c) * hz;
+  colliders.push([cx - ex, cz - ez, cx + ex, cz + ez, y1, y2, [cx, cz, c, s, hx, hz]]);
+};
+const loose = []; // loose balls, moved by physics.js: { mesh (a Mesh, or an InstancedMesh for many), r, pos [x, y, z per ball], region [x1, z1, x2, z2] they live in,
+// bounce, grip (rolling resistance, m/s²), and if they apply: float (density against water's), spin (it rolls visibly), solid (it stops the body),
+// slope (follows a sloping floor), pour (settle this many steps at load), seen (zone ids it is drawn from) }
 const flats = []; // [x1, z1, x2, z2, (x, z) => height]: floors that are not at 0, pools included (each pool place registers its own). A later one overrides an earlier one
 const seeThrough = [], skyOnly = { hill: [], dusk: [], night: [] }; // things the AO pass must skip; things only one sky has
 const warps = []; // [x1, z1, x2, z2, dx, dz]: standing in the rectangle moves you by the offset
@@ -26,9 +40,9 @@ function add(mat, g) {
   geo.has(mat) ? geo.get(mat).push(g) : geo.set(mat, [g]);
 }
 const block = (mat, x1, y1, z1, x2, y2, z2) => add(mat, new THREE.BoxGeometry(x2 - x1, y2 - y1, z2 - z1).translate((x1 + x2) / 2, (y1 + y2) / 2, (z1 + z2) / 2)); // a box that never blocks
-function box(mat, x1, y1, z1, x2, y2, z2) {
+function box(mat, x1, y1, z1, x2, y2, z2) { // a box that is solid, all of it: walls, floors, ceilings, seats
   block(mat, x1, y1, z1, x2, y2, z2);
-  if (y1 < 1.7 && y2 > .3) colliders.push([x1, z1, x2, z2]); // anything at body height blocks the player
+  if (y2 - y1 >= .02) solid(x1, y1, z1, x2, y2, z2); // a flush inlay is not something to bump into
 }
 // A flight of n solid steps filling the rectangle, climbing toward its high end (up = 1) or its low end (-1) along x or z, from height y0
 function flight(mat, x1, z1, x2, z2, axis, up, y0, n, rise = .25, base = y0 - .2) {
@@ -66,9 +80,13 @@ function slab(mat, axis, at, depth, a1, a2, y1, y2, cuts, through = false) { // 
   }
   const g = new THREE.ExtrudeGeometry(sh, { depth, bevelEnabled: false, curveSegments: 24 });
   add(mat, axis === 'x' ? g.translate(0, 0, at) : g.rotateY(-Math.PI / 2).translate(at + depth, 0, 0));
-  let a = a1; // solid stretches block the player: the whole slab, or just the piers between walk-through arches
-  const pier = b => { if (b - a > .01) colliders.push(axis === 'x' ? [a, at, b, at + depth] : [at, a, at + depth, b]); };
-  if (through) for (const [, c, w] of cuts.filter(c => c[0] === 'arch').sort((p, q) => p[1] - q[1])) { pier(c - w / 2); a = c + w / 2; }
+  let a = a1; // the solid: the whole slab, or the piers between walk-through arches and the curved heads over them in eight bands
+  const part = (p, q, lo, hi) => axis === 'x' ? solid(p, lo, at, q, hi, at + depth) : solid(at, lo, p, at + depth, hi, q);
+  const pier = b => { if (b - a > .01) part(a, b, y1, y2); };
+  if (through) for (const [, c, w, top] of cuts.filter(c => c[0] === 'arch').sort((p, q) => p[1] - q[1])) {
+    pier(c - w / 2); a = c + w / 2;
+    for (let i = 0; i < 8; i++) { const u = Math.max(Math.abs(i / 4 - 1), Math.abs((i + 1) / 4 - 1)) * w / 2; part(c - w / 2 + w * i / 8, c - w / 2 + w * (i + 1) / 8, top - w / 2 + Math.sqrt(Math.max(0, w * w / 4 - u * u)), y2); }
+  }
   pier(a2);
 }
 const room = (z, x1, z1, x2, z2, h) => { box(z.carpet, x1, -.2, z1, x2, 0, z2); box(z.ceil, x1, h, z1, x2, h + .2, z2); };
@@ -83,13 +101,14 @@ const lit = (z, x, y, zc, power, to = [x, 0, zc], angle = 1.35, dist = 12, color
 const post = (mat, globe, x, y, z, ax, az, power, zone) => { // street lamp: a pole curving over to a glowing globe; lit only where a zone is given
   tube([[x, y - .4, z], [x, y + 3.4, z], [x + ax * .12, y + 3.85, z + az * .12], [x + ax * .5, y + 4.05, z + az * .5], [x + ax * .9, y + 4, z + az * .9]], .045, 40, mat);
   add(globe, new THREE.SphereGeometry(.16, 20, 14).translate(x + ax * .95, y + 3.88, z + az * .95)); add(mat, new THREE.CylinderGeometry(.09, .11, .5, 12).translate(x, y + .25, z));
-  colliders.push([x - .1, z - .1, x + .1, z + .1]);
+  round(x, z, .11, y - .4, y + .5); round(x, z, .05, y + .5, y + 3.5);
   if (zone) lit(zone, x + ax * .95, y + 3.7, z + az * .95, power, [x + ax * .95, y, z + az * .95], 1.2, 18, 0xffc98a);
 };
 const doorway = (mat, leaf, x, y, z, ry, open = 1.9) => { // a door standing on its own, ajar
-  const part = (m, w, h, d, px, py, pz) => add(m, new THREE.BoxGeometry(w, h, d).translate(px, py, pz).rotateY(ry).translate(x, y, z));
+  const c = Math.cos(ry), s = Math.sin(ry), part = (m, w, h, d, px, py, pz) => { add(m, new THREE.BoxGeometry(w, h, d).translate(px, py, pz).rotateY(ry).translate(x, y, z)); turned(x + px * c + pz * s, z - px * s + pz * c, w / 2, d / 2, ry, y + py - h / 2, y + py + h / 2); };
   part(mat, .12, 2.3, .16, -.56, 1.15, 0); part(mat, .12, 2.3, .16, .56, 1.15, 0); part(mat, 1.24, .12, .16, 0, 2.3, 0); part(mat, 1.24, .05, .2, 0, .025, 0);
   add(leaf, new THREE.BoxGeometry(1, 2.2, .045).translate(.5, 1.13, 0).rotateY(open).translate(-.5, 0, 0).rotateY(ry).translate(x, y, z));
+  const lx = .5 * Math.cos(open) - .5, lz = -.5 * Math.sin(open); turned(x + lx * c + lz * s, z - lx * s + lz * c, .5, .0225, open + ry, y + .03, y + 2.23); // the leaf
 };
 const ladder = (x, zc, mat) => { // on a pool's east edge at x: two rails over the lip, three treads
   for (const z of [zc - .25, zc + .25]) tube([[x - .1, -1], [x - .1, .5], [x - .03, .76], [x + .17, .86], [x + .37, .76], [x + .44, .5], [x + .44, 0]].map(([a, y]) => [a, y, z]), .022, 48, mat);
@@ -97,9 +116,37 @@ const ladder = (x, zc, mat) => { // on a pool's east edge at x: two rails over t
   ladders.push([x - .8, zc - .45, x + .5, zc + .45]);
 };
 const floorH = (x, z) => { let y = 0; for (const f of flats) if (inR(x, z, f[0], f[1], f[2], f[3])) y = f[4](x, z); return y; };
+// The shortest move that takes a ball of radius r at (x, y, z) out of solid c, into `out`; false if they don't touch.
+// y = null: a circle on the plan, height ignored (the caller tests heights).
+const out = { x: 0, y: 0, z: 0 };
+function clear(c, x, y, z, r) {
+  const o = c[6], turn = Array.isArray(o);
+  let px = x, pz = z, ax = c[0], az = c[1], bx = c[2], bz = c[3];
+  if (turn) { const dx = x - o[0], dz = z - o[1]; px = dx * o[2] - dz * o[3]; pz = dx * o[3] + dz * o[2]; ax = -o[4]; az = -o[5]; bx = o[4]; bz = o[5]; }
+  let qx, qz, inside, mx, my = 0, mz;
+  const cyl = typeof o === 'number', cx = (ax + bx) / 2, cz = (az + bz) / 2, dx = px - cx, dz = pz - cz, d = cyl ? Math.hypot(dx, dz) : 0;
+  if (cyl) { inside = d <= o; const k = inside ? 1 : o / d; qx = cx + dx * k; qz = cz + dz * k; }
+  else { qx = Math.min(bx, Math.max(ax, px)); qz = Math.min(bz, Math.max(az, pz)); inside = qx === px && qz === pz; }
+  const qy = y === null ? 0 : Math.min(c[5], Math.max(c[4], y));
+  if (!inside || (y !== null && qy !== y)) { // centre outside: straight away from the nearest point
+    mx = px - qx; mz = pz - qz; if (y !== null) my = y - qy;
+    const d2 = mx * mx + my * my + mz * mz; if (d2 >= r * r) return false;
+    const k = (r - Math.sqrt(d2)) / Math.sqrt(d2); mx *= k; my *= k; mz *= k;
+  } else { // centre inside: out through the nearest face
+    let best = Infinity; mx = mz = 0;
+    const face = (len, fx, fy, fz) => { if (len < best) { best = len; mx = fx * len; my = fy * len; mz = fz * len; } };
+    if (cyl) { const k = d > 1e-9 ? 1 / d : 0; face(o - d + r, d > 1e-9 ? dx * k : 1, 0, dz * k); }
+    else { face(px - ax + r, -1, 0, 0); face(bx - px + r, 1, 0, 0); face(pz - az + r, 0, 0, -1); face(bz - pz + r, 0, 0, 1); }
+    if (y !== null) { face(y - c[4] + r, 0, -1, 0); face(c[5] - y + r, 0, 1, 0); }
+  }
+  if (turn) { out.x = mx * o[2] + mz * o[3]; out.z = -mx * o[3] + mz * o[2]; } else { out.x = mx; out.z = mz; }
+  out.y = my; return true;
+}
+const near = (c, x, z, r) => x > c[0] - r && x < c[2] + r && z > c[1] - r && z < c[3] + r; // within r of a solid's rectangle
 let sea;
 function merge() { // once every place is built (level.js): one mesh per material
+  for (const c of colliders) if (c.length === 4) c.push(-1e4, 1e4); // a bare rectangle is a wall of any height
   for (const [m, list] of geo) { const mesh = new THREE.Mesh(mergeGeometries(list), m); mesh.castShadow = !noCast.has(m); mesh.receiveShadow = m !== seaMat; scene.add(mesh); if (m === seaMat) sea = mesh; }
 }
 
-export { colliders, emitters, flats, seeThrough, skyOnly, warps, pools, onSun, ladders, rings, add, block, box, flight, passage, slab, room, wall, fixture, lamp, tube, lit, post, doorway, ladder, floorH, sea, merge };
+export { colliders, emitters, flats, seeThrough, skyOnly, warps, pools, onSun, ladders, rings, loose, add, block, box, solid, round, turned, clear, out, near, flight, passage, slab, room, wall, fixture, lamp, tube, lit, post, doorway, ladder, floorH, sea, merge };

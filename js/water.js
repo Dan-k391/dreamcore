@@ -23,12 +23,13 @@ import './level.js';
 // a top-down picture of its floor made once.
 // Where the water is thin against a step or wall it fades out, so the shoreline is soft instead of a hard cut.
 const OVER = 1.45;
-const simMat = new THREE.ShaderMaterial({ uniforms: { tSim: { value: null }, uPx: { value: null }, uDrop: { value: V(0, 0, 0) } }, vertexShader: quadVS,
-  fragmentShader: `uniform sampler2D tSim; uniform vec2 uPx; uniform vec3 uDrop; varying vec2 vUv;
+const DROPS = 8; // disturbances one step takes: the player's and the loose things'
+const simMat = new THREE.ShaderMaterial({ uniforms: { tSim: { value: null }, uPx: { value: null }, uDrop: { value: Array.from({ length: DROPS }, () => V(0, 0, 0)) } }, vertexShader: quadVS,
+  fragmentShader: `uniform sampler2D tSim; uniform vec2 uPx; uniform vec3 uDrop[${DROPS}]; varying vec2 vUv;
     void main() { vec4 s = texture2D(tSim, vUv); // r = height, g = velocity
       float avg = (texture2D(tSim, vUv - vec2(uPx.x, 0.)).r + texture2D(tSim, vUv + vec2(uPx.x, 0.)).r + texture2D(tSim, vUv - vec2(0., uPx.y)).r + texture2D(tSim, vUv + vec2(0., uPx.y)).r) * .25;
       s.g = (s.g + (avg - s.r) * 2.) * .993; s.r += s.g;
-      vec2 d = (vUv - uDrop.xy) / uPx; s.r += uDrop.z * exp(-dot(d, d) / 18.);
+      for (int i = 0; i < ${DROPS}; i++) { vec2 d = (vUv - uDrop[i].xy) / uPx; s.r += uDrop[i].z * exp(-dot(d, d) / 18.); }
       gl_FragColor = s; }` });
 const simQuad = new FullScreenQuad(simMat);
 const waterVS = 'varying vec3 vW; void main() { vec4 w = modelMatrix * vec4(position, 1.); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }';
@@ -86,7 +87,7 @@ const ponds = pools.map(([x1, z1, x2, z2, floor, zid, seen, scatter]) => {
   const sim = [rt(), rt()], rect = new THREE.Vector4(x1, z1, x2, z2), px = new THREE.Vector2(.05 / (x2 - x1), .05 / (z2 - z1));
   const ppm = Math.min(80, 2048 / Math.max(x2 - x1, z2 - z1)), pw = Math.round((x2 - x1) * ppm), ph = Math.round((z2 - z1) * ppm); // the plan: 80 pixels a metre where it fits
   const planRT = new THREE.WebGLRenderTarget(pw, ph, { type: THREE.HalfFloatType });
-  const gw = Math.round((x2 - x1) * 20), gh = Math.round((z2 - z1) * 20), heights = new Float32Array(gw * gh), solid = colliders.filter(c => c[2] > x1 && c[0] < x2 && c[3] > z1 && c[1] < z2);
+  const gw = Math.round((x2 - x1) * 20), gh = Math.round((z2 - z1) * 20), heights = new Float32Array(gw * gh), solid = colliders.filter(c => !c[6] && c[5] > WY && c[4] < 1.7 && c[2] > x1 && c[0] < x2 && c[3] > z1 && c[1] < z2); // boxes standing in the water
   for (let j = 0, i = 0; j < gh; j++) for (let k = 0; k < gw; k++, i++) { // the height map: the walking floor, or the surface itself where a wall or column stands in the water
     const x = x1 + (k + .5) / 20, z = z1 + (j + .5) / 20;
     heights[i] = solid.some(c => x > c[0] && x < c[2] && z > c[1] && z < c[3]) ? WY : Math.min(WY, floorH(x, z));
@@ -97,7 +98,7 @@ const ponds = pools.map(([x1, z1, x2, z2, floor, zid, seen, scatter]) => {
   const U = { uCaus: zones[zid].tileU.uCaus, tMirror: { value: mirror.getRenderTarget().texture }, tPlan: { value: planRT.texture }, tGround: { value: ground }, tUnder: { value: under.texture }, tUnderZ: { value: under.depthTexture }, uLens: { value: lens.camera.projectionMatrix }, tNormalMap0: { value: wn0 }, tNormalMap1: { value: wn1 },
               tSim: { value: sim[0].texture }, uPond: { value: rect }, uPx: { value: px }, uFloor: { value: floor }, uScatter: { value: V(...scatter) }, uMain: { value: 0 }, uTime };
   const w = new THREE.Mesh(g, new THREE.ShaderMaterial({ uniforms: U, vertexShader: waterVS, fragmentShader: waterFS, transparent: true }));
-  Object.assign(w, { seen, rect, px, sim, tileU: zones[zid].tileU, zone: zones[zid] });
+  Object.assign(w, { seen, rect, px, sim, tileU: zones[zid].tileU, zone: zones[zid], twin: twin(x1, z1, x2, z2) });
   w.drawPlan = () => { // once, while the zone's lamps are lit for its bake; caustics off, since the plan is a still and they move
     const caus = w.tileU.uCaus.value, target = renderer.getRenderTarget();
     w.tileU.uCaus.value = 0; sky.visible = false; renderer.setRenderTarget(planRT); renderer.render(scene, planCam);
@@ -119,11 +120,38 @@ const ponds = pools.map(([x1, z1, x2, z2, floor, zid, seen, scatter]) => {
   };
   return w;
 });
-function ripple(w, x, z, power) { // one 60Hz step of a pool's waves, with a disturbance of the given size at world (x, z)
+// The CPU's coarse copy of a pool's waves, 20 cm cells, given the same disturbances: what floating things ride on, so the GPU
+// waves never have to be read back. Shallow-water form (heights in the cells, water velocity on the faces between them),
+// tuned to the GPU waves' speed (c = 2.12 m/s: one 5 cm cell * 60 Hz / sqrt 2) and damping (.993 a step); walls reflect, as there.
+function twin(x1, z1, x2, z2) {
+  const nx = Math.round((x2 - x1) / .2), nz = Math.round((z2 - z1) / .2), dx = (x2 - x1) / nx, dz = (z2 - z1) / nz;
+  const h = new Float32Array(nx * nz), u = new Float32Array((nx + 1) * nz), v = new Float32Array(nx * (nz + 1)), G = 9.8, D = 2.12 ** 2 / 9.8, t = 1 / 60;
+  const T = { x1, z1, nx, nz, dx, dz, h, u, v, at: { h: 0, gx: 0, gz: 0, ux: 0, uz: 0 } };
+  T.step = drops => {
+    for (const [x, z, p] of drops) { // the same volume the GPU's gaussian adds, shared bilinearly between the four nearest cells
+      const fx = Math.min(nx - 1.001, Math.max(0, (x - x1) / dx - .5)), fz = Math.min(nz - 1.001, Math.max(0, (z - z1) / dz - .5)), i = fx | 0, j = fz | 0, a = fx - i, b = fz - j, q = p * .1414 / (dx * dz);
+      h[i + j * nx] += q * (1 - a) * (1 - b); h[i + 1 + j * nx] += q * a * (1 - b); h[i + (j + 1) * nx] += q * (1 - a) * b; h[i + 1 + (j + 1) * nx] += q * a * b;
+    }
+    for (let j = 0; j < nz; j++) for (let i = 1; i < nx; i++) { const k = i + j * (nx + 1); u[k] = (u[k] - G * t * (h[i + j * nx] - h[i - 1 + j * nx]) / dx) * .993; }
+    for (let j = 1; j < nz; j++) for (let i = 0; i < nx; i++) { const k = i + j * nx; v[k] = (v[k] - G * t * (h[k] - h[k - nx]) / dz) * .993; }
+    for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) { const k = i + j * nx; h[k] -= D * t * ((u[k + j + 1] - u[k + j]) / dx + (v[k + nx] - v[k]) / dz); }
+  };
+  T.sample = (x, z) => { // -> T.at: height above the still surface, its slope, and the water's flow, at (x, z)
+    const fx = Math.min(nx - 1.001, Math.max(0, (x - x1) / dx - .5)), fz = Math.min(nz - 1.001, Math.max(0, (z - z1) / dz - .5)), i = fx | 0, j = fz | 0, a = fx - i, b = fz - j;
+    const H = (p, q) => h[p + q * nx], h00 = H(i, j), h10 = H(i + 1, j), h01 = H(i, j + 1), h11 = H(i + 1, j + 1), o = T.at;
+    o.h = (h00 * (1 - a) + h10 * a) * (1 - b) + (h01 * (1 - a) + h11 * a) * b;
+    o.gx = ((h10 - h00) * (1 - b) + (h11 - h01) * b) / dx; o.gz = ((h01 - h00) * (1 - a) + (h11 - h10) * a) / dz;
+    const ci = Math.min(nx - 1, Math.max(0, Math.floor((x - x1) / dx))), cj = Math.min(nz - 1, Math.max(0, Math.floor((z - z1) / dz))), k = ci + cj * nx;
+    o.ux = (u[k + cj] + u[k + cj + 1]) / 2; o.uz = (v[k] + v[k + nx]) / 2; return o;
+  };
+  return T;
+}
+function ripple(w, drops) { // one 60Hz step of a pool's waves, with up to DROPS disturbances [x, z, size] in world space
   simMat.uniforms.tSim.value = w.sim[0].texture; simMat.uniforms.uPx.value = w.px;
-  simMat.uniforms.uDrop.value.set((x - w.rect.x) / (w.rect.z - w.rect.x), (z - w.rect.y) / (w.rect.w - w.rect.y), power);
+  simMat.uniforms.uDrop.value.forEach((d, i) => { const [x, z, p] = drops[i] || [0, 0, 0]; d.set((x - w.rect.x) / (w.rect.z - w.rect.x), (z - w.rect.y) / (w.rect.w - w.rect.y), p); });
   renderer.setRenderTarget(w.sim[1]); simQuad.render(renderer); renderer.setRenderTarget(null);
   w.sim.reverse(); w.material.uniforms.tSim.value = w.tileU.uSim.value = w.sim[0].texture;
+  w.twin.step(drops.slice(0, DROPS));
 }
 
 export { ponds, ripple };

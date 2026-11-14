@@ -2,28 +2,29 @@
 import * as THREE from 'three';
 import { scene, uTime, sunDir, dry, zones, defZone } from '../core.js';
 import { P, neon, wallMat } from '../mat.js';
-import { colliders, flats, seeThrough, skyOnly, add, block, box, flight, slab, post, doorway } from '../build.js';
+import { flats, seeThrough, skyOnly, add, block, box, solid, round, turned, flight, slab, post, doorway } from '../build.js';
 
 defZone('sK', { ...dry, sky: 'dusk', air: .7, grp: 's', k: 1, exp: .3, fog: [.95, .6, .55, .0012], sat: 1.12, bloom: .12, shaft: .1, wet: .35, box: [650.4, 600, 745, 700], probe: [672, 2, 649.4] });
 { // terrace above the clouds x[650,704] z[639,660], out of the vaulted hall's far door: white stone at sunset, a court of arches, a stair to a lookout
   const z = zones.sK, W = wallMat(z, 0xf2ece4, { roughness: .55 }), iron = P(z, { color: 0x24262c, metalness: .7, roughness: .4 }), blue = P(z, { color: 0x86a8d8, roughness: .4 }), lampG = neon(0xffd9a0, 6);
-  const rail = (x1, z1, x2, z2, y = 0) => { block(W, x1, y, z1, x2, y + .6, z2); colliders.push([x1, z1, x2, z2]); };
+  const edge = (x1, z1, x2, z2, y, side) => solid(side === 'e' ? x2 - .02 : x1, y, side === 's' ? z2 - .02 : z1, side === 'w' ? x1 + .02 : x2, y + 3, side === 'n' ? z1 + .02 : z2); // an unseen pane on a parapet's outer edge: stand on it, but not step off into the sky
+  const rail = (x1, z1, x2, z2, y, side) => { box(W, x1, y, z1, x2, y + .6, z2); edge(x1, z1, x2, z2, y + .6, side); };
   box(W, 649.9, -8, 560, 650.45, 16, 648.4); box(W, 649.9, -8, 650.4, 650.45, 16, 740); box(W, 649.9, 2.4, 648.4, 650.45, 16, 650.4); // the wall the passage comes out of, running out of sight both ways
-  block(W, 650.45, -8, 647.9, 664, 0, 650.9); rail(650.45, 647.6, 664, 647.9); rail(650.45, 650.9, 664, 651.2); // causeway
-  for (let x = 652.5; x < 664; x += 3.8) for (const zc of [647.1, 651.7]) add(W, new THREE.CylinderGeometry(.24, .24, 15, 20).translate(x, -.5, zc)); // columns rising out of the cloud beside it
+  block(W, 650.45, -8, 647.9, 664, 0, 650.9); rail(650.45, 647.6, 664, 647.9, 0, 'n'); rail(650.45, 650.9, 664, 651.2, 0, 's'); // causeway
+  for (let x = 652.5; x < 664; x += 3.8) for (const zc of [647.1, 651.7]) add(W, new THREE.CylinderGeometry(.24, .24, 15, 20).translate(x, -.5, zc)), round(x, zc, .24, -8, 7); // columns rising out of the cloud beside it
   block(W, 664, -8, 639.4, 684, 0, 659.4); // the court
-  rail(664, 639.1, 684, 639.4); rail(664, 659.4, 684, 659.7); rail(663.7, 639.1, 664, 647.9); rail(663.7, 650.9, 664, 659.7); rail(684, 639.1, 684.3, 645.4); rail(684, 653.4, 684.3, 659.7);
+  rail(664, 639.1, 684, 639.4, 0, 'n'); rail(664, 659.4, 684, 659.7, 0, 's'); rail(663.7, 639.1, 664, 647.9, 0, 'w'); rail(663.7, 650.9, 664, 659.7, 0, 'w'); rail(684, 639.1, 684.3, 645.4, 0, 'e'); rail(684, 653.4, 684.3, 659.7, 0, 'e');
   const arches = c0 => [0, 1, 2, 3].map(i => ['arch', c0 + 1.9 + 3.4 * i, 2.6, 4.6]);
   for (const zc of [642.4, 655.9]) slab(W, 'x', zc, .5, 667, 681, 0, 6, arches(667), true);
   for (const x of [667, 680.5]) slab(W, 'z', x, .5, 642.4, 656.4, 0, 6, arches(642.4), true);
   doorway(W, blue, 674, 0, 649.4, Math.PI / 2, 2.2);
   flight(W, 684, 645.4, 694, 653.4, 'x', 1, 0, 20, .25, -8); // the stair, between stepped walls
-  for (let i = 0; i < 4; i++) for (const zc of [645, 653.4]) box(W, 684 + 2.5 * i, -8, zc, 686.5 + 2.5 * i, 1.25 * (i + 1) + .9, zc + .4);
-  block(W, 694, -8, 645, 704, 5, 653.8); flats.push([694, 645.4, 704, 653.4, () => 5]); rail(694, 645, 704, 645.4, 5); rail(694, 653.4, 704, 653.8, 5); rail(703.6, 645.4, 704, 653.4, 5); // the lookout
+  for (let i = 0; i < 4; i++) for (const zc of [645, 653.4]) { box(W, 684 + 2.5 * i, -8, zc, 686.5 + 2.5 * i, 1.25 * (i + 1) + .9, zc + .4); edge(684 + 2.5 * i, zc, 686.5 + 2.5 * i, zc + .4, 1.25 * (i + 1) + .9, zc < 649 ? 'n' : 's'); }
+  block(W, 694, -8, 645, 704, 5, 653.8); flats.push([694, 645.4, 704, 653.4, () => 5]); rail(694, 645, 704, 645.4, 5, 'n'); rail(694, 653.4, 704, 653.8, 5, 's'); rail(703.6, 645.4, 704, 653.4, 5, 'e'); // the lookout
   post(iron, lampG, 696, 5, 646.4, .6, .8, 90, z);
-  for (let i = 0; i < 3; i++) block(iron, 700.6 + .13 * i, 5.44, 648.5, 700.7 + .13 * i, 5.47, 650.3); for (const k of [648.6, 650.2]) block(iron, 700.6, 5, k - .03, 700.98, 5.44, k + .03); colliders.push([700.6, 648.5, 701, 650.3]); // a bench facing the sun
+  for (let i = 0; i < 3; i++) block(iron, 700.6 + .13 * i, 5.44, 648.5, 700.7 + .13 * i, 5.47, 650.3); for (const k of [648.6, 650.2]) block(iron, 700.6, 5, k - .03, 700.98, 5.44, k + .03); solid(700.6, 5.4, 648.5, 701, 5.47, 650.3); for (const k of [648.6, 650.2]) solid(700.6, 5, k - .03, 700.98, 5.4, k + .03); // a bench facing the sun
   // things that hang in the sky out of reach: stairs and doors
-  for (const [x, y, zc, n, ry] of [[690, 9, 622, 9, .4], [712, 3, 676, 12, -1.1], [735, 12, 640, 7, 2]]) { for (let i = 0; i < n; i++) add(W, new THREE.BoxGeometry(.5, .25 * (i + 1), 2).translate(.5 * i, .125 * (i + 1), 0).rotateY(ry).translate(x, y, zc)); doorway(W, blue, x, y + .25 * n, zc - 3, ry); }
+  for (const [x, y, zc, n, ry] of [[690, 9, 622, 9, .4], [712, 3, 676, 12, -1.1], [735, 12, 640, 7, 2]]) { for (let i = 0; i < n; i++) { add(W, new THREE.BoxGeometry(.5, .25 * (i + 1), 2).translate(.5 * i, .125 * (i + 1), 0).rotateY(ry).translate(x, y, zc)); turned(x + .5 * i * Math.cos(ry), zc - .5 * i * Math.sin(ry), .25, 1, ry, y, y + .25 * (i + 1)); } doorway(W, blue, x, y + .25 * n, zc - 3, ry); }
   // The cloud sea: an opaque floor of cloud well below the terrace and three thinner sheets above it, all cut from one drifting pattern, lit from the low sun
   [0, 1, 2, 3].forEach(l => { const m = new THREE.Mesh(new THREE.PlaneGeometry(4000, 4000).rotateX(-Math.PI / 2), new THREE.ShaderMaterial({ transparent: l > 0, depthWrite: l === 0, uniforms: { uTime, uSun: { value: sunDir }, uL: { value: l } },
     vertexShader: 'varying vec3 vW; void main() { vW = (modelMatrix * vec4(position, 1.)).xyz; gl_Position = projectionMatrix * viewMatrix * vec4(vW, 1.); }',
