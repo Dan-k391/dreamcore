@@ -25,7 +25,7 @@ When the two pull against each other, quality wins: one place finished properly 
 
 ## Testing (subagents: use this, do not use the shared Browser pane)
 
-- Serve your working copy: `python -m http.server <port> --bind 127.0.0.1` from the repo root, on the port your brief gives you.
+- Serve your working copy: `node tools/serve.mjs <port>` from the root of the copy you are working in (in the background), on the port your brief gives you. Stop it when you are done.
 - `node tools/browse.mjs --url "http://127.0.0.1:<port>/?dev#x,z,yaw,pitch" --shot out.png --eval "<js>"` loads the game in a private headless browser on the real GPU, runs JavaScript in the page, saves a 1280x720 screenshot and prints `{result, errors}`. It exits non-zero on any page error. Read the screenshot file to look at it.
 - `?dev` in the address turns on the test hooks (`window.dev`, in `js/dev.js`); `#x,z,yaw,pitch` starts the player there. Without `?dev` none of it exists.
   - `dev.ready`: level built, baked and one frame drawn. `dev.hold = true` stops the normal loop, so only `dev.step(n, dt = 1/60)` moves time (deterministic).
