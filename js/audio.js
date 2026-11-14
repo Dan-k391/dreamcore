@@ -41,7 +41,7 @@ function startAudio(zone) { // zone: where you are when it starts
   const kinds = { carpet: ['lowpass', 260, .7, .5, .11], tile: ['bandpass', 1300, 1.1, .3, .06], water: ['bandpass', 650, .5, .45, .32] };
   sfx = {
     step(kind) { // a short filtered noise burst per footfall
-      const t = ac.currentTime, s = ac.createBufferSource(), b = ac.createBiquadFilter(), g = bus(0, master, verb), [type, f, q, vol, dur] = kinds[kind];
+      const t = ac.currentTime, s = ac.createBufferSource(), b = ac.createBiquadFilter(), g = bus(0, master, verb), [type, f, q, vol, dur] = kinds[kind] || kinds.carpet; // a place's step sound with no entry here sounds like carpet rather than throwing
       s.buffer = noise; s.playbackRate.value = .7 + Math.random() * .6; b.type = type; b.frequency.value = f * (.85 + Math.random() * .3); b.Q.value = q;
       g.gain.setValueAtTime(kind === 'water' ? .001 : vol, t); g.gain.exponentialRampToValueAtTime(vol, t + .04); g.gain.exponentialRampToValueAtTime(.001, t + .04 + dur);
       s.connect(b).connect(g); s.start(t, Math.random()); s.stop(t + dur + .1);
