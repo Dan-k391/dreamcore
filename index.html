@@ -555,11 +555,11 @@ document.addEventListener('pointerlockchange', () => { if (!locked()) o.style.di
 addEventListener('mousemove', e => { // mouse look: captured pointer where the browser allows it, bare cursor movement where it doesn't
   if (!locked() && !free) return;
   const m = free ? 60 : 250, cl = v => Math.max(-m, Math.min(m, v)); // drop the one-event jumps browsers report on re-entry or under capture
-  turn(cl(e.movementX) * .0022, cl(e.movementY) * .0022);
+  turn(cl(e.movementX) * .0022 * camera.fov / 72, cl(e.movementY) * .0022 * camera.fov / 72); // slower while zoomed in
 });
 addEventListener('keydown', e => { keys[e.code] = 1; if (e.code === 'Space') e.preventDefault(); if (e.code === 'KeyM') sfx?.mute(); });
 addEventListener('keyup', e => keys[e.code] = 0);
-document.getElementById('s').textContent = 'click to enter  ·  wasd walk  ·  mouse look  ·  q / e turn  ·  space jump  ·  shift run  ·  m mute';
+document.getElementById('s').textContent = 'click to enter  ·  wasd walk  ·  mouse look  ·  q / e turn  ·  space jump  ·  shift run  ·  c zoom  ·  m mute';
 
 function collide(p, R = .3) { // push the player circle out of every wall box along the shallowest axis
   for (const [x1, z1, x2, z2] of colliders) if (p.x > x1 - R && p.x < x2 + R && p.z > z1 - R && p.z < z2 + R) {
@@ -572,33 +572,46 @@ console.assert(floorH(0, -12) === -1.2 && floorH(0, -6.2) === -.3 && floorH(15, 
   && collide(V(5, 0, .6)).z > 1.29 && Object.values(zones).every(z => inR(z.probe.x, z.probe.z, ...z.box)) && emitters.every(e => inR(e.p.x, e.p.z, ...e.zone.box)), 'level self-check failed');
 
 const clock = new THREE.Clock(), vel = new THREE.Vector2(), UP = new THREE.Vector3(0, 1, 0);
-let stride = 0, foot = 0, eye = floorH(camera.position.x, camera.position.z) + 1.62, jump = 0, vy = 0, simT = 0;
+let stride = 0, foot = 0, feet = floorH(camera.position.x, camera.position.z), vy = 0, air = false, drop = 0, simT = 0; // feet: height of the player's soles
 renderer.setAnimationLoop(() => {
   const dt = Math.min(clock.getDelta(), .05), p = camera.position, k = c => keys[c] ? 1 : 0, ease = Math.min(1, dt * 8);
   uTime.value += dt;
-  const ground = floorH(p.x, p.z), speed = (k('ShiftLeft') ? 4 : 1.9) * (ground < -.5 ? .55 : 1); // wading is slower
+  const fov = k('KeyC') ? 22 : 72; // hold C to zoom in
+  if (Math.abs(camera.fov - fov) > .05) { camera.fov += (fov - camera.fov) * Math.min(1, dt * 12); camera.updateProjectionMatrix(); }
+  const speed = (k('ShiftLeft') ? 4 : 1.9) * (feet < -.5 ? .55 : 1); // wading is slower
   vel.x += ((k('KeyD') - k('KeyA')) * speed - vel.x) * ease;
   vel.y += (((k('KeyW') | k('ArrowUp')) - (k('KeyS') | k('ArrowDown'))) * speed - vel.y) * ease;
   camera.rotateOnWorldAxis(UP, ((k('ArrowLeft') | k('KeyQ')) - (k('ArrowRight') | k('KeyE'))) * dt * 2.2);
   const yaw = eu.setFromQuaternion(camera.quaternion).y, sn = Math.sin(yaw), cs = Math.cos(yaw);
+  const ox = p.x, oz = p.z;
   p.x += (vel.x * cs - vel.y * sn) * dt; p.z += (-vel.x * sn - vel.y * cs) * dt;
   collide(p);
-  stride += vel.length() * dt;
-  eye += (ground + 1.62 + Math.sin(stride * 3.4) * .018 * Math.min(1, vel.length()) - eye) * Math.min(1, dt * 7);
-  const air = jump > 0;
-  if (k('Space') && !air) vy = 4.3;
-  vy -= 11 * dt; jump = Math.max(0, jump + vy * dt); if (jump === 0) vy = 0;
-  p.y = eye + jump;
-  const f = Math.floor(stride * 3.4 / Math.PI); // one footfall per half bob cycle, and one on landing
-  if (sfx && ((f !== foot && !air && vel.length() > .5) || (air && jump === 0))) sfx.step(ground < 0 ? 'water' : zone.tile ? 'tile' : 'carpet');
+  // A rise taller than a step is a wall. Pool sides can't be walked up: the ways out are the steps, or a jump onto something low enough.
+  const lead = (to, from) => to + Math.sign(to - from) * .3, tall = (x, z) => floorH(lead(x, ox), lead(z, oz)) - feet > .35; // tested a body-width ahead, so the eye never reaches the wall face
+  if (tall(p.x, p.z)) { if (!tall(p.x, oz)) p.z = oz; else if (!tall(ox, p.z)) p.x = ox; else { p.x = ox; p.z = oz; } }
+  const ground = floorH(p.x, p.z), was = feet;
+  let landed = false;
+  if (feet > ground + .001 || vy > 0) { // off the ground: gravity, and drag once the legs are under water. Walking off a ledge is a fall.
+    vy -= 11 * dt; if (feet < WY) vy -= vy * Math.min(1, 4 * dt);
+    feet += vy * dt;
+    if (feet <= ground) { feet = ground; vy = 0; landed = true; }
+  } else feet = Math.min(ground, feet + 4 * dt); // a step up is climbed, not jumped to
+  air = feet > ground + .001;
+  if (k('Space') && !air) vy = feet < -.5 ? 2.8 : 4.3; // deep water weighs a jump down
+  const splash = was > WY && feet <= WY; // the moment the feet break the surface
+  if (splash) drop = .35;
+  if (!air) stride += vel.length() * dt;
+  p.y = feet + 1.62 + Math.sin(stride * 3.4) * .018 * Math.min(1, vel.length());
+  const f = Math.floor(stride * 3.4 / Math.PI); // one footfall per half bob cycle, one on landing, one on entering water
+  if (sfx && ((f !== foot && !air && vel.length() > .5) || landed || splash)) sfx.step(ground < 0 ? 'water' : zone.tile ? 'tile' : 'carpet');
   foot = f;
 
   const here = Object.values(zones).find(z => inR(p.x, p.z, ...z.box));
   if (here && here !== zone) { zone = here; sfx?.zone(zone); }
   relight(p, zone, dt * 3);
   for (const w of ponds) w.visible = w.seen.includes(zone.id);
-  const wake = ground < 0 ? (air && jump === 0 ? .3 : air ? 0 : Math.min(vel.length(), 4) * .006) : 0; // wading leaves a wake, landing makes a splash
-  for (simT += dt; simT > 1 / 60; simT = simT > .05 ? 0 : simT - 1 / 60) for (const w of ponds) if (w.visible) ripple(w, p.x, p.z, wake);
+  const wake = ground < 0 && !air ? Math.min(vel.length(), 4) * .006 : 0; // wading leaves a wake; `drop` is a pending splash
+  for (simT += dt; simT > 1 / 60; simT = simT > .05 ? 0 : simT - 1 / 60) { for (const w of ponds) if (w.visible) ripple(w, p.x, p.z, wake + drop); drop = 0; }
   const a = 1 - Math.exp(-dt * 1.5); // eye adaptation and mood drift between zones
   for (const key of ['exp', 'shaft', 'sat', 'bloom']) look[key] += (zone[key] - look[key]) * a;
   look.fog.lerp(zone.fog, a); look.tint.lerp(zone.tint, a);
