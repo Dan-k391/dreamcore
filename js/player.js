@@ -103,7 +103,7 @@ const frame = dt => { // one game frame of dt seconds: the loop below passes the
     if (feet <= ground) { hit = -vy; feet = ground; vy = 0; landed = true; }
   } else feet = Math.min(ground, feet + 4 * dt); // a step up is climbed, not jumped to
   air = feet > ground + .001;
-  if (k('Space') && !air) vy = deep ? 2.8 : 4.3; // deep water weighs a jump down
+  if (k('Space') && !air) vy = pool && feet < -.5 ? 2.8 : 4.3; // deep water weighs a jump down (a dry pit only slows the walk: you can jump out of it)
   const splash = pool && was > WY && feet <= WY; // the moment the feet break the surface
   if (splash) drop = .35;
   if (!air) stride += vel.length() * dt;

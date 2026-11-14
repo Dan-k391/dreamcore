@@ -12,6 +12,9 @@ import { sun } from './sky.js';
 
 const h = 1 / 60, G = 9.8;
 const pondAt = (x, z) => ponds.find(w => inR(x, z, w.rect.x, w.rect.y, w.rect.z, w.rect.w));
+// The drawn water is flat (water.js shades its waves, it doesn't move the surface), so what floats on it heaves by HEAVE at most:
+// enough to bob with the waves, never enough to leave the surface it is seen on or be flung off it.
+const HEAVE = .04, heave = t => Math.max(-HEAVE, Math.min(HEAVE, t.h * 5));
 const wakes = []; // [pond, x, z, size]: ripples the loose things leave this step, for player.js to hand to ripple()
 let ms = 0; // milliseconds the last frame's steps took
 
@@ -115,8 +118,8 @@ function stepGroup(g, me) {
   for (let b = 0; b < g.n; b++) if (g.still[b] < 30) { // fall and move
     const i = 3 * b; o[i] = p[i]; o[i + 1] = p[i + 1]; o[i + 2] = p[i + 2];
     v[i + 1] -= G * h;
-    if (g.float) { const w = pondAt(p[i], p[i + 2]), R = w?.rect; g.in[b] = R && inR(p[i], p[i + 2], R.x + r - .01, R.y + r - .01, R.z - r + .01, R.w - r + .01) ? R : null; if (w) { const t = w.twin.sample(p[i], p[i + 2]), s = WY + Math.max(-.02, Math.min(.12, t.h * 5)), sub = Math.min(1, Math.max(0, (s - p[i + 1] + r) / (2 * r))); // how much of it is under water (the surface heaved as the rings ride it, within their bounds: it never flies)
-      if (sub > 0) { v[i + 1] += G * sub / g.float * h; const k = Math.min(1, (.6 + sub * 4) * h), kv = Math.min(1, (2 + sub * 10) * h); // it floats, the water drags it along with its flow
+    if (g.float) { const w = pondAt(p[i], p[i + 2]), R = w?.rect; g.in[b] = R && inR(p[i], p[i + 2], R.x + r - .01, R.y + r - .01, R.z - r + .01, R.w - r + .01) ? R : null; if (w) { const t = w.twin.sample(p[i], p[i + 2]), s = WY + heave(t), sub = Math.min(1, Math.max(0, (s - p[i + 1] + r) / (2 * r))); // how much of it is under water (the surface heaved as the rings ride it)
+      if (sub > 0) { v[i + 1] += G * sub / g.float * h; const k = Math.min(1, (.6 + sub * 4) * h), kv = Math.min(1, (4 + sub * 60) * h); // it floats, the water drags it along with its flow and holds back its bobbing (near critical: a dive must not launch it)
         v[i] += (t.ux * 1.4 - G * .3 * t.gx - v[i]) * k; v[i + 2] += (t.uz * 1.4 - G * .3 * t.gz - v[i + 2]) * k; v[i + 1] -= v[i + 1] * kv;
         const sp = Math.hypot(v[i], v[i + 2]); if (sp > .08) wakes.push([w, p[i], p[i + 2], Math.min(sp, 2) * .0015 * sub]); } } } // its wake: from moving through the water, not bobbing (a wake raised under a rising ball would lift it further)
     const sp = Math.hypot(v[i], v[i + 1], v[i + 2]), top = g.cap || 7; if (sp > top) { v[i] *= top / sp; v[i + 1] *= top / sp; v[i + 2] *= top / sp; }
@@ -180,14 +183,15 @@ function draw(g, all) { // write the bodies that moved since they were last draw
 const FINE = 1.6;
 function fine(g) {
   const { p, hi, n } = g, a = g.mesh.instanceMatrix.array, f = g.fine.instanceMatrix.array, c = g.mesh.instanceColor.array, fc = g.fine.instanceColor.array, e = camera.position, m = g.mesh.count;
-  let k = 0, changed = false;
+  let k = 0, changed = false, moved = false;
   for (let b = 0, i = 0; b < n; b++, i += 3) {
     const dx = p[i] - e.x, dy = p[i + 1] - e.y, dz = p[i + 2] - e.z, on = b < m && dx * dx + dy * dy + dz * dz < FINE * FINE ? 1 : 0;
     if (on !== hi[b]) { hi[b] = on; a[16 * b] = a[16 * b + 5] = a[16 * b + 10] = 1 - on; changed = true; }
-    if (on) { f[16 * k + 12] = p[i]; f[16 * k + 13] = p[i + 1]; f[16 * k + 14] = p[i + 2]; fc[3 * k] = c[i]; fc[3 * k + 1] = c[i + 1]; fc[3 * k + 2] = c[i + 2]; k++; }
+    if (on) { const j = 16 * k, q = 3 * k; if (f[j + 12] !== p[i] || f[j + 13] !== p[i + 1] || f[j + 14] !== p[i + 2] || fc[q] !== c[i] || fc[q + 1] !== c[i + 1] || fc[q + 2] !== c[i + 2]) { f[j + 12] = p[i]; f[j + 13] = p[i + 1]; f[j + 14] = p[i + 2]; fc[q] = c[i]; fc[q + 1] = c[i + 1]; fc[q + 2] = c[i + 2]; moved = true; } k++; }
   }
   if (changed) g.mesh.instanceMatrix.needsUpdate = true;
-  if (k || g.fine.count) { g.fine.count = k; g.fine.instanceMatrix.needsUpdate = g.fine.instanceColor.needsUpdate = true; }
+  if (moved) for (const [A, w] of [[g.fine.instanceMatrix, 16], [g.fine.instanceColor, 3]]) { A.clearUpdateRanges(); A.addUpdateRange(0, w * k); A.needsUpdate = true; } // only the first k are drawn
+  g.fine.count = k;
 }
 // Settle a freshly poured group before anyone sees it (the pit, at load): step it with no one near until it sleeps, at most `max` steps.
 function settle(g, max) { const nobody = { x: 1e9, z: 1e9 }; const cap = g.cap; g.cap = .8; for (let i = 0; i < max && g.awake; i++) stepGroup(g, nobody); g.cap = cap; while (g.bq >= 0) bury(g); draw(g, 1); g.moved = 0; } // gently: no ball is thrown out
@@ -199,12 +203,12 @@ const floaters = rings.map((m, i) => ({ m, i, w: pondAt(m.position.x, m.position
 for (const w of [...floaters.map(f => f.w), ...groups.filter(g => g.float).map(g => pondAt(g.p[0], g.p[2]))]) if (w) w.twin.used = true; // the pools whose wave copy something rides
 for (const f of floaters) f.solids = colliders.filter(c => c[2] > f.w.rect.x - 1 && c[0] < f.w.rect.z + 1 && c[3] > f.w.rect.y - 1 && c[1] < f.w.rect.w + 1);
 function stepRing(f, me) {
-  const T = f.w.twin, t = uTime.value, e = .42, at = (x, z) => T.sample(x, z).h * 5; // heave and lean five times the copy's: the drawn water's slopes are drawn ten times steeper than the waves (water.js), and the ring should agree with what is seen
+  const T = f.w.twin, t = uTime.value, e = .42, at = (x, z) => heave(T.sample(x, z)); // heave and lean five times the copy's: the drawn water's slopes are drawn ten times steeper than the waves (water.js), and the ring should agree with what is seen
   const hm = (at(f.x + e, f.z) + at(f.x - e, f.z) + at(f.x, f.z + e) + at(f.x, f.z - e)) / 4, sx = (at(f.x + e, f.z) - at(f.x - e, f.z)) / (2 * e), sz = (at(f.x, f.z + e) - at(f.x, f.z - e)) / (2 * e);
   const flow = T.sample(f.x, f.z);
   // rides the surface on a soft spring; leans with its slope
   f.vy += (81 * (WY + .05 + hm - f.y) - 9 * f.vy) * h; f.y += f.vy * h; f.y = Math.min(WY + .12, Math.max(WY - .02, f.y)); // never sinks, never flies
-  const tx = Math.max(-.3, Math.min(.3, Math.atan(sx))), tz = Math.max(-.3, Math.min(.3, -Math.atan(sz)));
+  const lean = Math.hypot(sx, sz), q = lean > .15 ? .15 / lean : 1, tx = Math.atan(sx * q), tz = -Math.atan(sz * q); // leans with the slope, at most .15 rad any way: more would lift its rim clear of the flat drawn water
   f.wx += (49 * (tx - f.ax) - 8 * f.wx) * h; f.wz += (49 * (tz - f.az) - 8 * f.wz) * h; f.ax += f.wx * h; f.az += f.wz * h;
   // carried by the water's flow, down the wave faces and by a faint draught over the pool; slowed by drag
   const cx = .025 * Math.sin(t * .13 + f.z * .5 + f.i * 2), cz = .025 * Math.cos(t * .11 + f.x * .4 + f.i * 3);
