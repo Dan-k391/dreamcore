@@ -22,7 +22,7 @@
 </script>
 </head>
 <body>
-<div id="h" hidden>this preview pane can't capture the mouse, so mouse look stops at its edges — Q / E turn further · for full mouse look open localhost:8123 in Chrome or Edge</div>
+<div id="h" hidden>this window won't let the page capture the mouse, so mouse look stops at its edges — Q / E turn further · click to try again, or open the page in its own browser tab</div>
 <div id="x" hidden></div>
 <button id="o"><b>dreamcore</b><span id="s">loading…</span></button>
 <script type="module">
@@ -974,20 +974,34 @@ function startAudio() {
 // ---------- walking ----------
 const canvas = renderer.domElement, o = document.getElementById('o'), keys = {}, eu = new THREE.Euler(0, 0, 0, 'YXZ');
 const locked = () => document.pointerLockElement === canvas;
-let free = false; // free: capture was refused, so the bare cursor steers. Nothing turns the view except the mouse moving or a turn key.
-const noLock = () => { free = true; canvas.style.cursor = 'none'; document.getElementById('x').hidden = false; document.getElementById('h').hidden = false; };
+let free = false, tries = 0, again; // free: this window forbids capture, so the bare cursor steers. Nothing turns the view except the mouse moving or a turn key.
+const setFree = on => { free = on; canvas.style.cursor = on ? 'none' : ''; document.getElementById('x').hidden = document.getElementById('h').hidden = !on; };
 const turn = (dx, dy) => { eu.setFromQuaternion(camera.quaternion); eu.y -= dx; eu.x = Math.max(-1.5, Math.min(1.5, eu.x - dy)); camera.quaternion.setFromEuler(eu); };
 // Raw (unadjusted) movement avoids the random jumps Windows cursor acceleration and display scaling cause under capture.
-const capture = () => canvas.requestPointerLock({ unadjustedMovement: true })?.catch(e => e.name === 'NotSupportedError' ? canvas.requestPointerLock()?.catch(noLock) : noLock());
-o.onclick = () => { o.style.display = 'none'; sfx || startAudio(); capture(); };
-document.addEventListener('pointerlockerror', noLock);
-document.addEventListener('pointerlockchange', () => { if (!locked()) o.style.display = ''; }); // Esc pauses
+// Asking for the mouse can be refused for a moment (browsers do for about a second after Esc) or for good (an embedded
+// window that forbids it), and the two can't be told apart. So ask again a few times, and only then steer with the bare
+// cursor; a click in that mode asks once more. A refusal can arrive twice (rejected promise and error event): one timer covers both.
+function refused(e) {
+  clearTimeout(again);
+  if (locked()) return;
+  if (e?.name === 'WrongDocumentError' || tries >= 4) setFree(true); else again = setTimeout(capture, 450);
+}
+function capture() {
+  tries++;
+  try { canvas.requestPointerLock({ unadjustedMovement: true })?.catch(e => e.name === 'NotSupportedError' ? canvas.requestPointerLock()?.catch(refused) : refused(e)); } catch (e) { refused(e); }
+}
+const paused = () => o.style.display !== 'none', letGo = () => { for (const c in keys) keys[c] = 0; };
+o.onclick = () => { o.style.display = 'none'; sfx || startAudio(); tries = 0; capture(); };
+canvas.addEventListener('click', () => { if (free) { tries = 3; capture(); } });
+document.addEventListener('pointerlockerror', () => refused());
+document.addEventListener('pointerlockchange', () => { clearTimeout(again); if (locked()) setFree(false); else if (!free) { o.style.display = ''; letGo(); } }); // Esc pauses
+addEventListener('blur', letGo); // a key held while the window loses focus never reports its release
 addEventListener('mousemove', e => { // mouse look: captured pointer where the browser allows it, bare cursor movement where it doesn't
   if (!locked() && !free) return;
   const m = free ? 60 : 250, cl = v => Math.max(-m, Math.min(m, v)); // drop the one-event jumps browsers report on re-entry or under capture
   turn(cl(e.movementX) * .0022 * camera.fov / 72, cl(e.movementY) * .0022 * camera.fov / 72); // slower while zoomed in
 });
-addEventListener('keydown', e => { keys[e.code] = 1; if (e.code === 'Space') e.preventDefault(); if (e.code === 'KeyM') sfx?.mute(); });
+addEventListener('keydown', e => { if (paused()) return; keys[e.code] = 1; if (e.code === 'Space') e.preventDefault(); if (e.code === 'KeyM') sfx?.mute(); });
 addEventListener('keyup', e => keys[e.code] = 0);
 document.getElementById('s').textContent = 'click to enter  ·  wasd walk  ·  mouse look  ·  q / e turn  ·  space jump  ·  shift run  ·  c zoom  ·  m mute';
 
