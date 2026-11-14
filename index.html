@@ -66,9 +66,13 @@ const zones = {
   bB: { ...warm, box: [-33.4, .6, -9.4, 21.4], probe: [-21.3, 1.7, 13] },
   bC: { ...warm, box: [9.4, .4, 36.8, 12.4], probe: [23.4, 1.5, 10.8], wet: .3 },
   pH: { grp: 'h', k: 1.25, exp: .34, fog: [.7, .82, .95, .0015], tint: [1, 1, 1.02], sat: 1.08, bloom: .35, shaft: 1, hum: 0, water: 1, wet: .5,
-        box: [-9.4, -23.4, 9.4, 0], probe: [.5, 2.2, -12.5], env: [[-9, -1.4, -23], [9, 5, -1]], band: -99, bandCol: [1, 1, 1], shimmer: .25 },
+        box: [-9.4, -23.4, 9.4, 0], probe: [.5, 2.2, -12.5], env: [[-9, -1.4, -23], [9, 5, -1]], band: -99, bandCol: [1, 1, 1], shimmer: .25, caus: 1 },
   pC: { ...dark, exp: .26, bloom: .3, wet: .6, box: [9.4, -14.8, 21, -9.2], probe: [15.2, 1.6, -12], env: [[9.4, -.3, -14.8], [21, 3.6, -9.2]], shimmer: .35 },
   pN: { ...dark, exp: .22, bloom: .34, wet: .8, box: [21, -24.4, 45.4, .4], probe: [33, 3, -12], env: [[21, -1.4, -24.4], [45, 7, .4]], shimmer: .25 },
+  pG: { grp: 'g', k: .85, exp: .34, fog: [.75, .82, .8, .0015], tint: [.99, 1, .99], sat: 1, bloom: .3, shaft: 0, hum: 0, water: 1, wet: .7,
+        box: [18.3, 12.4, 28.1, 39.4], probe: [23.2, 2.6, 25], env: [[18.7, -1.4, 12.8], [27.7, 6, 39]], band: -99, bandCol: [1, 1, 1], shimmer: .2, caus: .25 },
+  pV: { grp: 'g', k: .8, exp: .3, fog: [.02, .03, .035, .003], tint: [1, 1, .99], sat: 1, bloom: .3, shaft: 0, hum: 0, water: 1, wet: .9,
+        box: [11.6, 39.4, 36.4, 63.4], probe: [24, 2, 49.25], env: [[12, -.8, 40.6], [36, 5.2, 63]], band: 1.15, bandCol: [.07, .17, .36], shimmer: .3, caus: .35 },
 };
 for (const [id, z] of Object.entries(zones)) Object.assign(z, { id, fog: new THREE.Vector4(...z.fog), tint: V(...z.tint), probe: V(...z.probe) });
 
@@ -159,17 +163,22 @@ zones.bA.mats.push(lampOff);
 function tileFX(m, z) {
   const u = z.tileU = { uTime, uBand: { value: z.band }, uBandCol: { value: new THREE.Color(...z.bandCol) }, uShimmer: { value: z.shimmer },
               uBoxMin: { value: V(...z.env[0]) }, uBoxMax: { value: V(...z.env[1]) }, uProbe: { value: z.probe },
-              uSim: { value: null }, uPond: { value: new THREE.Vector4(0, 0, 1, 1) }, uPx: { value: new THREE.Vector2() } }; // this zone's pool, filled in when the pool is made
+              uSim: { value: null }, uPond: { value: new THREE.Vector4(0, 0, 1, 1) }, uPx: { value: new THREE.Vector2() }, // this zone's pool, filled in when the pool is made
+              uLamp: { value: Array.from({ length: 24 }, () => new THREE.Vector4()) }, uLampCol: { value: new THREE.Color(0xffedc0) }, uCaus: { value: z.caus || .45 } }; // caustic strength: full only where the sun reaches // this zone's own fixtures (see fixture())
+  z.nl = 0;
   m.onBeforeCompile = s => {
     Object.assign(s.uniforms, u);
     s.vertexShader = 'varying vec3 vW;\n' + s.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\nvW = (modelMatrix * vec4(transformed, 1.)).xyz;');
-    s.fragmentShader = `varying vec3 vW; uniform float uTime, uBand, uShimmer; uniform vec3 uBandCol, uBoxMin, uBoxMax, uProbe; uniform sampler2D uSim; uniform vec4 uPond; uniform vec2 uPx;
+    s.fragmentShader = `varying vec3 vW; uniform float uTime, uBand, uShimmer, uCaus; uniform vec3 uBandCol, uBoxMin, uBoxMax, uProbe; uniform sampler2D uSim; uniform vec4 uPond; uniform vec2 uPx;
+      #ifdef NL
+        uniform vec4 uLamp[NL]; uniform vec3 uLampCol;
+      #endif
       vec2 h2(vec2 p) { return fract(sin(vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)))) * 43758.5453); }
       float cell(vec2 p, float t) { vec2 i = floor(p), f = fract(p); float a = 8., b = 8.;
         for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) { vec2 g = vec2(x, y); float d = length(g + .5 + .42 * sin(t + 6.2831 * h2(i + g)) - f); if (d < a) { b = a; a = d; } else b = min(b, d); }
         return b - a; }
       float caus(vec3 w) { vec2 p = w.xz * 1.5 + w.y * .9; p += .3 * sin(p.yx * 1.3 + uTime * .6) + .14 * sin(p.yx * 3.3 - uTime * .9); // warped so the cells don't read as straight-edged polygons
-        return pow(1. - smoothstep(0., .5, min(cell(p, uTime * .8), cell(p * 1.63 + 7.3, uTime * 1.1))), 3.); }
+        return pow(1. - smoothstep(0., .5, min(cell(p, uTime * .8), cell(p * 1.63 + 7.3, uTime * 1.1))), 3.); } // thin bright lines; averages about .22
       vec3 boxProj(vec3 d) { vec3 m = max((uBoxMax - vW) / d, (uBoxMin - vW) / d); return vW + d * min(min(m.x, m.y), m.z) - uProbe; }
     ` + s.fragmentShader
       .replace('#include <envmap_physical_pars_fragment>', THREE.ShaderChunk.envmap_physical_pars_fragment.replace(
@@ -178,17 +187,25 @@ function tileFX(m, z) {
         if (vW.y < uBand) diffuseColor.rgb *= uBandCol;
         float wet = 1. - smoothstep(0., .06, abs(vW.y + ${-WY})); diffuseColor.rgb *= 1. - .3 * wet; // the waterline leaves a wet band`)
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor *= 1. - .6 * wet;')
+      .replace('#include <lights_fragment_begin>', `#include <lights_fragment_begin>
+        #ifdef NL
+          for (int i = 0; i < NL; i++) { // the room's own fixtures: unshadowed, seen only by this zone's tiles, so a room can have dozens of them
+            vec3 lv = (viewMatrix * vec4(uLamp[i].xyz, 1.)).xyz - geometryPosition; float d2 = dot(lv, lv);
+            IncidentLight fx; fx.direction = lv * inversesqrt(d2); fx.color = uLampCol * uLamp[i].w / (d2 + .2); fx.visible = true;
+            RE_Direct(fx, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight);
+          }
+        #endif`)
       .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
         if (vW.y < ${WY}) { // light focused by the surface: a drifting base pattern plus the real ripples (crests focus, troughs spread)
           vec2 s = (vW.xz - uPond.xy) / (uPond.zw - uPond.xy), o = uPx * 2.;
           float lap = texture2D(uSim, s - vec2(o.x, 0.)).r + texture2D(uSim, s + vec2(o.x, 0.)).r + texture2D(uSim, s - vec2(0., o.y)).r + texture2D(uSim, s + vec2(0., o.y)).r - 4. * texture2D(uSim, s).r;
-          float c = max(caus(vW) + clamp(-lap * 30., -.6, 2.5), 0.) * smoothstep(${WY}, ${WY} - .3, vW.y);
-          reflectedLight.directDiffuse *= 1. + 3. * c; reflectedLight.indirectDiffuse *= 1. + 1.2 * c; }
-        else if (uShimmer > 0.) reflectedLight.indirectDiffuse *= 1. + uShimmer * caus(vW * .6) * smoothstep(.2, 1.2, vW.y - ${WY}) * exp((${WY} - vW.y) * .3);`);
+          float c = (max(caus(vW) + clamp(-lap * 30., -.6, 2.5), 0.) - .22) * smoothstep(${WY}, ${WY} - .3, vW.y); // minus its average: caustics move light around, they don't add any
+          reflectedLight.directDiffuse *= max(.2, 1. + 2.2 * uCaus * c); reflectedLight.indirectDiffuse *= max(.4, 1. + .9 * uCaus * c); }
+        else if (uShimmer > 0.) reflectedLight.indirectDiffuse *= 1. + uShimmer * (caus(vW * .6) - .22) * smoothstep(.2, 1.2, vW.y - ${WY}) * exp((${WY} - vW.y) * .3);`);
   };
   return m;
 }
-for (const z of [zones.pH, zones.pC, zones.pN]) { z.tile = tileFX(S({ ...tileTex }), z); z.mats = [z.tile]; }
+for (const z of [zones.pH, zones.pC, zones.pN, zones.pG, zones.pV]) { z.tile = tileFX(S({ ...tileTex }), z); z.metal = S({ metalness: 1, roughness: .12 }); z.mats = [z.tile, z.metal]; }
 zones.pH.mats.push(chrome); zones.pN.mats.push(slideMat);
 
 // ---------- level builder: boxes and cut-out wall slabs with world-space UVs, merged into one mesh per material ----------
@@ -209,7 +226,7 @@ function box(mat, x1, y1, z1, x2, y2, z2) {
 }
 // Wall slab with shapes cut out of it. axis 'x': runs a1..a2 along x, occupying z = at..at+depth; axis 'z': the same along z.
 // cuts: ['arch', centre, width, top] (niche rising from the floor), ['pill', centre, width, y, height], ['round', centre, diameter, y]
-function slab(mat, axis, at, depth, a1, a2, y1, y2, cuts) {
+function slab(mat, axis, at, depth, a1, a2, y1, y2, cuts, through = false) { // through: the arches are openings to walk through, not niches
   const sh = new THREE.Shape().moveTo(a1, y1).lineTo(a1, y2).lineTo(a2, y2).lineTo(a2, y1);
   for (const [, c, w, top] of cuts.filter(c => c[0] === 'arch').sort((p, q) => q[1] - p[1]))
     sh.lineTo(c + w / 2, y1).lineTo(c + w / 2, top - w / 2).absarc(c, top - w / 2, w / 2, 0, Math.PI, false).lineTo(c - w / 2, y1);
@@ -222,10 +239,14 @@ function slab(mat, axis, at, depth, a1, a2, y1, y2, cuts) {
   }
   const g = new THREE.ExtrudeGeometry(sh, { depth, bevelEnabled: false, curveSegments: 24 });
   add(mat, axis === 'x' ? g.translate(0, 0, at) : g.rotateY(-Math.PI / 2).translate(at + depth, 0, 0));
-  colliders.push(axis === 'x' ? [a1, at, a2, at + depth] : [at, a1, at + depth, a2]);
+  let a = a1; // solid stretches block the player: the whole slab, or just the piers between walk-through arches
+  const pier = b => { if (b - a > .01) colliders.push(axis === 'x' ? [a, at, b, at + depth] : [at, a, at + depth, b]); };
+  if (through) for (const [, c, w] of cuts.filter(c => c[0] === 'arch').sort((p, q) => p[1] - q[1])) { pier(c - w / 2); a = c + w / 2; }
+  pier(a2);
 }
 const room = (z, x1, z1, x2, z2, h) => { box(z.carpet, x1, -.2, z1, x2, 0, z2); box(z.ceil, x1, h, z1, x2, h + .2, z2); };
 const wall = (z, x1, z1, x2, z2, h = H) => { box(z.paper, x1, 0, z1, x2, h, z2); box(z.trim, x1 - .012, 0, z1 - .012, x2 + .012, .1, z2 + .012); };
+const fixture = (z, x, y, zc, power) => { z.tileU.uLamp.value[z.nl].set(x, y, zc, power); z.tile.defines.NL = ++z.nl; }; // a light only this zone's tiles see: cheap, unshadowed, up to 24 a zone
 const lamp = (z, x, zc, h = H, on = true, power = 120) => { // ceiling panel on the 60cm grid, plus the light it emits
   box(on ? lampOn : lampOff, x - .3, h - .012, zc - .6, x + .3, h + .01, zc + .6);
   if (on) emitters.push({ zone: z, p: V(x, h - .05, zc), t: V(x, 0, zc), power: power * (h / H) ** 2, angle: 1.45, dist: 16, color: 0xfff0cf });
@@ -253,7 +274,8 @@ const lamp = (z, x, zc, h = H, on = true, power = 120) => { // ceiling panel on 
 { // backrooms C: a long corridor east, turning north to the night hall
   const z = zones.bC;
   room(z, 9.4, 9.2, 36.8, 12.4, H); room(z, 33.6, .4, 36.8, 9.2, H);
-  for (const w of [[9.4, 9.2, 34, 9.6], [9.4, 12, 36.8, 12.4], [36.4, .4, 36.8, 12], [33.6, .4, 34, 9.2]]) wall(z, ...w);
+  for (const w of [[9.4, 9.2, 34, 9.6], [9.4, 12, 22, 12.4], [24.4, 12, 36.8, 12.4], [36.4, .4, 36.8, 12], [33.6, .4, 34, 9.2]]) wall(z, ...w);
+  box(z.paper, 22, 2.3, 12, 24.4, H, 12.4); // lintel over the door to the gallery pool
   for (const [x, zc] of [[13.5, 10.8], [20.1, 10.8], [26.7, 10.8], [35.1, 10.8], [35.1, 4.8]]) lamp(z, x, zc, H, true, 60); // narrow, so the walls are close to the lamps
 }
 { // sunlit pool hall: x[-9,9] z[-23,-1], pool x[-4,5] z[-19,-6]
@@ -269,7 +291,6 @@ const lamp = (z, x, zc, h = H, on = true, power = 120) => { // ceiling panel on 
   box(T, -9, 0, -23.4, 9, .4, -23); box(T, -9, 4.2, -23.4, 9, PH, -23); // north side: low curb, open to the sea
   for (const [a, b] of [[-9, -8.7], [-5.7, -5.1], [-2.1, -1.5], [1.5, 2.1], [5.1, 5.7], [8.7, 9]]) box(T, a, .4, -23.4, b, 4.2, -23);
   box(T, .1, -1.2, -10.4, .9, PH, -9.6); box(T, .1, -1.2, -15.4, .9, PH, -14.6); // columns standing in the water
-  for (const y of [-.2, -.5, -.8]) box(chrome, 4.86, y, -16.25, 4.94, y + .03, -15.75); // ladder treads
   box(T, -33.4, -1.5, 0, -9.4, PH + .3, .6); box(T, 20.6, -1.5, -25, 45.4, 7.3, -24.7); // blank facades hiding the other wings from the windows
 }
 { // flooded arcade x[9.4,21] z[-14,-10]: arched niches, ankle-deep water running on into the night hall's pool
@@ -294,6 +315,39 @@ const lamp = (z, x, zc, h = H, on = true, power = 120) => { // ceiling panel on 
   for (const zc of [-20, -12, -4]) emitters.push({ zone: z, p: V(44.6, 3.3, zc), t: V(34, 0, zc), power: 240, angle: 1.25, dist: 34, color: 0xffedc4 });
   for (const x of [25, 33, 41]) emitters.push({ zone: z, p: V(x, 3.3, -23.6), t: V(x, 0, -13), power: 240, angle: 1.25, dist: 34, color: 0xffedc4 });
 }
+{ // gallery pool x[18.7,27.7] z[12.8,39], 6m tall, off the corridor: a long bright bath with pilasters, high strip lights and handrails
+  const z = zones.pG, T = z.tile, M = z.metal;
+  box(T, 18.3, -1.4, 12.4, 20.9, 0, 39.4); box(T, 25.5, -1.4, 12.4, 28.1, 0, 39.4); box(T, 20.9, -1.4, 12.4, 25.5, 0, 16); box(T, 20.9, -1.4, 35, 25.5, 0, 39.4); // deck
+  box(T, 20.9, -1.4, 16, 25.5, -1.2, 35); // basin
+  for (let i = 1; i < 4; i++) box(T, 20.9, -1.2, 35 - .5 * i, 25.5, -.3 * i, 35.5 - .5 * i); // steps at the far end
+  box(T, 18.3, 6, 12.4, 28.1, 6.3, 39.4); // ceiling
+  box(T, 18.3, 0, 12.4, 18.7, 6, 39.4); box(T, 27.7, 0, 12.4, 28.1, 6, 39.4); // side walls
+  for (const zw of [12.4, 39]) { box(T, 18.7, 0, zw, 22, 6, zw + .4); box(T, 24.4, 0, zw, 27.7, 6, zw + .4); box(T, 22, 2.3, zw, 24.4, 6, zw + .4); } // end walls, each with a door
+  for (let i = 0; i < 10; i++) { const zc = 14.4 + 2.6 * i; box(T, 18.7, 0, zc - .25, 18.95, 6, zc + .25); box(T, 27.45, 0, zc - .25, 27.7, 6, zc + .25); } // pilasters
+  for (let i = 0; i < 9; i++) { const zc = 15.7 + 2.6 * i; // a strip light high on each wall between every pair of pilasters
+    box(glow, 18.7, 4.6, zc - .8, 18.74, 5.1, zc + .8); box(glow, 27.66, 4.6, zc - .8, 27.7, 5.1, zc + .8);
+    fixture(z, 19.15, 4.85, zc, 3.5); fixture(z, 27.25, 4.85, zc, 3.5);
+  }
+  for (const zc of [20.5, 30.5]) { box(glow, 22.8, 5.97, zc - .4, 23.6, 6.01, zc + .4); fixture(z, 23.2, 5.6, zc, 12); } // two ceiling lights
+  for (const x of [20.75, 25.65]) { // handrails along both sides of the pool; they block, so the ways in are the near end and the steps
+    box(M, x - .02, .93, 16.2, x + .02, .97, 34.8); box(M, x - .015, .5, 16.2, x + .015, .53, 34.8);
+    for (let i = 0; i <= 10; i++) box(M, x - .02, 0, 16.18 + 1.86 * i, x + .02, .95, 16.22 + 1.86 * i);
+  }
+}
+{ // vaulted hall x[12,36] z[41,63], knee-deep water throughout: three walls of walk-through arches, light wells overhead, a far wall of windows
+  const z = zones.pV, T = z.tile, arches = [14.4, 19.2, 24, 28.8, 33.6].map(c => ['arch', c, 3.2, 3.6]);
+  box(T, 22, -.8, 39.4, 24.4, 0, 40.2); box(T, 22, -.8, 40.2, 24.4, -.3, 40.7); box(T, 11.6, -.8, 40.6, 36.4, -.6, 63.4); // passage from the gallery stepping down, then the hall floor
+  box(T, 21.6, -.8, 39.4, 22, 2.6, 40.6); box(T, 24.4, -.8, 39.4, 24.8, 2.6, 40.6); box(T, 22, 2.3, 39.4, 24.4, 2.6, 40.6); // passage walls and roof
+  box(T, 11.6, 5.2, 40.6, 36.4, 5.5, 63.4); // ceiling
+  box(T, 11.6, -.8, 40.6, 12, 5.2, 63.4); box(T, 36, -.8, 40.6, 36.4, 5.2, 63.4); // side walls
+  box(T, 12, -.8, 40.6, 22, 5.2, 41); box(T, 24.4, -.8, 40.6, 36, 5.2, 41); box(T, 22, 2.3, 40.6, 24.4, 5.2, 41); // north wall, door
+  for (const zc of [46.5, 52, 57.5]) slab(T, 'x', zc - .3, .6, 12, 36, -.8, 5.2, arches, true);
+  slab(T, 'x', 63, .4, 12, 36, -.8, 5.2, [14, 18, 22, 26, 30, 34].map(c => ['pill', c, 1.3, 2.5, 3.6])); box(glow, 12, -.8, 63.45, 36, 5.2, 63.7); // glowing windows at the far end
+  for (const zc of [43.75, 49.25, 54.75, 60.25]) { // each bay: a shadow-casting light well in the middle, two soft ones to the sides
+    box(glow, 23.6, 5.17, zc - .4, 24.4, 5.21, zc + .4); emitters.push({ zone: z, p: V(24, 5.1, zc), t: V(24, -.6, zc), power: 150, angle: 1.35, dist: 18, color: 0xffedc4 });
+    for (const x of [16, 32]) { box(glow, x - .3, 5.17, zc - .3, x + .3, 5.21, zc + .3); fixture(z, x, 4.8, zc, 45); }
+  }
+}
 box(seaMat, -3000, -3, -3000, 3000, -1.5, 3000);
 for (const [m, list] of geo) { const mesh = new THREE.Mesh(mergeGeometries(list), m); mesh.castShadow = !noCast.has(m); mesh.receiveShadow = m !== seaMat; scene.add(mesh); }
 
@@ -301,11 +355,19 @@ const inR = (x, z, x1, z1, x2, z2) => x > x1 && x < x2 && z > z1 && z < z2;
 const floorH = (x, z) =>
   inR(x, z, -4, -19, 5, -6) ? -.3 * Math.min(4, Math.floor((-6 - z) / .5) + 1) : // pool hall, stepped entry
   inR(x, z, 9.4, -14, 24, -10) ? -.3 : // flooded arcade and its channel
-  inR(x, z, 24, -21, 42, -3) ? (z > -14 && z < -10 && x < 25 ? (x < 24.5 ? -.6 : -.9) : -1.2) : 0; // night pool
+  inR(x, z, 24, -21, 42, -3) ? (z > -14 && z < -10 && x < 25 ? (x < 24.5 ? -.6 : -.9) : -1.2) : // night pool
+  inR(x, z, 20.9, 16, 25.5, 35) ? -.3 * Math.min(4, Math.floor((35 - z) / .5) + 1) : // gallery pool, steps at the far end
+  inR(x, z, 22, 40.2, 24.4, 41) ? (z < 40.7 ? -.3 : -.6) : inR(x, z, 12, 41, 36, 63) ? -.6 : 0; // passage down into the vaulted hall
 
 // props: chrome ladder, floating rings, water slide spiralling round a column
 const tube = (pts, r, seg, mat) => { const m = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts.map(p => V(...p))), seg, r, 16), mat); m.castShadow = m.receiveShadow = true; scene.add(m); return m; };
-for (const z of [-16.25, -15.75]) tube([[4.9, -1], [4.9, .5], [4.97, .76], [5.17, .86], [5.37, .76], [5.44, .5], [5.44, 0]].map(([x, y]) => [x, y, z]), .022, 48, chrome);
+const ladders = []; // [x1, z1, x2, z2] zones in the water where facing the ladder and pressing forward climbs it
+const ladder = (x, zc, mat) => { // on a pool's east edge at x: two rails over the lip, three treads
+  for (const z of [zc - .25, zc + .25]) tube([[x - .1, -1], [x - .1, .5], [x - .03, .76], [x + .17, .86], [x + .37, .76], [x + .44, .5], [x + .44, 0]].map(([a, y]) => [a, y, z]), .022, 48, mat);
+  for (const y of [-.2, -.5, -.8]) { const m = new THREE.Mesh(new THREE.BoxGeometry(.08, .03, .5).translate(x - .1, y, zc), mat); m.castShadow = true; scene.add(m); }
+  ladders.push([x - .8, zc - .45, x + .5, zc + .45]);
+};
+ladder(5, -16, chrome); ladder(42, -12, zones.pN.metal);
 const rings = [[0xff9ec4, -1.6, -9.2], [0xffe27a, 2.9, -16.4], [0x9ee8d0, -2.3, -14]].map(([c, x, z]) => {
   const m = new THREE.Mesh(new THREE.TorusGeometry(.42, .13, 20, 48).rotateX(Math.PI / 2), S({ color: c, roughness: .3 }));
   m.position.set(x, WY + .05, z); m.castShadow = true; scene.add(m); zones.pH.mats.push(m.material); return m;
@@ -337,7 +399,7 @@ const waterShader = {
   vertexShader: 'varying vec3 vW; void main() { vec4 w = modelMatrix * vec4(position, 1.); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }',
   fragmentShader: `#include <packing>
     uniform sampler2D tReflectionMap, tRefractionMap, tNormalMap0, tNormalMap1, tSim, tDepth;
-    uniform mat4 projectionMatrix; uniform vec4 uPond; uniform vec2 uPx; uniform vec3 color; uniform float uFloor, uTime, uSoft; varying vec3 vW;
+    uniform mat4 projectionMatrix; uniform vec4 uPond; uniform vec2 uPx; uniform vec3 color, uScatter; uniform float uFloor, uTime, uSoft; varying vec3 vW;
     vec2 ndc(vec3 p) { vec4 c = projectionMatrix * viewMatrix * vec4(p, 1.); return c.xy / c.w; }
     vec2 wide(vec3 p) { return ndc(p) * ${(.5 / OVER).toFixed(5)} + .5; } // a world point's place in the wider reflection / refraction renders
     vec2 onScreen(vec2 from, vec2 to) { vec2 d = to - from, room = max(mix(from, 1. - from, step(0., d)), 1e-4); return from + sign(d) * room * (1. - exp(-abs(d) / room)); } // rays that would land off-screen are eased toward the edge; clamping smears streaks
@@ -351,11 +413,13 @@ const waterShader = {
       vec3 n = normalize(vec3((hx * 10. + calm.x) * body, 1., (hz * 10. + calm.y) * body)), V = normalize(cameraPosition - vW);
       vec3 R = reflect(-V, n); R.y = -max(R.y, .03); // mirrored: the planar render shows the room upside-down below the surface
       vec2 here = wide(vW), ru = onScreen(here, wide(vW + R * 9.));
-      vec3 refl = texture2D(tReflectionMap, vec2(1. - ru.x, ru.y)).rgb;
+      ru.x = 1. - ru.x; vec2 o = vec2(.0016, 0.); // four taps: a real surface is never a perfect mirror
+      vec3 refl = (texture2D(tReflectionMap, ru + o.xy).rgb + texture2D(tReflectionMap, ru - o.xy).rgb + texture2D(tReflectionMap, ru + o.yx).rgb + texture2D(tReflectionMap, ru - o.yx).rgb) * .25;
       vec3 T = refract(-V, n, .75); // air to water
       vec2 tw = mix(vW.xz - uPond.xy, uPond.zw - vW.xz, step(0., T.xz)) / (abs(T.xz) + 1e-5);
       float t = clamp(min((uFloor - vW.y) / min(T.y, -.001), min(tw.x, tw.y)), 0., 30.); // distance to the basin floor or nearest wall; never negative, or exp() below overflows
       vec3 refr = texture2D(tRefractionMap, onScreen(here, wide(vW + T * t))).rgb * exp(-vec3(.42, .085, .06) * t) * color; // red is absorbed first
+      refr += uScatter * (1. - exp(-.3 * t)); // and the water itself scatters the room's light back, giving deep water a pale body
       vec3 col = mix(refr, refl, .02 + .98 * pow(1. - max(dot(V, n), 0.), 5.));
       col = mix(texture2D(tRefractionMap, here).rgb, col, body); // thin water shows what is behind it, unbent and untinted
       col += refl * .3 * smoothstep(0., .015, gap) * (1. - smoothstep(.015, .06, gap)) * uSoft; // a wet glint along the contact line
@@ -364,11 +428,15 @@ const waterShader = {
       #include <colorspace_fragment>
     }`,
 };
-const ponds = [[-4, -19, 5, -6, -1.2, 'pH', ['bA', 'pH', 'pC', 'pN']], [9.4, -14.4, 24, -9.6, -.3, 'pC', ['pH', 'pC', 'pN']], [24, -21, 42, -3, -1.2, 'pN', ['pC', 'pN', 'bC']]].map(([x1, z1, x2, z2, floor, zid, seen]) => {
+const ponds = [ // x1, z1, x2, z2, floor height, zone, zones it is drawn from, scattered light
+  [-4, -19, 5, -6, -1.2, 'pH', ['bA', 'pH', 'pC', 'pN'], [.08, .18, .17]], [9.4, -14.4, 24, -9.6, -.3, 'pC', ['pH', 'pC', 'pN'], [.003, .01, .009]],
+  [24, -21, 42, -3, -1.2, 'pN', ['pC', 'pN', 'bC'], [.003, .01, .009]], [20.9, 16, 25.5, 35, -1.2, 'pG', ['bC', 'pG', 'pV'], [.08, .17, .15]],
+  [12, 40.2, 36, 63, -.6, 'pV', ['pG', 'pV'], [.006, .012, .016]],
+].map(([x1, z1, x2, z2, floor, zid, seen, scatter]) => {
   const w = new Water(new THREE.PlaneGeometry(x2 - x1, z2 - z1), { color: 0xffffff, textureWidth: 1280, textureHeight: 1280, normalMap0: wn0, normalMap1: wn1, shader: waterShader });
   const rt = () => new THREE.WebGLRenderTarget(Math.round((x2 - x1) * 20), Math.round((z2 - z1) * 20), { type: THREE.HalfFloatType, depthBuffer: false }); // 5cm cells
   Object.assign(w, { seen, rect: new THREE.Vector4(x1, z1, x2, z2), px: new THREE.Vector2(.05 / (x2 - x1), .05 / (z2 - z1)), sim: [rt(), rt()], tileU: zones[zid].tileU });
-  Object.assign(w.material.uniforms, { tSim: { value: w.sim[0].texture }, uPond: { value: w.rect }, uPx: { value: w.px }, uFloor: { value: floor }, uTime, tDepth: { value: null }, uSoft: { value: 0 } });
+  Object.assign(w.material.uniforms, { tSim: { value: w.sim[0].texture }, uPond: { value: w.rect }, uPx: { value: w.px }, uFloor: { value: floor }, uTime, tDepth: { value: null }, uSoft: { value: 0 }, uScatter: { value: V(...scatter) } });
   w.tileU.uSim.value = w.sim[0].texture; w.tileU.uPond.value = w.rect; w.tileU.uPx.value = w.px;
   w.rotation.x = -Math.PI / 2; w.position.set((x1 + x2) / 2, WY, (z1 + z2) / 2); scene.add(w);
   const pre = w.onBeforeRender, wideCam = new THREE.PerspectiveCamera(); // one per pool: pools render each other, so a shared camera would be overwritten mid-render
@@ -440,7 +508,7 @@ relight(camera.position, zone, 1); relight(camera.position, zone, 1);
 const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 }));
 composer.addPass(new RenderPass(scene, camera));
 const ao = new GTAOPass(scene, camera, 1, 1);
-ao.updateGtaoMaterial({ radius: .7, distanceExponent: 1.5, thickness: 1, scale: 1.3, samples: 16 });
+ao.updateGtaoMaterial({ radius: .9, distanceExponent: 1.5, thickness: 1, scale: 1.3, samples: 16 });
 composer.addPass(ao);
 const aoRender = ao.render.bind(ao); // the AO pass leaves the water out, so its depth buffer is the pool floor; the water reads it to know how deep it is at each pixel
 ao.render = (...a) => { const on = ponds.map(w => w.visible); for (const w of ponds) w.visible = false; aoRender(...a); ponds.forEach((w, i) => w.visible = on[i]); };
@@ -571,11 +639,11 @@ function collide(p, R = .3) { // push the player circle out of every wall box al
   }
   return p;
 }
-console.assert(floorH(0, -12) === -1.2 && floorH(0, -6.2) === -.3 && floorH(15, -12) === -.3 && floorH(24.2, -12) === -.6 && floorH(30, -12) === -1.2 && floorH(0, 10) === 0
+console.assert(floorH(0, -12) === -1.2 && floorH(0, -6.2) === -.3 && floorH(15, -12) === -.3 && floorH(24.2, -12) === -.6 && floorH(30, -12) === -1.2 && floorH(0, 10) === 0 && floorH(23, 25) === -1.2 && floorH(23, 34.8) === -.3 && floorH(24, 50) === -.6
   && collide(V(5, 0, .6)).z > 1.29 && Object.values(zones).every(z => inR(z.probe.x, z.probe.z, ...z.box)) && emitters.every(e => inR(e.p.x, e.p.z, ...e.zone.box)), 'level self-check failed');
 
 const clock = new THREE.Clock(), vel = new THREE.Vector2(), UP = new THREE.Vector3(0, 1, 0);
-let stride = 0, foot = 0, feet = floorH(camera.position.x, camera.position.z), vy = 0, air = false, drop = 0, simT = 0; // feet: height of the player's soles
+let stride = 0, foot = 0, feet = floorH(camera.position.x, camera.position.z), vy = 0, air = false, grip = false, drop = 0, simT = 0; // feet: height of the player's soles
 renderer.setAnimationLoop(() => {
   const dt = Math.min(clock.getDelta(), .05), p = camera.position, k = c => keys[c] ? 1 : 0, ease = Math.min(1, dt * 8);
   uTime.value += dt;
@@ -594,7 +662,11 @@ renderer.setAnimationLoop(() => {
   if (tall(p.x, p.z)) { if (!tall(p.x, oz)) p.z = oz; else if (!tall(ox, p.z)) p.x = ox; else { p.x = ox; p.z = oz; } }
   const ground = floorH(p.x, p.z), was = feet;
   let landed = false;
-  if (feet > ground + .001 || vy > 0) { // off the ground: gravity, and drag once the legs are under water. Walking off a ledge is a fall.
+  // Ladders: in the water at one, facing it, forward (or jump) climbs and back descends; once holding on, gravity lets go of you.
+  const at = feet < 0 && -sn > .3 && ladders.some(l => inR(p.x, p.z, ...l)), climb = at ? (k('KeyW') | k('ArrowUp') | k('Space')) - (k('KeyS') | k('ArrowDown')) : 0;
+  grip = at && (grip || climb !== 0);
+  if (grip) { feet = Math.max(ground, Math.min(0, feet + climb * 1.3 * dt)); vy = 0; }
+  else if (feet > ground + .001 || vy > 0) { // off the ground: gravity, and drag once the legs are under water. Walking off a ledge is a fall.
     vy -= 11 * dt; if (feet < WY) vy -= vy * Math.min(1, 4 * dt);
     feet += vy * dt;
     if (feet <= ground) { feet = ground; vy = 0; landed = true; }
