@@ -3,7 +3,8 @@ import * as THREE from 'three';
 import { dry, zones, defZone } from '../core.js';
 import { concrete } from '../tex.js';
 import { dirt, M, P, neon } from '../mat.js';
-import { add, block, box, round, lit, post } from '../build.js';
+import { add, block, box, round, lit } from '../build.js';
+import { post } from '../props/lights.js';
 
 defZone('nL', { ...dry, sky: 'night', air: .5, grp: 'n', k: 1, exp: .36, fog: [.012, .016, .03, .004], bloom: .4, wet: .15, box: [681, -20, 745, 50], probe: [712, 2.5, 15] });
 { // car park at night x[681,745] z[-20,50], out of the parking level's far door: pools of lamplight on wet asphalt, a bus shelter, vending machines, the moon

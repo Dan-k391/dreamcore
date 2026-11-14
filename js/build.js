@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { scene, V, H, inR } from './core.js';
-import { lampOn, lampOff, seaMat, noCast, voidMat, aisle } from './mat.js';
+import { seaMat, noCast, voidMat, aisle } from './mat.js';
 
 // ---------- level builder: boxes and cut-out wall slabs with world-space UVs, merged into one mesh per material ----------
 // Solids, everything the player and loose bodies collide with: [x1, z1, x2, z2, y1, y2] is an upright box. A 7th entry makes it
@@ -26,7 +26,6 @@ const seeThrough = [], skyOnly = { hill: [], dusk: [], night: [] }; // things th
 const warps = []; // [x1, z1, x2, z2, dx, dz]: standing in the rectangle moves you by the offset
 const pools = []; // each pool, registered by its place, made into water by water.js: x1, z1, x2, z2, floor height, zone, zones it is drawn from, scattered light
 const onSun = []; // f(sun): run once the sun exists, for things built before it that use its shadow map
-// props: chrome ladder, floating rings, water slide spiralling round a column
 const ladders = []; // [x1, z1, x2, z2] zones in the water where facing the ladder and pressing forward climbs it
 const rings = []; // floating rings: bob on the water (see frame)
 function add(mat, g, ownUV = false) { // ownUV: keep the geometry's own UVs (a library material's `uv` option says how many metres one unit is)
@@ -93,29 +92,14 @@ function slab(mat, axis, at, depth, a1, a2, y1, y2, cuts, through = false) { // 
 const room = (z, x1, z1, x2, z2, h) => { box(z.carpet, x1, -.2, z1, x2, 0, z2); box(z.ceil, x1, h, z1, x2, h + .2, z2); };
 const wall = (z, x1, z1, x2, z2, h = H) => { box(z.paper, x1, 0, z1, x2, h, z2); box(z.trim, x1 - .012, 0, z1 - .012, x2 + .012, .1, z2 + .012); };
 const fixture = (z, x, y, zc, power) => { z.tileU.uLamp.value[z.nl].set(x, y, zc, power); z.tile.defines.NL = ++z.nl; }; // a light only this zone's tiles see: cheap, unshadowed, up to 24 a zone
-const lamp = (z, x, zc, h = H, on = true, power = 120) => { // ceiling panel on the 60cm grid, plus the light it emits
-  box(on ? lampOn : lampOff, x - .3, h - .012, zc - .6, x + .3, h + .01, zc + .6);
-  if (on) emitters.push({ zone: z, p: V(x, h - .05, zc), t: V(x, 0, zc), power: power * (h / H) ** 2, angle: 1.45, dist: 16, color: 0xfff0cf });
-};
 const tube = (pts, r, seg, mat) => { const m = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts.map(p => V(...p))), seg, r, 16), mat); m.castShadow = m.receiveShadow = true; scene.add(m); return m; };
 const lit = (z, x, y, zc, power, to = [x, 0, zc], angle = 1.35, dist = 12, color = 0xffdfb0) => emitters.push({ zone: z, p: V(x, y, zc), t: V(...to), power, angle, dist, color });
-const post = (mat, globe, x, y, z, ax, az, power, zone) => { // street lamp: a pole curving over to a glowing globe; lit only where a zone is given
-  tube([[x, y - .4, z], [x, y + 3.4, z], [x + ax * .12, y + 3.85, z + az * .12], [x + ax * .5, y + 4.05, z + az * .5], [x + ax * .9, y + 4, z + az * .9]], .045, 40, mat);
-  add(globe, new THREE.SphereGeometry(.16, 20, 14).translate(x + ax * .95, y + 3.88, z + az * .95)); add(mat, new THREE.CylinderGeometry(.09, .11, .5, 12).translate(x, y + .25, z));
-  round(x, z, .11, y - .4, y + .5); round(x, z, .05, y + .5, y + 3.5);
-  if (zone) lit(zone, x + ax * .95, y + 3.7, z + az * .95, power, [x + ax * .95, y, z + az * .95], 1.2, 18, 0xffc98a);
-};
-const doorway = (mat, leaf, x, y, z, ry, open = 1.9) => { // a door standing on its own, ajar
-  const c = Math.cos(ry), s = Math.sin(ry), part = (m, w, h, d, px, py, pz) => { add(m, new THREE.BoxGeometry(w, h, d).translate(px, py, pz).rotateY(ry).translate(x, y, z)); turned(x + px * c + pz * s, z - px * s + pz * c, w / 2, d / 2, ry, y + py - h / 2, y + py + h / 2); };
-  part(mat, .12, 2.3, .16, -.56, 1.15, 0); part(mat, .12, 2.3, .16, .56, 1.15, 0); part(mat, 1.24, .12, .16, 0, 2.3, 0); part(mat, 1.24, .05, .2, 0, .025, 0);
-  add(leaf, new THREE.BoxGeometry(1, 2.2, .045).translate(.5, 1.13, 0).rotateY(open).translate(-.5, 0, 0).rotateY(ry).translate(x, y, z));
-  const lx = .5 * Math.cos(open) - .5, lz = -.5 * Math.sin(open); turned(x + lx * c + lz * s, z - lx * s + lz * c, .5, .0225, open + ry, y + .03, y + 2.23); // the leaf
-};
-const ladder = (x, zc, mat) => { // on a pool's east edge at x: two rails over the lip, three treads
-  for (const z of [zc - .25, zc + .25]) tube([[x - .1, -1], [x - .1, .5], [x - .03, .76], [x + .17, .86], [x + .37, .76], [x + .44, .5], [x + .44, 0]].map(([a, y]) => [a, y, z]), .022, 48, mat);
-  for (const y of [-.2, -.5, -.8]) { const m = new THREE.Mesh(new THREE.BoxGeometry(.08, .03, .5).translate(x - .1, y, zc), mat); m.castShadow = true; scene.add(m); }
-  ladders.push([x - .8, zc - .45, x + .5, zc + .45]);
-};
+// Kit objects (js/props/, docs/props.md) are built about their own origin, feet at y 0, front toward +z, and set in the world by put():
+// turned by ry about the vertical, then moved to x, y, z. spot() is where a point of the object's own plan lands; solidAt() the solid
+// of a w x h x d box centred at (cx, cy, cz) in the object's frame.
+const put = (g, x, y, z, ry = 0) => g.rotateY(ry).translate(x, y, z);
+const spot = (x, z, ry, px, pz) => [x + px * Math.cos(ry) + pz * Math.sin(ry), z - px * Math.sin(ry) + pz * Math.cos(ry)];
+const solidAt = (x, y, z, ry, cx, cy, cz, w, h, d) => { const [a, b] = spot(x, z, ry, cx, cz); turned(a, b, w / 2, d / 2, ry, y + cy - h / 2, y + cy + h / 2); };
 const floorH = (x, z) => { let y = 0; for (const f of flats) if (inR(x, z, f[0], f[1], f[2], f[3])) y = f[4](x, z); return y; };
 // The shortest move that takes a ball of radius r at (x, y, z) out of solid c, into `out`; false if they don't touch.
 // y = null: a circle on the plan, height ignored (the caller tests heights).
@@ -150,4 +134,4 @@ function merge() { // once every place is built (level.js): one mesh per materia
   for (const [m, list] of geo) { const mesh = new THREE.Mesh(mergeGeometries(list), m); mesh.castShadow = !noCast.has(m); mesh.receiveShadow = m !== seaMat; scene.add(mesh); if (m === seaMat) sea = mesh; }
 }
 
-export { colliders, emitters, flats, seeThrough, skyOnly, warps, pools, onSun, ladders, rings, loose, add, block, box, solid, round, turned, clear, out, near, flight, passage, slab, room, wall, fixture, lamp, tube, lit, post, doorway, ladder, floorH, sea, merge };
+export { colliders, emitters, flats, seeThrough, skyOnly, warps, pools, onSun, ladders, rings, loose, add, block, box, solid, round, turned, clear, out, near, flight, passage, slab, room, wall, fixture, tube, lit, put, spot, solidAt, floorH, sea, merge };

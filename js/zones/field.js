@@ -3,7 +3,9 @@ import * as THREE from 'three';
 import { scene, camera, uTime, sunDir, dry, zones, defZone } from '../core.js';
 import { hash, noise, fbm, ss, makeTex, concrete } from '../tex.js';
 import { M, P, wallMat, paintedBall } from '../mat.js';
-import { colliders, flats, seeThrough, skyOnly, onSun, loose, add, block, box, solid, round, flight, tube, lit, post, doorway } from '../build.js';
+import { colliders, flats, seeThrough, skyOnly, onSun, loose, add, block, box, solid, round, flight, tube, lit } from '../build.js';
+import { post } from '../props/lights.js';
+import { doorway } from '../props/metalwork.js';
 
 defZone('fD', { ...dry, step: 'carpet', sky: 'hill', air: 1, grp: 'f', k: 1, exp: .3, fog: [.72, .82, .95, .002], sat: 1.15, bloom: .07, shaft: .04, wet: 0, box: [-50, 665.6, 58, 760], probe: [4, 6, 690] });
 // ---------- the field: reached through the dark passage at the end of the hotel hallway ----------

@@ -5,6 +5,7 @@
 - `js/core.js`: renderer, scene, camera, constants, the zone registry (`defZone`).
 - `js/tex.js`: procedural textures. `js/mat.js`: materials (see [materials.md](materials.md)).
 - `js/build.js`: the level builder and the registries places hand things to the rest of the game through.
+- `js/props/<group>.js`: the prop kits (lights, metalwork, garden, play, structure); places call them for objects (see [props.md](props.md)).
 - `js/zones/<place>.js`: everything about one place: its zones, materials, geometry, floors, lights, props. `js/level.js` imports them in order.
 - `js/sky.js`, `water.js`, `lights.js`, `post.js`, `audio.js`, `player.js`, `physics.js`, `dev.js`, `main.js`.
 - Imports only point back to earlier files, and places never import each other.

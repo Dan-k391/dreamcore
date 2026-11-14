@@ -3,7 +3,8 @@ import * as THREE from 'three';
 import { scene, dry, zones, defZone } from '../core.js';
 import { hash } from '../tex.js';
 import { P, wallMat } from '../mat.js';
-import { flats, loose, add, block, box, solid, flight, slab, lamp } from '../build.js';
+import { flats, loose, add, block, box, solid, flight, slab } from '../build.js';
+import { lamp } from '../props/lights.js';
 
 defZone('sP', { ...dry, step: 'carpet', wade: 1, grp: 'm', k: 1.15, exp: .3, fog: [.6, .5, .55, .001], bloom: .25, wet: .25, box: [-41.4, 28, -27, 44], probe: [-34, 2, 36] });
 { // soft play room x[-41,-27] z[28.4,43.6], off the mall: foam floor squares, a ball pit, a climbing block with a way to jump in

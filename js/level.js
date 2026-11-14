@@ -21,7 +21,7 @@ import './zones/field.js';
 import './zones/carpark.js';
 import './zones/terrace.js';
 import './zones/sea.js';
-if (new URLSearchParams(location.search).has('dev')) await import('./zones/showroom.js'); // the material showroom: test builds only
+if (new URLSearchParams(location.search).has('dev')) { await import('./zones/showroom.js'); await import('./zones/yard.js'); } // the material showroom and the prop yard: test builds only
 
 performance.mark('load: places built'); // the load's phases, for a profile or performance.getEntriesByType('mark')
 merge();

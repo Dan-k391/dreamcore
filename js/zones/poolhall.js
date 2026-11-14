@@ -2,7 +2,8 @@
 import * as THREE from 'three';
 import { scene, PH, WY, zones, defZone } from '../core.js';
 import { S, poolMats, beachBall } from '../mat.js';
-import { flats, pools, rings, loose, box, solid, ladder } from '../build.js';
+import { flats, pools, rings, loose, box, solid } from '../build.js';
+import { ladder } from '../props/metalwork.js';
 
 defZone('pH', { grp: 'h', k: 1.25, exp: .34, fog: [.7, .82, .95, .0015], tint: [1, 1, 1.02], sat: 1.08, bloom: .35, shaft: 1, hum: 0, water: 1, wet: .5,
         box: [-9.4, -23.4, 9.4, 0], probe: [.5, 2.2, -12.5], env: [[-9, -1.4, -23], [9, 5, -1]], band: -99, bandCol: [1, 1, 1], shimmer: .25, caus: 1 });

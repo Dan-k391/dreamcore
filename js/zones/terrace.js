@@ -2,7 +2,9 @@
 import * as THREE from 'three';
 import { scene, uTime, sunDir, dry, zones, defZone } from '../core.js';
 import { P, neon, wallMat } from '../mat.js';
-import { flats, seeThrough, skyOnly, add, block, box, solid, round, turned, flight, slab, post, doorway } from '../build.js';
+import { flats, seeThrough, skyOnly, add, block, box, solid, round, turned, flight, slab } from '../build.js';
+import { post } from '../props/lights.js';
+import { doorway } from '../props/metalwork.js';
 
 defZone('sK', { ...dry, sky: 'dusk', air: .7, grp: 's', k: 1, exp: .3, fog: [.95, .6, .55, .0012], sat: 1.12, bloom: .12, shaft: .1, wet: .35, box: [650.4, 600, 745, 700], probe: [672, 2, 649.4] });
 { // terrace above the clouds x[650,704] z[639,660], out of the vaulted hall's far door: white stone at sunset, a court of arches, a stair to a lookout

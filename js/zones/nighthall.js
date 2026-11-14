@@ -2,7 +2,8 @@
 import * as THREE from 'three';
 import { V, dark, zones, defZone } from '../core.js';
 import { S, glow, poolMats } from '../mat.js';
-import { emitters, flats, pools, box, round, slab, tube, ladder } from '../build.js';
+import { emitters, flats, pools, box, round, slab, tube } from '../build.js';
+import { ladder } from '../props/metalwork.js';
 
 defZone('pN', { ...dark, exp: .22, bloom: .34, wet: .8, box: [21, -24.4, 45.4, .4], probe: [33, 3, -12], env: [[21, -1.4, -24.4], [45, 7, .4]], shimmer: .25 });
 flats.push([24, -21, 42, -3, (x, z) => (z > -14 && z < -10 && x < 25 ? (x < 24.5 ? -.6 : -.9) : -1.2)]); // night pool

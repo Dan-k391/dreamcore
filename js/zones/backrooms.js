@@ -1,7 +1,8 @@
 // The backrooms: the first maze (bA), the pillar hall (bB) and the corridor east (bC).
 import { H, warm, zones, defZone } from '../core.js';
 import { M, P, lampOff } from '../mat.js';
-import { box, room, wall, lamp } from '../build.js';
+import { box, room, wall } from '../build.js';
+import { lamp } from '../props/lights.js';
 
 defZone('bA', { ...warm, box: [-9.4, 0, 9.4, 21.4], probe: [0, 1.5, 11] });
 defZone('bB', { ...warm, box: [-33.4, .6, -9.4, 21.4], probe: [-21.3, 1.7, 13] });
