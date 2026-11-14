@@ -1,79 +1,143 @@
 // Wall coverings, carpets, upholstery and ceiling tiles: the texture sets (GLSL, see docs/materials.md) and the materials made from them.
 import { set, mat } from './registry.js';
 
-set('wallpaper', 1.06, 1024, 1024, .84, .3, `
-  float s = fract(uv.x * 2.), seam = min(s, 1. - s) * 530.; // two 53 cm strips
-  vec2 g = uv * 8., cl = fract(g); cl.y = fract(g.y + mod(floor(g.x), 2.) * .5);
-  float line = 1. - ss(.8, 1.4, (.5 - abs(cl.x - .5)) * 132.5);
-  float dd = abs(cl.x - .5) * 1.5 + abs(cl.y - .5), motif = 1. - ss(.12, .132, dd), ring = 1. - ss(.0, .01, abs(dd - .17));
-  float fib = vn(uv * 1200., vec2(1200), 3), age = fbm(uv * 5., vec2(5), 5, 5);
-  c = vec3(.84, .67, .24) * (.92 + .08 * fib) * (.86 + .2 * age) * (1. - .32 * line - .26 * motif - .14 * ring);
-  c *= 1. - .3 * (1. - ss(.15, .5, seam));
-  h = .25 * fib + .1 * motif + .05 * ring - .1 * line + .12 * (1. - ss(.5, 3., seam)) - .25 * (1. - ss(0., .3, seam));
-  r = .88 - .25 * motif; t = 1.;`);
+// Printed vinyl paper hung in 53 cm strips: straight pinstripes and diamonds printed with a little ink spread, each strip hung
+// a millimetre or two off its neighbour, glue-stained butt seams whose edges have lifted, an embossed paper grain.
+set('wallpaper', 1.06, 1024, 1024, .86, .3, `
+  float sx = uv.x * 2., s = fract(sx), seam = min(s, 1. - s) * 530.; vec4 sr = hr(vec2(floor(sx), 3.), 17); // mm to the strip edge
+  vec2 q = uv + vec2(.0078 + (sr.y - .5) * .0016, (sr.x - .5) * .004); // the print, misregistered strip by strip
+  vec2 g = q * 8., cl = fract(g); cl.y = fract(g.y + mod(floor(g.x), 2.) * .5); vec2 pm = (cl - .5) * 132.5; // mm in the motif cell
+  float ink = .85 + .3 * fbm(uv * 70., vec2(70), 3, 7), sp = .5 * (vn(uv * 600., vec2(600), 3) - .5); // ink density, ink spread
+  float ex = 66.25 - abs(pm.x), line = max(aa(ex, .5), .6 * aa(abs(ex - 3.4), .3)); // a straight pinstripe and its fine partner
+  float dd = abs(pm.x) * 1.45 + abs(pm.y) + sp, fill = aa(dd, 15.), rim = aa(abs(dd - 15.), .45), ring = aa(abs(dd - 23.), .35), dt = aa(length(pm) + sp, 2.2);
+  float fib = vn(uv * 450., vec2(450), 3), emb = fbm(uv * 160., vec2(160), 4, 5), mott = multi(uv, 41);
+  c = vec3(.84, .67, .25) * (.93 + .07 * fib) * (1. + .05 * mott) * (1. - .2 * fill * ink - .3 * rim - .2 * ring - .3 * line * ink - .35 * dt);
+  float glue = 1. - ss(.5, 7., seam), gap = aa(seam, .25);
+  c *= mix(vec3(1), vec3(.92, .87, .76), glue * (.4 + .6 * sr.z)) * (1. - .55 * gap);
+  float lift = (1. - ss(.3, 9., seam)) * (.05 + .12 * (s < .5 ? sr.w : sr.z)); // the strip edges curl off the wall a little
+  h = .1 * emb + .03 * fib + .02 * (fill + line) + lift - .15 * gap;
+  r = .87 - .08 * fill - .06 * line - .1 * glue; t = 1.;`);
+
+// Tone-on-tone damask wall fabric: a mirrored acanthus medallion on a half-drop, told from the ground by its satin floats
+// running the other way and their sheen (roughness), hardly by colour or relief.
 set('damask', .53, 1024, 512, .6, .3, `
-  vec2 g = uv * 2.; g.y += mod(floor(g.x), 2.) * .5; vec2 p = fract(g) - .5; p.x = abs(p.x); // mirrored motif, half-drop match
-  float an = atan(p.y, p.x), bd = length((p - vec2(0., .02)) * vec2(1.6, 1.)) - (.17 + .05 * cos(an * 4.));
-  float body = 1. - ss(.0, .01, bd), inner = 1. - ss(.0, .008, abs(bd + .05));
-  float sc1 = 1. - ss(.0, .012, abs(length(p - vec2(.22, -.16)) - .09)), sc2 = 1. - ss(.0, .012, abs(length(p - vec2(.2, .2)) - .07));
-  float leaf = 1. - ss(.0, .01, length((p - vec2(.31, .0)) * vec2(3., 1.)) - .12), top = 1. - ss(0., .01, length((p - vec2(0., .37)) * vec2(2.5, 1.)) - .08);
-  float flock = sat(max(max(body - inner, sc1), max(sc2, max(leaf, top))));
-  float fib = vn(uv * 1500., vec2(1500), 3);
-  c = mix(vec3(.82, .74, .58) * (.95 + .05 * fib), vec3(.6, .46, .28) * (.85 + .2 * fib), flock);
-  h = .35 * flock + .1 * fib * flock; r = mix(.42, .95, flock); t = 1.;`);
-set('loopCarpet', .5, 1024, 1024, .95, .45, `
-  vec4 v = vor(uv * 220., vec2(220), 1, 1.); vec3 nv = vorv(uv * 220., vec2(220), 1, 1.); // tufts, about 2.3 mm
-  float tuft = sat(1. - v.x * 1.25), side = ss(.0, .25, v.y - v.x), a = nv.z * 6.28;
-  float tw = .5 + .5 * sin(dot(-nv.xy, vec2(cos(a), sin(a))) * 18. + nv.z * 9.); // the twist of the yarn
-  float mot = st(fbm(uv * 30., vec2(30), 4, 11), 3.5), clump = fbm(uv * 90., vec2(90), 3, 19), fleck = step(.8, v.w) * (v.w - .8) * 5.;
-  float lean = multi(uv, 41); // the pile leans a different way patch by patch: the mottling that reads from across a room
-  h = (.6 + .5 * v.w) * sqrt(tuft) * side + .12 * tw * tuft + 1.1 * (mot - .5) + .7 * (clump - .5) + .5 * lean;
-  c = vec3(.68, .66, .62) * (.6 + .6 * v.z) * (.5 + .5 * tuft * side) * (.88 + .12 * tw) * (.55 + .8 * mot) * (1. + .16 * lean) * (1. + vec3(.06, 0., -.06) * (v.w - .5));
-  c = mix(c, c * vec3(.55, .5, .45), fleck * .7); // darker yarn flecked through it
-  r = .95; t = 1.;`);
+  vec2 g = uv * 2.; g.y += mod(floor(g.x), 2.) * .5; vec2 p = fract(g) - .5; p.x = abs(p.x);
+  float mk = aa(dmMotif(p) * 265., 0.);
+  float sg = vn(uv * vec2(30., 300.), vec2(30., 300.), 3), sm = vn(uv * vec2(300., 30.), vec2(300., 30.), 4); // satin floats: across in the ground, up in the motif
+  float slub = vn(uv * vec2(6., 240.), vec2(6., 240.), 6), mott = multi(uv, 9);
+  c = mix(vec3(.8, .72, .56) * (.97 + .03 * sg), vec3(.74, .64, .47) * (.96 + .04 * sm), mk) * (.97 + .04 * slub) * (1. + .03 * mott);
+  h = mix(.04 * sg, .02 + .03 * sm, mk); r = mix(.72, .36, mk); t = 1.;`, `
+float dmLeaf(vec2 p, vec2 a, vec2 b, float wd, float bend) { // distance (cell units) to a curved leaf from a to b, wd wide at its middle
+  vec2 d = b - a; float L = length(d), t = dot(p - a, d) / (L * L), n = dot(p - a, vec2(-d.y, d.x) / L) - bend * L * sin(PI * sat(t));
+  return abs(n) - wd * sin(PI * sat(t)) + max(max(-t, t - 1.), 0.) * L; }
+float dmArc(vec2 p, vec2 c, float R, float w, vec2 dir) { vec2 q = p - c; return dot(q, dir) > 0. ? abs(length(q) - R) - w : 1.; }
+float dmMotif(vec2 p) { // the medallion, mirrored (p.x >= 0)
+  float body = dmLeaf(p, vec2(0., -.2), vec2(0., .24), .075, 0.), hol = dmLeaf(p, vec2(0., -.13), vec2(0., .17), .045, 0.);
+  float d = min(max(body, -hol), dmLeaf(p, vec2(0., -.07), vec2(0., .11), .016, 0.));
+  d = min(d, dmLeaf(p, vec2(.02, -.2), vec2(.28, -.03), .045, .25));
+  d = min(d, dmLeaf(p, vec2(.05, -.06), vec2(.3, .2), .04, .2));
+  d = min(d, dmLeaf(p, vec2(.04, .13), vec2(.18, .34), .03, .2));
+  d = min(d, dmArc(p, vec2(.3, .025), .04, .008, vec2(1., .3)));
+  d = min(d, dmArc(p, vec2(.31, .24), .035, .007, vec2(.4, 1.)));
+  d = min(d, dmArc(p, vec2(.065, -.38), .045, .008, vec2(-.2, -1.)));
+  d = min(d, dmLeaf(p, vec2(0., .3), vec2(0., .46), .022, 0.));
+  d = min(d, dmLeaf(p, vec2(0., .3), vec2(.07, .44), .018, .1));
+  d = min(d, dmLeaf(p, vec2(0., .29), vec2(.13, .39), .016, .15));
+  d = min(d, dmLeaf(p, vec2(0., -.45), vec2(0., -.2), .01, 0.));
+  vec2 s = vec2(p.x, abs(p.y)) - vec2(.5, .25); d = min(d, min(length(s * vec2(1., 2.5)), length(s * vec2(2.5, 1.))) - .03); // a sprig between columns
+  return d; }`);
+
+// Tufted loop pile: rows of yarn loops on a 3.2 x 3 mm gauge in three shades of yarn with a darker fleck, matted where it
+// has been trodden flat (darker, glossier), with the odd bit of lint caught in it.
+set('loopCarpet', .5, 1024, 1024, .93, .45, `
+  vec2 lw = uv + .0024 * vec2(fbm(uv * 20., vec2(20), 3, 2) - .5, fbm(uv * 20., vec2(20), 3, 3) - .5); // rows tufted a little off true
+  vec3 L = loops(lw, vec2(156., 166.), 5); L.x *= .75 + .5 * hf(floor(lw * vec2(156., 166.)), 21);
+  float cr = ss(.5, .78, fbm(uv * 4., vec2(4), 4, 11)); // matted patches
+  float ply = vn(uv * 520., vec2(520), 9), lean = st(fbm(uv * 40., vec2(40), 3, 19), 2.); // tufts clump and lean together
+  float tone = L.y < .34 ? .78 : L.y < .72 ? 1. : 1.18; // three shades tufted together: the heather
+  float fleck = step(.955, L.y), lint = fibres(uv * 60., vec2(60), 9, .5, .07) * step(.86, hf(floor(uv * 60.), 12));
+  float pile = L.x * (1. - .45 * cr) * (.9 + .2 * ply);
+  h = 2.4 * pile + 1.2 * (lean - .5) - .5 * cr;
+  vec3 yarn = vec3(.55, .52, .48) * tone * (1. + vec3(.04, 0., -.05) * (L.y * 2. - 1.)) * (.9 + .2 * ply);
+  yarn = mix(yarn, yarn * vec3(.42, .43, .5), fleck);
+  c = yarn * (.55 + .45 * sqrt(L.z) * (.6 + .4 * L.x)) * (1. - .14 * cr) * (.7 + .6 * lean) * (.86 + .28 * vn(uv * 130., vec2(130), 23)) // clumps of tufts that lean and catch the light together
+    * (.72 + .56 * st(vn(uv * vec2(90., 45.), vec2(90., 45.), 27), 2.5)); // runs of lighter and darker yarn ends along the rows
+  c = mix(c, vec3(.5, .49, .47), lint * .85);
+  r = .94 - .14 * cr * L.z - .04 * L.x; t = 1. - .9 * lint;`);
+
+// Woven (Axminster-like) hotel carpet: every 3 mm tuft takes one yarn colour, so the design steps along the loom's grid and
+// bleeds a tuft into its neighbour: a gold lattice, leaf medallions with cream rosettes and teal buds, a maroon filler scroll.
 set('hotelCarpet', 1.2, 1024, 512, 1, .3, `
-  vec2 cu = fract(uv * 6.) - .5;
-  float lat = abs(abs(cu.x) + abs(cu.y) - .5), latL = 1. - ss(.016, .022, lat), latI = 1. - ss(.004, .008, abs(lat - .055));
-  float rr = length(cu), an = atan(cu.y, cu.x), petal = rr - (.11 + .045 * cos(6. * an));
-  float flower = 1. - ss(.0, .01, petal), vein = (1. - ss(.0, .006, abs(petal + .03))) * flower, centre = 1. - ss(.025, .035, rr);
-  float dots = 1. - ss(.006, .01, length(fract(uv * 12. + .5) - .5) / 12.);
-  vec4 tv = vor(uv * 500., vec2(500), 3, 1.); float tuft = sqrt(sat(1. - tv.x)), lay = vn(uv * vec2(60., 600.), vec2(60., 600.), 5), mot = fbm(uv * 20., vec2(20), 4, 7);
-  float gold = max(max(latL, latI), max(flower - vein, dots * (1. - flower)));
-  c = mix(vec3(.15, .006, .01), vec3(.48, .26, .035), gold); c = mix(c, vec3(.014, .002, .003), centre);
-  c *= (.66 + .4 * tuft) * (.86 + .24 * lay) * (.9 + .2 * tv.z) * (.85 + .3 * mot);
-  h = .35 * tuft + .25 * lay; r = 1.; t = 1.;`);
-set('velvet', .3, 512, 512, .9, .2, `
-  float pile = vn(uv * 600., vec2(600), 1) * .5 + vn(uv * 240., vec2(240), 3) * .5;
-  float crush = st(fbm(uv * 3. + .6 * vec2(fbm(uv * 3., vec2(3), 3, 5), 0.), vec2(3), 5, 7), 2.5); // crushed pile: lighter and smoother where it lies flat
-  c = vec3(.7) * (.65 + .45 * crush) * (.92 + .1 * pile); h = .15 * pile + .3 * crush; r = .9 - .15 * crush; t = 1.;`);
+  vec2 tg = uv * 400., ti = floor(tg), tf = fract(tg) - .5; vec4 th = hr(ti, 3);
+  vec4 P = hcPat((ti + .5 + (th.xy - .5) * .8) / 400.);
+  vec3 col = vec3(.19, .012, .016); col = mix(col, vec3(.1, .006, .01), P.w); col = mix(col, vec3(.02, .06, .05), P.z);
+  col = mix(col, vec3(.6, .46, .26), P.y); col = mix(col, vec3(.5, .27, .045), P.x);
+  float tb = sqrt(sat(1. - dot(tf, tf) * 2.6)), lay = vn(uv * vec2(60., 600.), vec2(60., 600.), 5), wear = ss(.5, .8, fbm(uv * 3., vec2(3), 4, 9)), mot = fbm(uv * 20., vec2(20), 4, 7);
+  c = col * (.9 + .2 * th.z) * (.72 + .35 * tb) * (.88 + .2 * lay) * (.88 + .24 * mot) * (1. + .12 * wear);
+  h = .4 * tb * (1. - .4 * wear) + .25 * lay; r = 1. - .1 * wear; t = 1.;`, `
+vec4 hcPat(vec2 q) { // the design at a point: x gold, y cream, z teal, w maroon (the rest is the red ground)
+  vec2 cu = fract(q * 6.) - .5; float lat = abs(abs(cu.x) + abs(cu.y) - .5);
+  float gold = max(1. - step(.017, lat), 1. - step(.008, abs(lat - .06)));
+  vec2 p = abs(cu); if (p.y > p.x) p = p.yx;
+  float x = (p.x - .05) / .22, w = .055 * sin(PI * sat(x)) * (1. - .3 * x), leaf = step(0., x) * step(x, 1.) * step(p.y, w), rib = leaf * step(p.y, .006);
+  float curl = step(abs(length(p - vec2(.29, .045)) - .035), .008) * step(.27, p.x);
+  float bd = length(p - vec2(.14, .14)), r = length(cu);
+  float fill = step(abs(fbm(q * 24., vec2(24), 3, 7) - .5), .01); // a thin maroon scroll through the ground
+  return vec4(max(gold, max(leaf - rib, curl)), max(step(r, .05) - step(r, .02), step(bd, .011)), max(step(bd, .028) - step(bd, .011), rib), max(fill, step(r, .02))); }`);
+
+// Cotton velvet: the pile lies a different way patch by patch where it was pressed (lighter, smoother, its fibres streaked
+// one of four ways, so the grazing sheen changes patch to patch), with soft crease lines between the patches.
+set('velvet', .3, 512, 512, .88, .2, `
+  vec2 w = uv + .04 * vec2(fbm(uv * 5., vec2(5), 3, 2) - .5, fbm(uv * 5., vec2(5), 3, 3) - .5);
+  vec4 v = vor(w * 4., vec2(4), 5, 1.); float edge = ss(0., .45, v.y - v.x), cr = v.z * edge, k = floor(v.w * 4.);
+  vec2 a = uv * 300., b = vec2(uv.x + uv.y, uv.x - uv.y) * 250.;
+  float st0 = k < 1. ? vn(a * vec2(1., .08), vec2(300., 24.), 4) : k < 2. ? vn(a.yx * vec2(1., .08), vec2(300., 24.), 5) : k < 3. ? vn(b * vec2(1., .08), vec2(250., 20.), 6) : vn(b.yx * vec2(1., .08), vec2(250., 20.), 7);
+  float pile = vn(uv * 400., vec2(400), 9), small = vor(w * 10., vec2(10), 8, 1.).z;
+  c = vec3(.7) * (1. + .15 * (v.z * 2. - 1.) * edge) * (1. + .05 * (small - .5)) * (.94 + .1 * pile) * (.95 + .1 * st0);
+  h = .25 * st0 * (.4 + .6 * cr) + .08 * pile - .05 * (1. - edge); r = .88 - .14 * cr; t = 1.;`);
+
+// Vinyl over foam: a pebbled grain, the cover pillowed up between its seams and rolled down into them, rows of 4 mm stitches
+// as rounded thread bumps (band-limited: no ringing), creases toward the corners, scuffed matt where it gets knocked.
 set('vinylFoam', 1, 512, 1024, .45, .3, `
-  vec4 v = vor(uv * 380., vec2(380), 1, 1.); float peb = sqrt(sat(1. - v.x * 1.3)) * (.7 + .3 * v.z);
+  vec4 v = vor(uv * 380., vec2(380), 1, 1.); float peb = sqrt(sat(1. - v.x * 1.3)) * (.7 + .3 * v.z), grain = fbm(uv * 90., vec2(90), 3, 4);
   float du = min(uv.x, 1. - uv.x) * 1000., dv = min(uv.y, 1. - uv.y) * 1000., sd = min(du, dv), al = du < dv ? uv.y : uv.x; // seams on the panel edges
-  float pipe = sqrt(sat(1. - sd * sd / 25.)), groove = 1. - ss(.5, 1.5, abs(sd - 6.));
-  float stitch = (1. - ss(.4, .8, abs(sd - 11.))) * step(.35, fract(al * 1000. / 5.));
-  float wr = exp(-sd / 22.) * ss(.35, .75, gn(vec2(al * 56., sd / 9.), vec2(56., 4096.), 3)) * ss(.3, .6, gn(uv * 12., vec2(12), 7)); // wrinkles pulled toward the seams, irregular (a sine here rang like a ladder) // wrinkles pulled toward the seams
-  float scuff = ss(.72, .86, fbm(uv * vec2(6., 24.), vec2(6., 24.), 4, 5));
-  h = .05 * peb + 2. * pipe + 1.2 * wr - .3 * stitch - .4 * groove + .3 * fbm(uv * 3., vec2(3), 3, 9);
-  c = vec3(.82) * (.96 + .04 * peb) * (1. - .15 * groove); c = mix(c, vec3(.9, .88, .82), stitch); c = mix(c, vec3(.72), scuff * .15);
-  r = .42 + .05 * peb + .2 * scuff + .1 * stitch; t = (1. - stitch) * (1. - .3 * scuff);`);
-set('ceilingTile', 1.2, 1024, 1024, .9, .25, `
-  vec2 g = uv * 2., id = floor(g), f = fract(g);
-  float e = min(min(f.x, 1. - f.x), min(f.y, 1. - f.y)) * 600.; // mm to the grid line
-  float bar = 1. - ss(11.5, 12.5, e), rev = ss(13., 22., e);
-  vec2 p = uv * 40. + .6 * vec2(fbm(uv * 12., vec2(12), 4, 1), fbm(uv * 12., vec2(12), 4, 3));
-  float fis = (1. - ss(.0, .05, abs(gn(p, vec2(40), 5) - .5))) * ss(.35, .6, vn(uv * 90., vec2(90), 7)); // worm-like fissures
-  vec4 pv = vor(uv * 300., vec2(300), 9, 1.); float pin = (1. - ss(.15, .32, pv.x)) * step(.45, pv.z); // pinholes
-  float ht = -3. + 3. * rev - .5 * fis - .5 * pin + .15 * fbm(uv * 400., vec2(400), 2, 11);
-  h = mix(ht, 2. - .8 * (1. - ss(10., 11.5, e)) * 0., bar);
-  vec3 tile = vec3(.86, .85, .81) * (.95 + .05 * hf(id, 11)) * (1. - .22 * fis - .5 * pin) * (.95 + .05 * fbm(uv * 20., vec2(20), 3, 13));
-  c = mix(tile, vec3(.88, .87, .84), bar); r = mix(.95, .4, bar); t = 1.;`);
+  float roll = 1. - exp(-sd / 18.), val = 1. - ss(0., 3., sd);
+  float sx = fract(al * 1000. / 7.), pulse = ss(.05, .25, sx) * (1. - ss(.45, .65, sx));
+  float acr = 1. - ss(.6, 1.4, abs(sd - 9.)), stitch = acr * pulse, hole = acr * (1. - pulse);
+  float corner = exp(-length(vec2(du, dv)) / 90.), crease = corner * ridged(uv * 30., vec2(30), 3, 3);
+  float wr = exp(-sd / 22.) * ss(.35, .75, gn(vec2(al * 56., sd / 9.), vec2(56., 4096.), 3)) * ss(.3, .6, gn(uv * 12., vec2(12), 7));
+  float scuff = ss(.7, .86, fbm(uv * vec2(6., 24.), vec2(6., 24.), 4, 5)) * roll;
+  h = .05 * peb + .05 * grain + 3. * roll - 1. * val + .35 * stitch - .15 * hole + 1. * wr + .9 * crease + .3 * fbm(uv * 3., vec2(3), 3, 9);
+  c = vec3(.82) * (.96 + .04 * peb) * (.97 + .05 * grain) * (1. - .25 * val) * (1. - .2 * hole); c = mix(c, vec3(.88, .86, .8), stitch); c = mix(c, vec3(.72), scuff * .15);
+  r = .42 + .05 * peb + .22 * scuff + .15 * stitch; t = (1. - stitch) * (1. - .3 * scuff);`);
+
+// Mineral fibre ceiling tiles, 60 cm, in a painted steel T-bar grid: worm fissures that vary in width and gather in clusters,
+// pinholes, each tile its own tone and yellowing, a few sagging or water-ringed, a shadow line where each sits on the flange.
+set('ceilingTile', 1.8, 1024, 1024, .9, .25, `
+  Cell c0 = tiles(uv, vec2(3), 0., 3); float e = c0.e; vec4 q = hr(c0.id, 13), q2 = hr(c0.id, 29);
+  float bar = aa(e, 12.); // the 24 mm flange
+  vec2 wu = uv + .006 * vec2(fbm(uv * 9., vec2(9), 3, 1) - .5, fbm(uv * 9., vec2(9), 3, 2) - .5);
+  float clus = ss(.42, .68, fbm(uv * 12., vec2(12), 3, 4));
+  float f1 = vein(wu, 60., 1.8, 3, 21) * ss(.5, .64, vn(uv * 150., vec2(150), 7)) * (.3 + .7 * clus);
+  float f2 = vein(wu.yx + .3, 96., .9, 3, 23) * ss(.5, .62, vn(uv * 240., vec2(240), 8)) * clus;
+  float pin = pits(uv, 90., 1.6, .55, 31);
+  float wetT = step(.86, q.x), wet = wetT * ss(14., 40., e);
+  float sag = max(step(.86, q.z), wetT * step(.45, q.z)) * (4. + 6. * q.w) * sin(PI * c0.f.x) * sin(PI * c0.f.y); // bowed with damp
+  float ht = -4. + 4. * ss(12.5, 22., e) + cellTilt(c0, 1.5) + sag - .9 * f1 - .6 * f2 - .9 * pin + .2 * fbm(uv * 450., vec2(450), 2, 11);
+  float sd = length((c0.f - .22 - .56 * q2.xy) * c0.mm) / (70. + 150. * q2.z) + .25 * (fbm(uv * 14., vec2(14), 4, 17) - .5);
+  float soak = wet * (1. - ss(.8, 1., sd)), tide = wet * ((1. - ss(0., .03, abs(sd - 1.))) + .6 * (1. - ss(0., .025, abs(sd - .7))));
+  vec3 tile = cellCol(vec3(.86, .85, .8), c0.r, .08) * mix(vec3(1), vec3(1., .93, .78), .6 * q.y * q.y);
+  tile *= (.96 + .06 * fbm(uv * 30., vec2(30), 3, 13)) * (1. - .4 * f1 - .28 * f2 - .5 * pin);
+  tile *= mix(vec3(1), vec3(1., .95, .84), soak) * mix(vec3(1), vec3(.86, .77, .6), sat(tide)) * (1. - .5 * (1. - ss(12., 15., e)));
+  c = mix(tile, vec3(.84, .85, .86) * (.97 + .03 * vn(uv * 600., vec2(600), 5)), bar);
+  h = mix(ht, 2., bar); r = mix(.93 - .06 * soak, .38, bar); t = mix(1., .25, bar);`);
 
 // materials: name, texture set, shader options (see mat.js)
-mat('wallpaper', 'wallpaper', { detail: .25, macro: .08, dirt: .7, dirtCol: [.62, .52, .36] });
-mat('damask', 'damask', { detail: .1, macro: .06, dirt: .5, dirtCol: [.66, .6, .5] });
-mat('loopCarpet', 'loopCarpet', { color: 0xc8b48a, macro: .4, grime: .4 });
-mat('blackoutCarpet', 'loopCarpet', { color: 0x2a2a2e, macro: .2 });
-mat('hotelCarpet', 'hotelCarpet', { macro: .15 });
-mat('velvet', 'velvet', { color: 0x8a1a26, macro: .1, sheen: 1 });
+mat('wallpaper', 'wallpaper', { detail: .2, macro: .08, dirt: .7, dirtCol: [.62, .52, .36] });
+mat('damask', 'damask', { detail: .05, macro: .05, dirt: .5, dirtCol: [.66, .6, .5] });
+mat('loopCarpet', 'loopCarpet', { color: 0xc8b48a, macro: .32, grime: .35, fine: .004 });
+mat('blackoutCarpet', 'loopCarpet', { color: 0x5c5c66, macro: .15, sheen: .3, fine: .004 });
+mat('hotelCarpet', 'hotelCarpet', { macro: .12, fine: .003 });
+mat('velvet', 'velvet', { color: 0x8a1a26, macro: .06, sheen: 1, detail: .1 });
 mat('vinylFoam', 'vinylFoam', { fine: .005, color: 0x3f8fe0, detail: .12, macro: .05, dirt: .4, wear: .3, edgeCol: [.85, .85, .85] });
-mat('ceilingTile', 'ceilingTile', { detail: .25, macro: .06 });
+mat('ceilingTile', 'ceilingTile', { detail: .2, macro: .09 });
