@@ -1,5 +1,24 @@
 [
  {"name": "structure-plot", "hash": "-628,-685,0,-0.2", "lift": 1.2},
- {"name": "structure-wheelstop-close", "hash": "-624.5,-692.2,0,-0.75"},
- {"name": "structure-wheelstop-far", "hash": "-626,-688,0.2,-0.35"}
+ {"name": "s01-pillar-3m", "hash": "-628.3,-694.6,0.62,-0.2"},
+ {"name": "s02-pillar-close", "hash": "-629.5,-696.25,0.42,-0.15", "lift": -0.9},
+ {"name": "s03-pillar-number-close", "hash": "-630.05,-696.15,0,0.02", "lift": -0.25},
+ {"name": "s04-beam-3m", "hash": "-628.4,-694.4,0.6,0.35"},
+ {"name": "s05-beam-close", "hash": "-631.3,-696.35,0,0.8"},
+ {"name": "s06-wheelstop-3m", "hash": "-626.5,-695.4,0.35,-0.45"},
+ {"name": "s07-wheelstop-close", "hash": "-627.15,-697.55,0.3,-0.55", "lift": -1.0},
+ {"name": "s08-baypaint-3m", "hash": "-627.5,-690.3,0,-0.45"},
+ {"name": "s09-arrow-close", "hash": "-627.55,-692.0,0,-1.0", "lift": -0.9},
+ {"name": "s10-line-close", "hash": "-626.3,-693.3,0,-0.9", "lift": -1.0},
+ {"name": "s11-kerb-3m", "hash": "-626.8,-693.2,-0.5,-0.4"},
+ {"name": "s12-kerb-close", "hash": "-625.5,-695.1,-0.7,-0.6", "lift": -1.0},
+ {"name": "s12b-kerb-drop-side", "hash": "-626.6,-696.5,-1.5708,-0.35", "lift": -0.7},
+ {"name": "s13-bollard-3m", "hash": "-624.5,-692.6,-0.23,-0.2"},
+ {"name": "s14-bollard-close", "hash": "-623.7,-694.85,0,-0.35", "lift": -0.6},
+ {"name": "s15-bump-3m", "hash": "-623.5,-690.8,-0.2,-0.5"},
+ {"name": "s16-bump-close", "hash": "-621.6,-692.9,-0.3,-0.6", "lift": -1.1}
+ ,{"name": "s17-steps-3m", "hash": "-621.2,-694.3,0.37,-0.3"},
+ {"name": "s18-steps-close", "hash": "-622.0,-696.3,-0.25,-0.75", "lift": -0.6},
+ {"name": "s19-skirting-3m", "hash": "-628.5,-697.0,0,-0.35"},
+ {"name": "s20-skirting-close", "hash": "-627.0,-699.5,0.3,-0.55", "lift": -1.0}
 ]
