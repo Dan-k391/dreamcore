@@ -1,7 +1,7 @@
 // The sun, the skies and switching between them.
 import * as THREE from 'three';
 import { Sky } from 'three/addons/objects/Sky.js';
-import { renderer, scene, V, sunDir } from './core.js';
+import { renderer, scene, V, sunDir, zones } from './core.js';
 import { skyOnly, onSun, sea } from './build.js';
 
 import './level.js';
@@ -34,6 +34,21 @@ const skies = { // sun direction, strength, colour; middle and half-size of the 
   dusk: { dir: [.8, .1, .55], light: 9, color: 0xffb27a, at: [695, 650], r: [60, 16], sky: [[.3, .32, .85], [2.3, 1.05, .7], [3, 1.5, .7], .25], show: [dome, ...skyOnly.dusk] },
   night: { dir: [.4, .45, -.6], light: 1.3, color: 0x9db4ff, at: [712, 15], r: [46, 30], sky: [[.004, .007, .018], [.02, .03, .06], [.5, .55, .7], 1], show: [dome, ...skyOnly.night] },
 };
+// Every place is drawn only under its own sky, in every pass (main, AO, pond pictures, shadow maps, bakes): a mesh in a material
+// of zones of one sky (P(), a zone's mats), or else reaching only into boxes of zones of one sky, is hidden under the others.
+// Looked up at every switch, so things made later (physics.js) are included. The show lists above and the ponds (their own seen-from lists) are left alone.
+const matSky = new Map(), ownSky = new WeakMap(), bb = new THREE.Box3();
+for (const z of Object.values(zones)) for (const m of z.mats) matSky.set(m, matSky.has(m) && matSky.get(m) !== (z.sky || 'day') ? null : z.sky || 'day');
+function skyOfMesh(o) {
+  if (!ownSky.has(o)) {
+    let k = matSky.get(o.material);
+    if (k === undefined) { k = null; bb.setFromObject(o);
+      if (!bb.isEmpty()) for (const z of Object.values(zones)) { const [x1, z1, x2, z2] = z.box;
+        if (bb.max.x > x1 && bb.min.x < x2 && bb.max.z > z1 && bb.min.z < z2) { if (k === null) k = z.sky || 'day'; else if (k !== (z.sky || 'day')) { k = false; break; } } } }
+    ownSky.set(o, k || null);
+  }
+  return ownSky.get(o);
+}
 let skyNow;
 function setSky(k) {
   if (k === skyNow) return;
@@ -45,6 +60,11 @@ function setSky(k) {
   sun.shadow.needsUpdate = renderer.shadowMap.needsUpdate = true;
   for (const q of Object.values(skies)) for (const o of q.show) o.visible = false;
   for (const o of s.show) o.visible = true;
+  const listed = new Set(Object.values(skies).flatMap(q => q.show));
+  scene.traverse(o => {
+    if (o.isMesh && !listed.has(o) && !o.material.uniforms?.tMirror) { const own = skyOfMesh(o); if (own) o.visible = own === k; }
+    if (o.isSpotLight && o.castShadow) o.shadow.needsUpdate = true; // a lamp's shadow drawn under the other sky lacks this one's things: draw it again
+  });
 }
 setSky('day');
 

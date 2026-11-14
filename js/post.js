@@ -13,23 +13,36 @@ import { ponds } from './water.js';
 
 import { zone0 as zone } from './lights.js'; // the starting zone: the look starts from it
 // ---------- post ----------
-const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 }));
-composer.addPass(new RenderPass(scene, camera));
+// Only the scene render is multisampled: it draws into msaa, which the AO pass and atmos read; the full-screen passes after it
+// write the same value to every sample, so their ping-pong targets need none (a 4x resolve per pass saved, same picture).
+const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType }));
+const msaa = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 });
+const scenePass = new RenderPass(scene, camera), sceneRender = scenePass.render.bind(scenePass);
+scenePass.render = (r, w, read, ...x) => sceneRender(r, w, msaa, ...x);
+composer.addPass(scenePass);
 const ao = new GTAOPass(scene, camera, 1, 1);
 ao.updateGtaoMaterial({ radius: .9, distanceExponent: 1.5, thickness: 1, scale: 1.3, samples: 16 });
+ao.output = GTAOPass.OUTPUT.Off; ao.needsSwap = false; // it only makes its denoised AO picture; atmos multiplies it in (was a copy and a multiply blend, two full-screen passes)
 composer.addPass(ao);
 const aoRender = ao.render.bind(ao); // the AO pass leaves the water out: its normals and depth then describe the pool floor, and the water isn't asked to re-render its pictures
 const noAO = [...ponds, ...seeThrough]; // and anything else see-through
 ao.render = (...a) => { const on = noAO.map(w => w.visible); for (const w of noAO) w.visible = false; aoRender(...a); noAO.forEach((w, i) => w.visible = on[i]); };
+{ // the AO pass draws every mesh in its normal material: compile that now in each kind of mesh there is (plain, instanced, instanced
+  // with colours), not on the frame the ball pit first comes into view
+  const was = []; scene.traverse(o => { if (o.isMesh) { was.push([o, o.material]); o.material = ao.normalMaterial; } });
+  renderer.setRenderTarget(ao.normalRenderTarget);
+  try { if (renderer.compileAsync) await renderer.compileAsync(scene, camera); } catch (e) { console.warn('compiling ahead failed, compiling as drawn instead', e); }
+  renderer.setRenderTarget(null); for (const [o, m] of was) o.material = m;
+}
 const look = { exp: zone.exp, shaft: 0, sat: zone.sat, bloom: zone.bloom, fog: zone.fog.clone(), tint: zone.tint.clone() }; // eases toward the current zone's values
 const atmos = new THREE.ShaderMaterial({ // distance fog per zone + sun shafts ray-marched through the sun's shadow map
-  uniforms: { tDiffuse: { value: null }, tDepth: { value: ao.depthTexture }, tShadow: { value: sun.shadow.map.texture }, uPI: { value: camera.projectionMatrixInverse }, uCW: { value: camera.matrixWorld },
+  uniforms: { tDiffuse: { value: null }, tAO: { value: ao.pdRenderTarget.texture }, tDepth: { value: ao.depthTexture }, tShadow: { value: sun.shadow.map.texture }, uPI: { value: camera.projectionMatrixInverse }, uCW: { value: camera.matrixWorld },
               uSM: { value: sun.shadow.matrix }, uCam: { value: camera.position }, uSun: { value: sunDir }, uFog: { value: look.fog }, uShaft: { value: 0 }, t: uTime },
   vertexShader: quadVS,
   fragmentShader: `#include <packing>
-    uniform sampler2D tDiffuse, tDepth, tShadow; uniform mat4 uPI, uCW, uSM; uniform vec3 uCam, uSun; uniform vec4 uFog; uniform float uShaft, t; varying vec2 vUv;
+    uniform sampler2D tDiffuse, tAO, tDepth, tShadow; uniform mat4 uPI, uCW, uSM; uniform vec3 uCam, uSun; uniform vec4 uFog; uniform float uShaft, t; varying vec2 vUv;
     void main() {
-      vec3 col = texture2D(tDiffuse, vUv).rgb;
+      vec3 col = texture2D(tDiffuse, vUv).rgb * texture2D(tAO, vUv).rgb; // the ambient occlusion (blend intensity 1)
       vec4 v = uPI * vec4(vUv * 2. - 1., texture2D(tDepth, vUv).x * 2. - 1., 1.);
       vec3 ray = (uCW * vec4(v.xyz / v.w, 1.)).xyz - uCam; float len = min(length(ray), 60.); vec3 dir = normalize(ray);
       col = mix(col, uFog.rgb, 1. - exp(-len * uFog.a));
@@ -42,7 +55,9 @@ const atmos = new THREE.ShaderMaterial({ // distance fog per zone + sun shafts r
       gl_FragColor = vec4(col, 1.);
     }`,
 });
-composer.addPass(new ShaderPass(atmos));
+const atmosPass = new ShaderPass(atmos), atmosRender = atmosPass.render.bind(atmosPass);
+atmosPass.render = (r, w, read, ...x) => atmosRender(r, w, msaa, ...x); // reads the scene picture
+composer.addPass(atmosPass);
 const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), .3, .85, .95);
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
@@ -62,7 +77,7 @@ function resize() {
   if (!innerWidth || !innerHeight) return; // hidden tab
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth, innerHeight); composer.setPixelRatio(renderer.getPixelRatio()); composer.setSize(innerWidth, innerHeight);
+  renderer.setSize(innerWidth, innerHeight); composer.setPixelRatio(renderer.getPixelRatio()); composer.setSize(innerWidth, innerHeight); msaa.setSize(innerWidth * renderer.getPixelRatio(), innerHeight * renderer.getPixelRatio());
 }
 addEventListener('resize', resize); resize();
 

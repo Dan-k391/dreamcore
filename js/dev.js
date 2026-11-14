@@ -13,7 +13,8 @@ if (new URLSearchParams(location.search).has('dev')) {
   o.style.display = 'none'; // no start overlay, so no click, so no audio
   const r2 = v => +v.toFixed(2);
   renderer.info.autoReset = false; // so info() counts every pass of a frame, not just the last
-  window.dev = { ready: false, hold: false, THREE, renderer, scene, camera, zones, colliders, emitters, floorH, uTime,
+  window.dev = { _ready: false, readyAt: 0, hold: false, // readyAt: ms from page start to the first frame drawn (tools/perf.mjs)
+    get ready() { return this._ready; }, set ready(v) { if (v && !this._ready) this.readyAt = Math.round(performance.now()); this._ready = v; }, THREE, renderer, scene, camera, zones, colliders, emitters, floorH, uTime,
     step(n = 1, dt = 1 / 60) { for (let i = 0; i < n; i++) frame(dt); }, // deterministic: only the caller's dt moves the game
     state: () => ({ x: r2(camera.position.x), y: r2(feet), z: r2(camera.position.z), zone: zone.id, sky: skyNow, air }),
     key: (code, down) => dispatchEvent(new KeyboardEvent(down ? 'keydown' : 'keyup', { code })),

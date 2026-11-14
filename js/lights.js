@@ -4,7 +4,7 @@ import { renderer, scene, camera, V, zones, inR } from './core.js';
 import { seaMat } from './mat.js';
 import { emitters } from './build.js';
 import { setSky } from './sky.js';
-import { ponds } from './water.js';
+import { ponds, ripple } from './water.js';
 
 // lamps: nine shadow-casting spotlights are shared by every light fixture in the level and follow the player from
 // fixture to fixture, fading out before they move. More fixtures cost nothing; the world can grow without more lights.
@@ -39,12 +39,25 @@ function bake(z, mats = z.mats, k = z.k) {
   const env = pmrem.fromCubemap(cubeRT.texture).texture;
   for (const m of mats) { m.envMap = env; m.envMapIntensity = k; m.needsUpdate = true; }
 }
+// Every program the bakes and the first frames use, compiled up front and in parallel (KHR_parallel_shader_compile) instead of
+// one after another as each is first drawn. For the cube target, as the bakes and the scene pass draw (a half-float target:
+// no tone mapping, linear; for the screen the variants would be ones no draw uses), and with an env map of the bakes' kind.
+const env0 = pmrem.fromCubemap(cubeRT.texture), shown = [];
+for (const m of [seaMat, ...Object.values(zones).flatMap(z => z.mats)]) m.envMap = env0.texture;
+scene.traverse(o => { shown.push([o, o.visible]); o.visible = true; });
+renderer.setRenderTarget(cubeRT);
+const compiled = (async () => renderer.compileAsync?.(scene, camera))(); // (a throw becomes a rejection) the GPU compiles them while the rest goes on
+renderer.setRenderTarget(null);
+if (ponds.length) ripple(ponds[0], []); // and the wave step's program, by one step of still water (which stays still), not when a pool first comes into view
+try { await compiled; } catch (e) { console.warn('compiling ahead failed, compiling as drawn instead', e); }
+for (const [o, v] of shown) o.visible = v;
 for (const w of ponds) w.visible = false; // a pool's nested renders would reset the active cube face
 bake({ probe: V(-200, 3, -12) }, [seaMat], 1);
 for (let pass = 0; pass < 2; pass++) for (const z of Object.values(zones)) { // second pass picks up the first bounce, including through doorways
   if (z.mats.length) bake(z); // the dark passages have nothing to light
   if (pass) for (const w of ponds) if (w.zone === z) w.drawPlan();
 }
+env0.dispose(); // every material has its bake's now
 const zone0 = Object.values(zones).find(z => inR(camera.position.x, camera.position.z, ...z.box)) || zones.bA;
 setSky(zone0.sky || 'day'); relight(camera.position, zone0, 1); relight(camera.position, zone0, 1); // the zone you start in
 
