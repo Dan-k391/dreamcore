@@ -1,5 +1,8 @@
 // The level: every place, in this order (it is the order zones register, are baked and override each other's floors in),
-// then one mesh per material. To add a place: a new file in zones/ and one import line here.
+// then one mesh per material. To add a place: a new file in zones/ and one import line here, plus, only if it needs them:
+// a row in `tunnels` (zones/passages.js) for a far-off place reached by a dark passage; an entry in `skies` (sky.js) and a key
+// in `skyOnly` (build.js) for a new sky; its zone id in a neighbouring pool's seen-from list (that pool's place file) if the
+// pool shows through a doorway from it.
 import { merge } from './build.js';
 import './zones/backrooms.js';
 import './zones/poolhall.js';
