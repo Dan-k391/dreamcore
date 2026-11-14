@@ -12,8 +12,6 @@
   #h { position: fixed; left: 0; right: 0; bottom: 20px; text-align: center; pointer-events: none; color: #fff;
        font: 13px Georgia, serif; letter-spacing: .12em; text-shadow: 0 0 8px #000 }
   #x { position: fixed; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px; border-radius: 50%; background: rgba(255,255,255,.55); pointer-events: none }
-  .e { position: fixed; top: 0; bottom: 0; left: 0; width: 7%; pointer-events: none; opacity: 0; transition: opacity .2s; background: linear-gradient(90deg, rgba(255,255,255,.14), transparent) }
-  #eR { left: auto; right: 0; transform: scaleX(-1) }
   #o b { display: block; font-weight: 300; font-size: 46px; letter-spacing: .55em; margin-left: .55em }
 </style>
 <script type="importmap">
@@ -24,8 +22,8 @@
 </script>
 </head>
 <body>
-<div id="h" hidden>this preview pane blocks mouse capture — move the mouse to look; the lit strip at the left or right edge keeps turning · open in Chrome or Edge for full mouse look</div>
-<div id="x" hidden></div><div id="eL" class="e"></div><div id="eR" class="e"></div>
+<div id="h" hidden>this preview pane can't capture the mouse, so mouse look stops at its edges — Q / E turn further · for full mouse look open localhost:8123 in Chrome or Edge</div>
+<div id="x" hidden></div>
 <button id="o"><b>dreamcore</b><span id="s">loading…</span></button>
 <script type="module">
 import * as THREE from 'three';
@@ -525,23 +523,22 @@ function startAudio() {
 // ---------- walking ----------
 const canvas = renderer.domElement, o = document.getElementById('o'), keys = {}, eu = new THREE.Euler(0, 0, 0, 'YXZ');
 const locked = () => document.pointerLockElement === canvas;
-let free = false, edgeX = 0; // free: capture was refused, so the bare cursor steers, and holding it in a side strip keeps turning
-const noLock = () => { free = true; canvas.style.cursor = 'none'; document.getElementById('x').hidden = false; const h = document.getElementById('h'); h.hidden = false; setTimeout(() => h.hidden = true, 12000); };
+let free = false; // free: capture was refused, so the bare cursor steers. Nothing turns the view except the mouse moving or a turn key.
+const noLock = () => { free = true; canvas.style.cursor = 'none'; document.getElementById('x').hidden = false; document.getElementById('h').hidden = false; };
 const turn = (dx, dy) => { eu.setFromQuaternion(camera.quaternion); eu.y -= dx; eu.x = Math.max(-1.5, Math.min(1.5, eu.x - dy)); camera.quaternion.setFromEuler(eu); };
-const setEdge = n => { edgeX = n < .07 ? -1 : n > .93 ? 1 : 0; document.getElementById('eL').style.opacity = +(edgeX < 0); document.getElementById('eR').style.opacity = +(edgeX > 0); };
-o.onclick = () => { o.style.display = 'none'; sfx || startAudio(); canvas.requestPointerLock()?.catch(noLock); };
+// Raw (unadjusted) movement avoids the random jumps Windows cursor acceleration and display scaling cause under capture.
+const capture = () => canvas.requestPointerLock({ unadjustedMovement: true })?.catch(e => e.name === 'NotSupportedError' ? canvas.requestPointerLock()?.catch(noLock) : noLock());
+o.onclick = () => { o.style.display = 'none'; sfx || startAudio(); capture(); };
 document.addEventListener('pointerlockerror', noLock);
 document.addEventListener('pointerlockchange', () => { if (!locked()) o.style.display = ''; }); // Esc pauses
 addEventListener('mousemove', e => { // mouse look: captured pointer where the browser allows it, bare cursor movement where it doesn't
   if (!locked() && !free) return;
   const m = free ? 60 : 250, cl = v => Math.max(-m, Math.min(m, v)); // drop the one-event jumps browsers report on re-entry or under capture
   turn(cl(e.movementX) * .0022, cl(e.movementY) * .0022);
-  if (free) setEdge(e.clientX / innerWidth);
 });
-for (const ev of ['mouseleave', 'mouseout', 'blur']) addEventListener(ev, e => { if (!e.relatedTarget) setEdge(.5); }, true); // cursor left the page: stop turning
 addEventListener('keydown', e => { keys[e.code] = 1; if (e.code === 'Space') e.preventDefault(); if (e.code === 'KeyM') sfx?.mute(); });
 addEventListener('keyup', e => keys[e.code] = 0);
-document.getElementById('s').textContent = 'click to enter  ·  wasd walk  ·  mouse look  ·  space jump  ·  shift run  ·  m mute';
+document.getElementById('s').textContent = 'click to enter  ·  wasd walk  ·  mouse look  ·  q / e turn  ·  space jump  ·  shift run  ·  m mute';
 
 function collide(p, R = .3) { // push the player circle out of every wall box along the shallowest axis
   for (const [x1, z1, x2, z2] of colliders) if (p.x > x1 - R && p.x < x2 + R && p.z > z1 - R && p.z < z2 + R) {
@@ -561,8 +558,7 @@ renderer.setAnimationLoop(() => {
   const ground = floorH(p.x, p.z), speed = (k('ShiftLeft') ? 4 : 1.9) * (ground < -.5 ? .55 : 1); // wading is slower
   vel.x += ((k('KeyD') - k('KeyA')) * speed - vel.x) * ease;
   vel.y += (((k('KeyW') | k('ArrowUp')) - (k('KeyS') | k('ArrowDown'))) * speed - vel.y) * ease;
-  camera.rotateOnWorldAxis(UP, (k('ArrowLeft') - k('ArrowRight')) * dt * 1.6);
-  if (edgeX) turn(edgeX * 1.8 * dt, 0);
+  camera.rotateOnWorldAxis(UP, ((k('ArrowLeft') | k('KeyQ')) - (k('ArrowRight') | k('KeyE'))) * dt * 2.2);
   const yaw = eu.setFromQuaternion(camera.quaternion).y, sn = Math.sin(yaw), cs = Math.cos(yaw);
   p.x += (vel.x * cs - vel.y * sn) * dt; p.z += (-vel.x * sn - vel.y * cs) * dt;
   collide(p);
