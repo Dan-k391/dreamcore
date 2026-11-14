@@ -3,52 +3,53 @@ import * as THREE from 'three';
 import { scene, camera, uTime, sunDir, dry, zones, defZone } from '../core.js';
 import { hash, noise, fbm, ss, makeTex, concrete } from '../tex.js';
 import { M, P, wallMat, paintedBall } from '../mat.js';
-import { colliders, flats, seeThrough, skyOnly, onSun, loose, add, block, box, solid, round, flight, tube, lit } from '../build.js';
-import { post } from '../props/lights.js';
+import { colliders, flats, seeThrough, skyOnly, onSun, loose, add, block, box } from '../build.js';
+import { streetLamp } from '../props/lights.js';
 import { doorway } from '../props/metalwork.js';
+import { swingSet, slide, roundabout, springRider } from '../props/play.js';
+import { parkBench, picnicTable, fence } from '../props/garden.js';
+import { kerb, steps } from '../props/structure.js';
 
 defZone('fD', { ...dry, step: 'carpet', sky: 'hill', air: 1, grp: 'f', k: 1, exp: .3, fog: [.72, .82, .95, .002], sat: 1.15, bloom: .07, shaft: .04, wet: 0, box: [-50, 665.6, 58, 760], probe: [4, 6, 690] });
 // ---------- the field: reached through the dark passage at the end of the hotel hallway ----------
 // Rolling ground, written once for the walking floor and once for the shaders that plant grass on it. Flat at the door and at the playground, rising to a rim all round.
 const hill = (x, z) => { const h = (3 + 2.2 * Math.sin(x * .07 + 1) * Math.cos(z * .06) + 1.4 * Math.sin(x * .13 + z * .11) + .5 * Math.sin(x * .31) * Math.cos(z * .27) + 12 * ss(40, 62, Math.hypot(x - 4, z - 712)) ** 2) * ss(5, 22, Math.hypot(x - 3.8, z - 665.6));
-  return 3.2 + (h - 3.2) * ss(7, 14, Math.hypot(x + 18, z - 705)); };
+  return 3.2 + (h - 3.2) * ss(10, 18, Math.hypot(x + 18, z - 705)); };
 const hillGLSL = `float hillH(vec2 p) { float r = smoothstep(40., 62., distance(p, vec2(4., 712.)));
   float h = (3. + 2.2 * sin(p.x * .07 + 1.) * cos(p.y * .06) + 1.4 * sin(p.x * .13 + p.y * .11) + .5 * sin(p.x * .31) * cos(p.y * .27) + 12. * r * r) * smoothstep(5., 22., distance(p, vec2(3.8, 665.6)));
-  return 3.2 + (h - 3.2) * smoothstep(7., 14., distance(p, vec2(-18., 705.))); }`;
+  return 3.2 + (h - 3.2) * smoothstep(10., 18., distance(p, vec2(-18., 705.))); }`;
 let grass;
 { const z = zones.fD, W = wallMat(z, 0xf4f1ea), G = M(z, 'grassGround'), stone = P(z, { ...concrete, color: 0xd8d2c4 }),
-    iron = P(z, { color: 0x24302c, metalness: .7, roughness: .45 }), red = P(z, { color: 0xc8322c, roughness: .35 }), blue = P(z, { color: 0x2f6fc0, roughness: .35 }), yel = P(z, { color: 0xe8b820, roughness: .35 }),
-    wood = P(z, { color: 0x7a5a3c, roughness: .7 }), frost = P(z, { color: 0xfff6e0, roughness: .15, emissive: 0xffe2a8, emissiveIntensity: .5 }), sand = wallMat(z, 0xb39a68, { roughness: 1 }), y0 = 3.2;
+    red = P(z, { color: 0xc8322c, roughness: .35 }), blue = P(z, { color: 0x2f6fc0, roughness: .35 }), y0 = 3.2;
   const g = new THREE.PlaneGeometry(180, 180, 240, 240).rotateX(-Math.PI / 2).translate(4, 0, 712), q = g.attributes.position;
   for (let i = 0; i < q.count; i++) { q.setY(i, hill(q.getX(i), q.getZ(i))); g.attributes.uv.setXY(i, q.getX(i), q.getZ(i)); }
   g.computeVertexNormals(); const land = new THREE.Mesh(g, G); land.castShadow = land.receiveShadow = true; scene.add(land);
   flats.push([-60, 665.6, 70, 790, hill]); colliders.push([-46, 665, -44, 760], [52, 665, 54, 760], [-46, 757, 54, 759], [-90, 665.2, 2.8, 665.65], [4.8, 665.2, 98, 665.65]); // the hills climb higher than the end wall either side of the door: it stops you at any height
   box(W, -90, -3, 665.2, 2.8, 9, 665.65); box(W, 4.8, -3, 665.2, 98, 9, 665.65); box(W, 2.8, 2.4, 665.2, 4.8, 9, 665.65); // one long white wall across the hills, and the door you came through
   block(stone, 2, -.2, 665.65, 5.6, .03, 668.6);
-  for (let i = 0; i < 5; i++) { const x = 1.2 - 3.6 * i, zc = 672 + 6.6 * i; post(iron, frost, x, hill(x, zc), zc, .6, -.8); } // lamps leading to the playground
-  // playground on its patch of sand: swings, a roundabout, a seesaw
-  add(sand, new THREE.CylinderGeometry(7.3, 7.3, .08, 64).translate(-18, y0 + .02, 705)); round(-18, 705, 7.3, y0 - .5, y0 + .06);
-  for (const x of [-22.2, -18.6]) for (const k of [-1, 1]) { tube([[x, y0 + 2.5, 702], [x, y0 - .3, 702 + k * 1.1]], .04, 8, red); // the swing frame's legs, solid in five lengths down their slant
-    for (let i = 0; i < 5; i++) round(x, 702 + k * 1.1 * (i + .5) / 5, .05, y0 - .3 + 2.8 * (1 - (i + 1) / 5), y0 - .3 + 2.8 * (1 - i / 5) + .05); }
-  solid(-22.25, y0 + 2.45, 701.95, -18.55, y0 + 2.55, 702.05); // the top bar
-  tube([[-22.2, y0 + 2.5, 702], [-18.6, y0 + 2.5, 702]], .04, 8, red);
-  for (const x of [-21.3, -19.5]) { for (const k of [-.22, .22]) block(iron, x + k - .006, y0 + .55, 701.994, x + k + .006, y0 + 2.5, 702.006); block(blue, x - .26, y0 + .5, 701.9, x + .26, y0 + .55, 702.1); solid(x - .26, y0 + .5, 701.9, x + .26, y0 + 2.45, 702.1); } // a seat on its chains: too narrow to stand between them
-  add(yel, new THREE.CylinderGeometry(1.25, 1.25, .08, 40).translate(-14.5, y0 + .42, 707.5)); add(iron, new THREE.CylinderGeometry(.06, .06, 1.2, 12).translate(-14.5, y0 + .6, 707.5));
-  for (let i = 0; i < 4; i++) add(red, new THREE.TorusGeometry(.55, .022, 8, 24, Math.PI).translate(.6, .46, 0).rotateY(i * Math.PI / 2 + .4).translate(-14.5, y0, 707.5));
-  round(-14.5, 707.5, 1.25, y0, y0 + .46); round(-14.5, 707.5, .06, y0, y0 + 1.2); // the roundabout's deck, to stand on, and its middle pole
-  add(blue, new THREE.BoxGeometry(3.4, .06, .26).rotateZ(.2).translate(-21, y0 + .55, 708.5)); add(iron, new THREE.CylinderGeometry(.05, .05, .5, 10).rotateX(Math.PI / 2).translate(-21, y0 + .52, 708.5));
-  for (const k of [-.14, .14]) block(iron, -21.03, y0, 708.5 + k - .02, -20.97, y0 + .55, 708.5 + k + .02);
-  for (let i = 0; i < 6; i++) { const a = -21 - 1.665 + .555 * i, t = Math.tan(.2); solid(a, y0 + .55 + (a + 21) * t - .035, 708.37, a + .555, y0 + .55 + (a + .555 + 21) * t + .035, 708.63); } // the seesaw's plank in six steps up its slope
-  solid(-21.05, y0, 708.34, -20.95, y0 + .5, 708.66); // and its pivot
-  // a white staircase that climbs to nothing, two doors standing open on the grass, a bench
-  { const x = 22, zc = 694, y = hill(x, zc + .5) - .1; flight(W, x - 1, zc, x + 1, zc + 6.4, 'z', 1, y, 16, .25, y - 6); }
+  // a tarmac path from the door down to the playground, draped on the hill: straight runs with round joins (the grass below keeps off the same shape)
+  { const pts = [[3.8, 668.3], [2.6, 672.2], [-11.9, 697.6], [-11.9, 706.6]], hw = .7, st = [], pos = [], idx = [];
+    for (let i = 0; i + 1 < pts.length; i++) { const [x1, z1] = pts[i], [x2, z2] = pts[i + 1], L = Math.hypot(x2 - x1, z2 - z1), n = Math.ceil(L / .4), nx = -(z2 - z1) / L, nz = (x2 - x1) / L;
+      if (i) { const p = st[st.length - 1], a0 = Math.atan2(p[3], p[2]), a1 = Math.atan2(nz, nx); let da = a1 - a0; da -= 2 * Math.PI * Math.round(da / (2 * Math.PI));
+        for (let k = 1; k < 8; k++) st.push([x1, z1, Math.cos(a0 + da * k / 8), Math.sin(a0 + da * k / 8)]); } // the round join, turning about the corner
+      for (let k = 0; k <= n; k++) st.push([x1 + (x2 - x1) * k / n, z1 + (z2 - z1) * k / n, nx, nz]); }
+    for (const [x, zc, nx, nz] of st) for (const o of [-1, -.85, 0, .85, 1]) { const px = x + nx * o * hw, pz = zc + nz * o * hw; pos.push(px, hill(px, pz) + (Math.abs(o) < 1 ? .022 : -.004), pz); } // the edge tucked into the ground
+    for (let i = 0; i + 1 < st.length; i++) for (let k = 0; k < 4; k++) { const a = i * 5 + k; idx.push(a, a + 1, a + 5, a + 1, a + 6, a + 5); }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(pos.length / 3 * 2, 2)); g.setIndex(idx); g.computeVertexNormals(); add(M(z, 'asphalt'), g);
+    block(M(z, 'asphalt'), -11.1, y0 - .1, 704.2, -9.95, y0 + .02, 706.6); } // the bench's hardstanding off the end of the path
+  for (const s of [2, 9.5, 17, 24.5]) { const t = s / 29.27, x = 2.6 - 14.4 * t + .87 * 1.05, zc = 672.2 + 25.4 * t + .493 * 1.05; streetLamp(z, x, hill(x, zc), zc, 2.626, { on: false }); } // crook-neck lamps along the path's east side, lanterns over it
+  // the playground: a bark-mulch safety surface set flush in a precast edging, swings, a slide, a roundabout and a spring rider; a low timber fence round it with a gap for the path
+  box(M(z, 'mulch'), -23.375, y0 - .1, 701.125, -12.625, y0 + .012, 708.875);
+  { const c = [[-12.5, 701], [-23.5, 701], [-23.5, 709], [-12.5, 709]], ky = y0 - .105; // each run starts one kerb width in, so the corners butt instead of overlapping
+    for (let i = 0; i < 4; i++) { const [x1, z1] = c[i], [x2, z2] = c[(i + 1) % 4], L = Math.hypot(x2 - x1, z2 - z1), dx = (x2 - x1) / L, dz = (z2 - z1) / L; kerb(z, [[x1 + dx * .125, ky, z1 + dz * .125], [x2, ky, z2]]); } }
+  swingSet(z, -20.5, y0 + .012, 703); slide(z, -14.5, y0 + .012, 703.2); roundabout(z, -17.2, y0 + .012, 707.2, .4); springRider(z, -21.5, y0 + .012, 707.4, -.5);
+  fence(z, [[-12.6, y0, 700.2], [-24.4, y0, 700.2], [-24.4, y0, 709.8], [-9, y0, 709.8], [-9, y0, 700.2], [-10.8, y0, 700.2]]);
+  parkBench(z, -10.5, y0 + .02, 705.4, -Math.PI / 2); // on its hardstanding, facing the swings
+  picnicTable(z, -16.5, hill(-16.5, 712.6), 712.6, .15);
+  // a white stair that climbs to nothing, two doors standing open on the grass
+  steps(z, 22, 1.24, 697.2, Math.PI, { n: 16, r: .25, g: .4, w: 2, color: 0xece8e0 });
   doorway(W, red, 14, hill(14, 716), 716, .5); doorway(W, blue, -30, hill(-30, 728), 728, -.9, 1.2);
-  { const x = 6, zc = 684, y = hill(x, zc); for (let i = 0; i < 4; i++) block(wood, x - .9, y + .44, zc - .22 + .12 * i, x + .9, y + .47, zc - .13 + .12 * i);
-    for (let i = 0; i < 2; i++) block(wood, x - .9, y + .62 + .14 * i, zc - .27, x + .9, y + .72 + .14 * i, zc - .24);
-    for (const k of [-.75, .75]) { block(iron, x + k - .025, y - .2, zc - .28, x + k + .025, y + .9, zc - .23); block(iron, x + k - .025, y - .2, zc + .2, x + k + .025, y + .44, zc + .25); block(iron, x + k - .025, y + .4, zc - .25, x + k + .025, y + .44, zc + .22); }
-    solid(x - .9, y + .4, zc - .25, x + .9, y + .47, zc + .25); solid(x - .9, y + .47, zc - .28, x + .9, y + .9, zc - .23); // the seat and the back
-    for (const k of [-.75, .75]) solid(x + k - .025, y - .2, zc - .28, x + k + .025, y + .4, zc + .25); }
-  { const x = -10.6, zc = 700.4, r = .17; // a rubber ball left on the grass by the playground: red, with a darker seam round it each way
+  { const x = -8.2, zc = 702.5, r = .17; // a rubber ball left on the grass by the playground: red, with a darker seam round it each way
     loose.push({ mesh: paintedBall(z, r, (a, b, c) => Math.abs(b) < .045 || Math.abs(a) < .045 ? 0x7a1a14 : 0xc8322c, { roughness: .55 }), r, pos: [x, hill(x, zc) + r, zc], region: [-44, 665.7, 52, 757], bounce: .45, grip: 1.3, spin: 1, solid: 1, slope: 1 }); }
   // Grass: blades planted in a square that follows the camera (each blade draws its nearest copy), so it is dense underfoot without covering the whole field.
   const N = 430, seeds = new Float32Array(N * N * 3), blade = new THREE.InstancedBufferGeometry();
@@ -59,10 +60,12 @@ let grass;
     vertexShader: `#include <packing>
       attribute vec3 aSeed; uniform vec3 uCam, uSun; uniform float uTime; uniform mat4 uSM; uniform sampler2D tShadow; varying vec3 vCol;
       ${hillGLSL}
+      float segD(vec2 p, vec2 a, vec2 b) { vec2 d = b - a; return distance(p, a + d * clamp(dot(p - a, d) / dot(d, d), 0., 1.)); }
       void main() { const float L = 40.;
         vec2 b = aSeed.xy * L; b += L * floor((uCam.xz - b) / L + .5);
         float r = aSeed.z, a = r * 44., t = position.y, far = distance(b, uCam.xz);
-        float keep = smoothstep(L * .5, L * .5 - 9., far) * smoothstep(7., 8.2, distance(b, vec2(-18., 705.))) * step(665.8, b.y) * (abs(b.x - 3.8) < 1.9 && b.y < 668.7 ? 0. : 1.);
+        float keep = smoothstep(L * .5, L * .5 - 9., far) * step(665.8, b.y) * (abs(b.x - 3.8) < 1.9 && b.y < 668.7 || abs(b.x + 18.) < 5.66 && abs(b.y - 705.) < 4.16 || abs(b.x - 22.) < 1.05 && b.y > 693.95 && b.y < 700.45 || b.x > -11.15 && b.x < -9.9 && b.y > 704.15 && b.y < 706.65 ? 0. : 1.)
+          * smoothstep(.6, .78, min(min(segD(b, vec2(3.8, 668.3), vec2(2.6, 672.2)), segD(b, vec2(2.6, 672.2), vec2(-11.9, 697.6))), segD(b, vec2(-11.9, 697.6), vec2(-11.9, 706.6)))); // off the playground, stair, path and hardstanding
         float tall = (.16 + .2 * fract(r * 13.) + .12 * sin(b.x * .9) * sin(b.y * .7)) * keep; // taller in clumps
         vec2 d = vec2(cos(a), sin(a)); float wind = .16 + .13 * sin(uTime * 1.3 + b.x * .33 + b.y * .27) + .05 * sin(uTime * 3.3 + r * 50.);
         vec3 root = vec3(b.x, hillH(b), b.y), p = root + vec3(d.x, 0., d.y) * position.x * .017 * keep + vec3(0., t * tall, 0.) + (vec3(.8, 0., .6) * wind + vec3(d.y, 0., -d.x) * .3) * t * t * tall;
