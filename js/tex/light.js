@@ -43,11 +43,12 @@ set('opal', .5, 512, 256, .3, 0, `
   t = (.44 + .34 * led + .2 * mot + .04 * (grain - .5)) * (1. - .12 * dust);
   c = mix(mix(vec3(.87, .85, .78), vec3(.86, .8, .66), .5 * mot), vec3(.6, .56, .48), .35 * dust);
   r = .26 + .06 * mot + .15 * dust; h = .015 * fbm(uv * 300., vec2(300), 2, 3) + .01 * dust;`);
-// Acid-etched opal glass: an isotropic frost (globes are box- or triplanar-projected, so nothing directional), thicker and
-// thinner etch in soft patches, a fine sugary grain.
+// Acid-etched opal glass on a lamp's own UVs (u round it, v from the bottom, 0, to the neck, 1): the lamp inside lights it most at
+// mid-height and least up by the neck in the fitter's shadow; the etch is thicker and thinner in soft patches, with a sugary grain.
 set('globe', .1, 256, 256, .55, 0, `
-  float mo = fbm(uv * 5., vec2(5), 4, 2), g = vn(uv * 120., vec2(120), 3), g2 = vn(uv * 60., vec2(60), 4);
-  t = .58 + .3 * mo + .1 * (g - .5) + .08 * (g2 - .5);
+  float mo = fbm(uv * 5., vec2(5), 4, 2), g = vn(uv * 120., vec2(120), 3), g2 = vn(uv * 60., vec2(60), 4), v = uv.y;
+  float core = exp(-pow((v - .46) / .24, 2.)), neck = ss(.72, 1., v);
+  t = (.34 + .56 * core + .04 * (1. - ss(0., .2, v))) * (1. - .45 * neck) * (1. + .12 * (mo - .5) + .06 * (g - .5) + .04 * (g2 - .5));
   c = mix(vec3(.88, .86, .8), vec3(.86, .82, .72), mo); r = .5 + .1 * g + .05 * mo; h = .015 * g + .01 * g2;`);
 // T8 LED tubes, four around a 75 mm circumference per tile: SMD LEDs on a 10 mm pitch seen through the frosted half, brightest
 // facing out and falling around the cylinder, a clipped seam, the aluminium housing behind.
@@ -61,9 +62,9 @@ set('ledTube', .3, 512, 512, .25, 0, `
 
 
 // materials: name, texture set, shader options (see mat.js)
-mat('troffer', 'troffer', { color: 0x6a6a66, emit: [0xffd6a0, 6.5], fine: .004 }); // fine: the 4 mm prisms fade out down a room instead of fringing
+mat('troffer', 'troffer', { color: 0x6a6a66, emit: [0xffd29a, 6.6], fine: .004 }); // fine: the 4 mm prisms fade out down a room instead of fringing
 mat('trofferOff', 'troffer', { color: 0xc4c0b2, fine: .004 }); // light tint: the dark tubes show through the lens, not stripes
 mat('opalPanel', 'opal', { color: 0x9a9a96, emit: [0xffd29a, 4.5], fine: .05 });
 mat('ledTube', 'ledTube', { color: 0x9a9a96, emit: [0xffd09a, 8], fine: .01 }); // brighter: the housing third of each tube is dark
-mat('frostedGlobe', 'globe', { color: 0x9a9a96, emit: [0xffc684, 4.7], fine: .002 });
+mat('frostedGlobe', 'globe', { color: 0x9a9a96, emit: [0xffc684, 3.4], fine: .002 });
 mat('backlitPanel', 'opal', { color: 0x9a9a96, emit: [0xffd8a8, 3.2], fine: .05 });

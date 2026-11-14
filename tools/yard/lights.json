@@ -1,3 +1,15 @@
 [
- { "name": "lights-plot", "hash": "-692,-685,0,-0.2", "lift": 1.2 }
+ { "name": "lights-plot", "hash": "-692,-685,0,-0.2", "lift": 1.2 },
+ { "name": "troffer-3m", "hash": "-692.4,-694.7,0,0.4" },
+ { "name": "troffer-close", "hash": "-693.1,-696.75,0,1.1", "lift": 0.58 },
+ { "name": "troffer-dead-close", "hash": "-691.9,-696.75,0,1.1", "lift": 0.58 },
+ { "name": "batten-3m", "hash": "-692.4,-693.3,0.3,0.45" },
+ { "name": "batten-close", "hash": "-692.0,-695.5,0.9,0.75", "lift": 0.55 },
+ { "name": "street-3m", "hash": "-696.6,-694.2,0.35,0.32" },
+ { "name": "street-close", "hash": "-697.25,-697.05,0.25,0.1", "lift": 2.05 },
+ { "name": "street-base-close", "hash": "-697.75,-697.05,0.5,-0.85", "lift": -0.6 },
+ { "name": "sconce-3m", "hash": "-696.1,-696.9,0.05,0.1" },
+ { "name": "sconce-close", "hash": "-696.15,-699.45,0.35,-0.05", "lift": 0.35 },
+ { "name": "globe-3m", "hash": "-686.4,-693.2,-0.15,0.35" },
+ { "name": "globe-close", "hash": "-687,-695.4,0,0.05", "lift": 1.6 }
 ]
