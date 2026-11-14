@@ -20,7 +20,7 @@ const turned = (cx, cz, hx, hz, ry, y1, y2) => { // the solid of a box of half-s
 };
 const loose = []; // loose balls, moved by physics.js: { mesh (a Mesh, or an InstancedMesh for many), r, pos [x, y, z per ball], region [x1, z1, x2, z2] they live in,
 // bounce, grip (rolling resistance, m/s²), and if they apply: float (density against water's), spin (it rolls visibly), solid (it stops the body),
-// slope (follows a sloping floor), pour (settle this many steps at load), seen (zone ids it is drawn from) }
+// slope (follows a sloping floor), pour (settle this many steps at load), seen (zone ids it is drawn from), cap (top speed, m/s; 7 if not given) }
 const flats = []; // [x1, z1, x2, z2, (x, z) => height]: floors that are not at 0, pools included (each pool place registers its own). A later one overrides an earlier one
 const seeThrough = [], skyOnly = { hill: [], dusk: [], night: [] }; // things the AO pass must skip; things only one sky has
 const warps = []; // [x1, z1, x2, z2, dx, dz]: standing in the rectangle moves you by the offset
@@ -85,7 +85,8 @@ function slab(mat, axis, at, depth, a1, a2, y1, y2, cuts, through = false) { // 
   const pier = b => { if (b - a > .01) part(a, b, y1, y2); };
   if (through) for (const [, c, w, top] of cuts.filter(c => c[0] === 'arch').sort((p, q) => p[1] - q[1])) {
     pier(c - w / 2); a = c + w / 2;
-    for (let i = 0; i < 8; i++) { const u = Math.max(Math.abs(i / 4 - 1), Math.abs((i + 1) / 4 - 1)) * w / 2; part(c - w / 2 + w * i / 8, c - w / 2 + w * (i + 1) / 8, top - w / 2 + Math.sqrt(Math.max(0, w * w / 4 - u * u)), y2); }
+    for (let i = 0; i < 8; i++) { const u = Math.max(Math.abs(i / 4 - 1), Math.abs((i + 1) / 4 - 1)) * w / 2; // never below head height (the body ducks its top 5 cm), so a low arch still lets you through
+      part(c - w / 2 + w * i / 8, c - w / 2 + w * (i + 1) / 8, Math.max(y1 + 1.7, top - w / 2 + Math.sqrt(Math.max(0, w * w / 4 - u * u))), y2); }
   }
   pier(a2);
 }

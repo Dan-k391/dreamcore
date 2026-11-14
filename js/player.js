@@ -66,7 +66,7 @@ console.assert(floorH(0, -12) === -1.2 && floorH(0, -6.2) === -.3 && floorH(15, 
   && (q => collide(q) && q.z > 1.29)(V(5, 0, .6)) && Object.values(zones).every(z => inR(z.probe.x, z.probe.z, ...z.box)) && emitters.every(e => inR(e.p.x, e.p.z, ...e.zone.box)), 'level self-check failed');
 
 const vel = new THREE.Vector2(), UP = new THREE.Vector3(0, 1, 0);
-let stride = 0, foot = 0, feet = floorH(camera.position.x, camera.position.z), vy = 0, air = false, grip = false, drop = 0, simT = 0; // feet: height of the player's soles
+let stride = 0, foot = 0, feet = floorH(camera.position.x, camera.position.z), vy = 0, air = false, grip = false, drop = 0, simT = 0, hitP = 0, splashP = false, fallP = 0; // feet: height of the player's soles
 const place = (x, z, yaw, pitch) => { // teleport: stand at (x, z) facing that way, at rest
   camera.position.x = x; camera.position.z = z; camera.rotation.set(pitch, yaw, 0, 'YXZ');
   feet = floorH(x, z); vy = 0; vel.set(0, 0); air = grip = false;
@@ -120,10 +120,11 @@ const frame = dt => { // one game frame of dt seconds: the loop below passes the
   const wake = pool && ground < 0 && !air ? Math.min(vel.length(), 4) * .006 : 0; // wading leaves a wake; `drop` is a pending splash
   // 60 Hz: the loose things, then the waves, with the ripples both leave
   simT += dt; const steps = Math.min(4, Math.floor(simT * 60 + 1e-6)); simT = steps === 4 ? 0 : simT - steps / 60; // as many as the frame's time holds; a long stall is dropped, not caught up
-  const me = { x: p.x, z: p.z, feet, vx: (p.x - ox) / dt, vz: (p.z - oz) / dt, vy, hit, splash };
-  for (let i = 1; i <= steps; i++) { // the body moves through the frame's steps, so a slow frame doesn't hit things harder
-    if (!me.shoved) { me.x = ox + (p.x - ox) * i / steps; me.z = oz + (p.z - oz) * i / steps; }
-    stepLoose(me); me.hit = 0; me.splash = false;
+  hitP = Math.max(hitP, hit); splashP ||= splash; fallP = Math.min(fallP, landed ? -hit : vy); // held until a step runs: above 60 Hz most frames run none
+  const me = { x: p.x, z: p.z, feet, vx: (p.x - ox) / dt, vz: (p.z - oz) / dt, vy: fallP < 0 ? fallP : vy, hit: hitP, splash: splashP };
+  for (let i = 1; i <= steps; i++) { // the body's place and height move through the frame's steps, so a slow frame doesn't hit things harder or skip them
+    if (!me.shoved) { me.x = ox + (p.x - ox) * i / steps; me.z = oz + (p.z - oz) * i / steps; } me.feet = was + (feet - was) * i / steps;
+    stepLoose(me); me.hit = 0; me.splash = false; hitP = 0; splashP = false; fallP = 0;
     for (const w of ponds) if (w.visible) ripple(w, [[p.x, p.z, wake + drop], ...wakes.filter(k => k[0] === w).map(k => k.slice(1))]);
     drop = 0;
   }

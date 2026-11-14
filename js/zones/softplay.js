@@ -24,7 +24,7 @@ defZone('sP', { ...dry, step: 'carpet', wade: 1, grp: 'm', k: 1.15, exp: .3, fog
     const n = pos.length / 3, balls = new THREE.InstancedMesh(new THREE.SphereGeometry(r, 14, 10), P(z, { roughness: .3 }), n), cols = [0xff5d73, 0x4db8ff, 0xffd84a, 0x58d68d, 0xff9f43, 0xffffff].map(c => new THREE.Color(c));
     for (let i = 0; i < n; i++) balls.setColorAt(i, cols[Math.floor(hash(i, 3) * 6)]);
     balls.castShadow = balls.receiveShadow = true; scene.add(balls);
-    loose.push({ mesh: balls, r, pos, region: [-41, 28.4, -27, 43.6], seen: ['sP', 'mL'], bounce: .35, grip: 2.5, pour: 240 });
+    loose.push({ mesh: balls, r, pos, region: [-41, 28.4, -27, 43.6], seen: ['sP', 'mL'], bounce: .35, grip: 2.5, pour: 240, cap: 3 }); // cap: no ball flies faster, so a jump in leaves most of them in the pit
   }
   flight(pad[1], -32.6, 31, -31, 33, 'z', -1, 0, 4); box(pad[2], -32.6, 0, 29, -31, 1, 31); flats.push([-32.6, 29, -31, 31, () => 1]); // steps up a block beside the pit; jump off it
   for (const [x, zc, s, c] of [[-30, 41, .7, 0], [-29.2, 41.2, .5, 3], [-30.1, 41, .45, 2], [-37, 41.5, .8, 1], [-36.1, 41.6, .5, 0]]) box(pad[c], x - s / 2, c === 2 ? .7 : 0, zc - s / 2, x + s / 2, (c === 2 ? .7 : 0) + s, zc + s / 2); // foam cubes

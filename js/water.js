@@ -134,7 +134,8 @@ function twin(x1, z1, x2, z2) {
     }
     for (let j = 0; j < nz; j++) for (let i = 1; i < nx; i++) { const k = i + j * (nx + 1); u[k] = (u[k] - G * t * (h[i + j * nx] - h[i - 1 + j * nx]) / dx) * .993; }
     for (let j = 1; j < nz; j++) for (let i = 0; i < nx; i++) { const k = i + j * nx; v[k] = (v[k] - G * t * (h[k] - h[k - nx]) / dz) * .993; }
-    for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) { const k = i + j * nx; h[k] -= D * t * ((u[k + j + 1] - u[k + j]) / dx + (v[k + nx] - v[k]) / dz); }
+    let s = 0; for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) { const k = i + j * nx; s += h[k] -= D * t * ((u[k + j + 1] - u[k + j]) / dx + (v[k + nx] - v[k]) / dz); }
+    s /= h.length; for (let k = 0; k < h.length; k++) h[k] -= s; // the drops add water and the closed sides keep it: hold the mean level at the still surface, as the drawn water's is
   };
   T.sample = (x, z) => { // -> T.at: height above the still surface, its slope, and the water's flow, at (x, z)
     const fx = Math.min(nx - 1.001, Math.max(0, (x - x1) / dx - .5)), fz = Math.min(nz - 1.001, Math.max(0, (z - z1) / dz - .5)), i = fx | 0, j = fz | 0, a = fx - i, b = fz - j;
@@ -151,7 +152,7 @@ function ripple(w, drops) { // one 60Hz step of a pool's waves, with up to DROPS
   simMat.uniforms.uDrop.value.forEach((d, i) => { const [x, z, p] = drops[i] || [0, 0, 0]; d.set((x - w.rect.x) / (w.rect.z - w.rect.x), (z - w.rect.y) / (w.rect.w - w.rect.y), p); });
   renderer.setRenderTarget(w.sim[1]); simQuad.render(renderer); renderer.setRenderTarget(null);
   w.sim.reverse(); w.material.uniforms.tSim.value = w.tileU.uSim.value = w.sim[0].texture;
-  w.twin.step(drops.slice(0, DROPS));
+  if (w.twin.used) w.twin.step(drops.slice(0, DROPS)); // only a pool with something floating on it (physics.js marks them) needs the copy
 }
 
 export { ponds, ripple };

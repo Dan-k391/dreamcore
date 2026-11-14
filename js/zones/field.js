@@ -21,7 +21,7 @@ let grass;
   const g = new THREE.PlaneGeometry(180, 180, 240, 240).rotateX(-Math.PI / 2).translate(4, 0, 712), q = g.attributes.position;
   for (let i = 0; i < q.count; i++) { q.setY(i, hill(q.getX(i), q.getZ(i))); g.attributes.uv.setXY(i, q.getX(i), q.getZ(i)); }
   g.computeVertexNormals(); const land = new THREE.Mesh(g, G); land.castShadow = land.receiveShadow = true; scene.add(land);
-  flats.push([-60, 665.6, 70, 790, hill]); colliders.push([-46, 665, -44, 760], [52, 665, 54, 760], [-46, 757, 54, 759]);
+  flats.push([-60, 665.6, 70, 790, hill]); colliders.push([-46, 665, -44, 760], [52, 665, 54, 760], [-46, 757, 54, 759], [-90, 665.2, 2.8, 665.65], [4.8, 665.2, 98, 665.65]); // the hills climb higher than the end wall either side of the door: it stops you at any height
   box(W, -90, -3, 665.2, 2.8, 9, 665.65); box(W, 4.8, -3, 665.2, 98, 9, 665.65); box(W, 2.8, 2.4, 665.2, 4.8, 9, 665.65); // one long white wall across the hills, and the door you came through
   block(stone, 2, -.2, 665.65, 5.6, .03, 668.6);
   for (let i = 0; i < 5; i++) { const x = 1.2 - 3.6 * i, zc = 672 + 6.6 * i; post(iron, frost, x, hill(x, zc), zc, .6, -.8); } // lamps leading to the playground

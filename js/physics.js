@@ -56,14 +56,16 @@ function each(g, x, y, z, rad, f) { // f(ball) for every ball whose cell is with
 // list and are not drawn (mesh.count) until the heap moves or the player is down in it.
 function bury(g) {
   if (g.dirty) rebuild(g);
-  const { p, n } = g, hid = new Uint8Array(n);
-  for (let b = 0; b < n; b++) { let above = 0; each(g, p[3 * b], p[3 * b + 1] + .15, p[3 * b + 2], .2, c => { const dy = p[3 * c + 1] - p[3 * b + 1]; if (dy > .05 && dy < .3 && Math.hypot(p[3 * c] - p[3 * b], p[3 * c + 2] - p[3 * b + 2]) < .17) above++; }); hid[b] = above >= 3; }
-  const order = [...Array(n).keys()].sort((a, b) => hid[a] - hid[b] || a - b), col = g.mesh.instanceColor.array.slice();
-  for (const k of ['p', 'o', 'd', 'a', 'v']) { const a = g[k].slice(); order.forEach((b, i) => { g[k][3 * i] = a[3 * b]; g[k][3 * i + 1] = a[3 * b + 1]; g[k][3 * i + 2] = a[3 * b + 2]; }); }
-  for (const k of ['still', 'contact']) { const a = g[k].slice(); order.forEach((b, i) => g[k][i] = a[b]); }
-  order.forEach((b, i) => { col[3 * i] = g.mesh.instanceColor.array[3 * b]; col[3 * i + 1] = g.mesh.instanceColor.array[3 * b + 1]; col[3 * i + 2] = g.mesh.instanceColor.array[3 * b + 2]; });
-  g.mesh.instanceColor.array.set(col); g.mesh.instanceColor.needsUpdate = true;
-  g.shown = n - hid.reduce((s, h) => s + h, 0); g.dirty = true; draw(g, 1);
+  const { p, n, head, next, gx, gy, gz } = g, s = 2 * g.r, hid = new Uint8Array(n), cell = (v, lo, m) => Math.min(m - 1, Math.max(0, Math.floor((v - lo) / s)));
+  for (let b = 0; b < n; b++) { const x = p[3 * b], y = p[3 * b + 1], z = p[3 * b + 2]; let above = 0; // the balls just above it, cell by cell (each() inlined: this runs over the whole heap at once)
+    const i0 = cell(x - .2, g.x1, gx), i1 = cell(x + .2, g.x1, gx), j0 = cell(y - .05, -1.2, gy), j1 = cell(y + .35, -1.2, gy), k0 = cell(z - .2, g.z1, gz), k1 = cell(z + .2, g.z1, gz);
+    for (let k = k0; k <= k1; k++) for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) for (let c = head[i + gx * (j + gy * k)]; c >= 0; c = next[c]) {
+      const dy = p[3 * c + 1] - y, dx = p[3 * c] - x, dz = p[3 * c + 2] - z; if (dy > .05 && dy < .3 && dx * dx + dz * dz < .0289) above++; }
+    hid[b] = above >= 3 ? 1 : 0; }
+  const order = new Int32Array(n); let m = 0; for (const k of [0, 1]) for (let b = 0; b < n; b++) if (hid[b] === k) order[m++] = b; // the shown ones first, each part in its old order
+  for (const a of [g.p, g.o, g.d, g.a, g.v, g.mesh.instanceColor.array]) { const c = a.slice(); for (let i = 0; i < n; i++) { const b = order[i]; a[3 * i] = c[3 * b]; a[3 * i + 1] = c[3 * b + 1]; a[3 * i + 2] = c[3 * b + 2]; } }
+  for (const a of [g.still, g.contact]) { const c = a.slice(); for (let i = 0; i < n; i++) a[i] = c[order[i]]; }
+  g.mesh.instanceColor.needsUpdate = true; g.shown = n - hid.reduce((t, h) => t + h, 0); g.dirty = true; draw(g, 1);
 }
 const wake = (g, b) => { if (g.still[b] >= 30) { g.still[b] = 0; g.awake++; } else g.still[b] = 0; };
 
@@ -72,8 +74,10 @@ const BR = .22;
 function legs(g, b, me) {
   const i = 3 * b, x = g.p[i], y = g.p[i + 1], z = g.p[i + 2], cy = Math.min(me.feet + 1.5, Math.max(me.feet + .2, y)), dx = x - me.x, dy = y - cy, dz = z - me.z, d2 = dx * dx + dy * dy + dz * dz, R = BR + g.r;
   if (d2 >= R * R) return false;
-  const d = Math.sqrt(d2) || 1e-6, k = (R - d) / d;
-  g.p[i] += dx * k; g.p[i + 1] += dy * k; g.p[i + 2] += dz * k;
+  const d = Math.sqrt(d2) || 1e-6, k = (R - d) / d, nx = dx / d, ny = dy / d, nz = dz / d;
+  g.p[i] += dx * k; g.p[i + 1] += dy * k; g.p[i + 2] += dz * k; g.o[i] += dx * k; g.o[i + 1] += dy * k; g.o[i + 2] += dz * k; // being put outside the body is not speed: a deep overlap (a fall beside it) would fire it off
+  const vn = Math.min(me.vx * nx + me.vz * nz, g.float ? 1.5 : 9), own = ((g.p[i] - g.o[i]) * nx + (g.p[i + 1] - g.o[i + 1]) * ny + (g.p[i + 2] - g.o[i + 2]) * nz) / h; // the legs' speed into it (the water between cushions a float)
+  if (own < vn) { const e = (vn - own) * h; g.o[i] -= nx * e; g.o[i + 1] -= ny * e; g.o[i + 2] -= nz * e; } // it moves off at that speed
   return true;
 }
 
@@ -86,12 +90,13 @@ function stepGroup(g, me) {
   const { p, o, v, r } = g;
   if (near && (Math.hypot(me.vx, me.vz) > .05 || Math.abs(me.vy) > .05 || me.hit)) { // moving legs wake what they touch (still ones leave a resting heap be); a landing throws the balls round the feet up and out
     const touch = b => { const i = 3 * b, dx = p[i] - me.x, dz = p[i + 2] - me.z, dy = p[i + 1] - Math.min(me.feet + 1.5, Math.max(me.feet + .2, p[i + 1])), R = BR + r - .003, d = Math.hypot(dx, dz) + .05;
-      if (dx * dx + dy * dy + dz * dz < R * R) { wake(g, b); if (me.vy < -2.5 && dy < .05) { const k = (.5 + .5 * frac(b * .618)) * Math.min(1.5, -me.vy / 4); // falling in: what is under the feet sprays up and out
-        v[i] += dx / d * 2.2 * k; v[i + 1] += (1.6 + 2.6 * frac(b * .377)) * k; v[i + 2] += dz / d * 2.2 * k; } }
-      else if (me.hit > 2.5 && d < .9 && p[i + 1] < me.feet + .6) { wake(g, b); const k = (1 - d / .9) * (.4 + .6 * frac(b * .618)) * Math.min(1.5, me.hit / 4); // and the landing heaves the ones round the legs
-        v[i] += dx / d * 1.8 * k; v[i + 1] += (1.2 + 1.8 * frac(b * .377)) * k; v[i + 2] += dz / d * 1.8 * k; } };
+      if (dx * dx + dy * dy + dz * dz < R * R) { wake(g, b); if (me.vy < -2.5 && dy < .05 && !g.float) { const k = (.5 + .5 * frac(b * .618)) * Math.min(1.2, -me.vy / 4); // falling in: what is under the feet sprays up and out, low enough that most stay in
+        const up = (1.1 + 1.5 * frac(b * .377)) * k; if (v[i + 1] < up) { v[i] += dx / d * 1.1 * k; v[i + 1] = up; v[i + 2] += dz / d * 1.1 * k; } } } // once: a ball already thrown is not thrown again on the next step of the fall
+      else if (me.hit > 2.5 && d < .9 && p[i + 1] < me.feet + .6 && !g.float) { wake(g, b); const k = (1 - d / .9) * (.4 + .6 * frac(b * .618)) * Math.min(1.2, me.hit / 4); // and the landing heaves the ones round the legs
+        v[i] += dx / d * 1 * k; v[i + 1] += (.9 + 1.2 * frac(b * .377)) * k; v[i + 2] += dz / d * 1 * k; } };
     if (many) each(g, me.x, me.feet + .8, me.z, 1, touch); else touch(0);
   }
+  if (g.float && me.splash) { const dx = p[0] - me.x, dz = p[2] - me.z, d = Math.hypot(dx, dz); if (d < 3.5) { wake(g, 0); const k = (1 - d / 3.5) / (d || 1); v[0] += dx * k; v[2] += dz * k; } } // a jump in throws water, and a float on it, outward
   if (!g.awake) return;
   let fast = 0;
   for (let b = 0; b < g.n; b++) if (g.still[b] < 30) { // fall and move
@@ -105,8 +110,9 @@ function stepGroup(g, me) {
     p[i] += v[i] * h; p[i + 1] += v[i + 1] * h; p[i + 2] += v[i + 2] * h;
   }
   for (let it = 0; it < 2; it++) for (let b = 0; b < g.n; b++) if (g.still[b] < 30) { // push out of the world, each other and the legs
-    const i = 3 * b; let x = p[i], y = p[i + 1], z = p[i + 2], hit = 0;
-    const fy = g.floor(x, z); // the floor: along its slope's normal where it slopes (the field), so a ball on a slope rolls down it
+    const i = 3 * b; let x = p[i], y = p[i + 1], z = p[i + 2], hit = 0, fy = g.floor(x, z);
+    if (fy > y - r * .5 && !g.slope) { x = o[i]; z = o[i + 2]; fy = g.floor(x, z); } // a floor rising above half its radius (a step, a block) is a wall to it, not a lift onto its top
+    // the floor: along its slope's normal where it slopes (the field), so a ball on a slope rolls down it
     if (y - r < fy + .01) { let nx = 0, ny = 1, nz = 0; if (g.slope) { nx = g.floor(x - .1, z) - g.floor(x + .1, z); nz = g.floor(x, z - .1) - g.floor(x, z + .1); ny = .2; const l = Math.hypot(nx, ny, nz); nx /= l; ny /= l; nz /= l; }
       const pen = r - (y - fy) * ny; if (pen > 0) { x += nx * pen; y += ny * pen; z += nz * pen; } hit = 1; }
     const cl = g.cells[Math.min(g.cw - 1, Math.max(0, Math.floor((x - g.x1) / .5))) + g.cw * Math.min(g.ch - 1, Math.max(0, Math.floor((z - g.z1) / .5)))];
@@ -121,6 +127,7 @@ function stepGroup(g, me) {
       const w = g.still[c] >= 30 ? 1 : .5 + .4 * dy / d, k = e * w / d, kj = e * (1 - w) / d; // the upper ball gives way more, so a pile carries its weight down to the floor in one step
       p[i] += dx * k; p[i + 1] += dy * k; p[i + 2] += dz * k; p[j] -= dx * kj; p[j + 1] -= dy * kj; p[j + 2] -= dz * kj; });
     if (me.feet !== undefined && legs(g, b, me) && g.solid) g.kick = b + 1;
+    p[i] = Math.min(g.x2 - r, Math.max(g.x1 + r, p[i])); p[i + 2] = Math.min(g.z2 - r, Math.max(g.z1 + r, p[i + 2])); // a ball never leaves its place: its doorways are shut to it, and its solids are only gathered there
     g.contact[b] = hit;
   }
   if (g.solid && g.kick) { // a big ball the walls hold against the legs pushes back: you can't walk through it
@@ -131,6 +138,7 @@ function stepGroup(g, me) {
   for (let b = 0; b < g.n; b++) if (g.still[b] < 30) { // speed is what the step did; floors bounce a little and roll it to a stop
     const i = 3 * b, ox = v[i], oy = v[i + 1], oz = v[i + 2];
     v[i] = (p[i] - o[i]) / h; v[i + 1] = (p[i + 1] - o[i + 1]) / h; v[i + 2] = (p[i + 2] - o[i + 2]) / h;
+    const s1 = Math.hypot(v[i], v[i + 1], v[i + 2]), s0 = Math.hypot(ox, oy, oz) + 3; if (s1 > s0) { v[i] *= s0 / s1; v[i + 1] *= s0 / s1; v[i + 2] *= s0 / s1; } // being pushed out of an overlap gains at most 3 m/s a step: a pile squeezed by a falling body would otherwise burst
     if (g.contact[b]) {
       if (oy < -1.2 && v[i + 1] > oy * -.2) v[i + 1] = -oy * g.bounce; // a fall onto something bounces
       const s = Math.hypot(v[i], v[i + 2]), f = s > 1e-6 ? Math.max(0, s - g.grip * h) / s : 0; v[i] *= f; v[i + 2] *= f; // rolling resistance
@@ -152,12 +160,13 @@ function draw(g, all) { // write the bodies that moved since they were last draw
   else { g.mesh.position.set(p[0], p[1], p[2]); if (g.q) g.mesh.quaternion.copy(g.q); }
 }
 // Settle a freshly poured group before anyone sees it (the pit, at load): step it with no one near until it sleeps, at most `max` steps.
-function settle(g, max) { const nobody = { x: 1e9, z: 1e9 }; g.cap = .8; for (let i = 0; i < max && g.awake; i++) stepGroup(g, nobody); g.cap = 0; draw(g, 1); g.moved = 0; } // gently: no ball is thrown out
+function settle(g, max) { const nobody = { x: 1e9, z: 1e9 }; const cap = g.cap; g.cap = .8; for (let i = 0; i < max && g.awake; i++) stepGroup(g, nobody); g.cap = cap; draw(g, 1); g.moved = 0; } // gently: no ball is thrown out
 for (const g of groups) { g.awake = g.n; if (g.pour) settle(g, g.pour); else g.awake = 0, g.still.fill(30); draw(g, 1); }
 
 // ---------- rings: float on the waves, pushed by the body, the water's flow and each other; bounce softly off the pool's sides ----------
 const RO = .55, RT = .13; // outer radius, tube radius
 const floaters = rings.map((m, i) => ({ m, i, w: pondAt(m.position.x, m.position.z), x: m.position.x, z: m.position.z, y: m.position.y, vx: 0, vz: 0, vy: 0, ax: 0, az: 0, wx: 0, wz: 0, yaw: i * 2.1, wy: 0, shade: [1e9, 0, 0, 0, 0] }));
+for (const w of [...floaters.map(f => f.w), ...groups.filter(g => g.float).map(g => pondAt(g.p[0], g.p[2]))]) if (w) w.twin.used = true; // the pools whose wave copy something rides
 for (const f of floaters) f.solids = colliders.filter(c => c[2] > f.w.rect.x - 1 && c[0] < f.w.rect.z + 1 && c[3] > f.w.rect.y - 1 && c[1] < f.w.rect.w + 1);
 function stepRing(f, me) {
   const T = f.w.twin, t = uTime.value, e = .42, at = (x, z) => T.sample(x, z).h * 5; // heave and lean five times the copy's: the drawn water's slopes are drawn ten times steeper than the waves (water.js), and the ring should agree with what is seen
@@ -206,7 +215,7 @@ function drawLoose(zone) { // once a frame, after the steps: meshes, and the sha
   for (const g of groups) if (!g.drawn) { draw(g, 0); g.drawn = true;
     if (g.moved > .01) { const [x1, z1, x2, z2] = g.region; if (g.n > 1) reshade((x1 + x2) / 2, 0, (z1 + z2) / 2, Math.hypot(x2 - x1, z2 - z1) / 2); else reshade(g.p[0], g.p[1], g.p[2], g.r); g.moved = 0; } }
   for (const f of floaters) { f.m.position.set(f.x, f.y, f.z); f.m.rotation.set(f.az, f.yaw, f.ax);
-    const s = f.shade; if (Math.hypot(f.x - s[0], f.z - s[2]) + Math.abs(f.y - s[1]) + .5 * (Math.abs(f.ax - s[3]) + Math.abs(f.az - s[4])) > .01) { reshade(f.x, f.y, f.z, RO); f.shade = [f.x, f.y, f.z, f.ax, f.az]; } } // its pose when its shadow was last drawn
+    const s = f.shade; if (f.w.zone.id === zone && Math.hypot(f.x - s[0], f.z - s[2]) + Math.abs(f.y - s[1]) + .5 * (Math.abs(f.ax - s[3]) + Math.abs(f.az - s[4])) > .01) { reshade(f.x, f.y, f.z, RO); f.shade = [f.x, f.y, f.z, f.ax, f.az]; } } // its pose when its shadow was last drawn; only from its own room, as its slow drift can't be seen through a doorway
   const took = ms + performance.now() - t0; ms = 0; return took;
 }
 
