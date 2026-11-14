@@ -117,7 +117,7 @@ const frame = dt => { // one game frame of dt seconds: the loop below passes the
   if (warp) relight(p, zone, 1); // arrived somewhere else: the lamps come at once
   relight(p, zone, warp ? 1 : dt * 3);
   for (const w of ponds) w.visible = w.seen.includes(zone.id);
-  const wake = pool && ground < 0 && !air ? Math.min(vel.length(), 4) * .006 : 0; // wading leaves a wake; `drop` is a pending splash
+  const wake = pool && ground < 0 && !air ? Math.min(Math.hypot(p.x - ox, p.z - oz) / dt, 4) * .006 : 0; // wading leaves a wake, by how far the body really moved (pressed against a wall it would heap the water on one spot); `drop` is a pending splash
   // 60 Hz: the loose things, then the waves, with the ripples both leave
   simT += dt; const steps = Math.min(4, Math.floor(simT * 60 + 1e-6)); simT = steps === 4 ? 0 : simT - steps / 60; // as many as the frame's time holds; a long stall is dropped, not caught up
   hitP = Math.max(hitP, hit); splashP ||= splash; fallP = Math.min(fallP, landed ? -hit : vy); // held until a step runs: above 60 Hz most frames run none

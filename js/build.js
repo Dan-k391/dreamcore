@@ -85,8 +85,8 @@ function slab(mat, axis, at, depth, a1, a2, y1, y2, cuts, through = false) { // 
   const pier = b => { if (b - a > .01) part(a, b, y1, y2); };
   if (through) for (const [, c, w, top] of cuts.filter(c => c[0] === 'arch').sort((p, q) => p[1] - q[1])) {
     pier(c - w / 2); a = c + w / 2;
-    for (let i = 0; i < 8; i++) { const u = Math.max(Math.abs(i / 4 - 1), Math.abs((i + 1) / 4 - 1)) * w / 2; // never below head height (the body ducks its top 5 cm), so a low arch still lets you through
-      part(c - w / 2 + w * i / 8, c - w / 2 + w * (i + 1) / 8, Math.max(y1 + 1.7, top - w / 2 + Math.sqrt(Math.max(0, w * w / 4 - u * u))), y2); }
+    for (let i = 0; i < 8; i++) { const u = Math.max(Math.abs(i / 4 - 1), Math.abs((i + 1) / 4 - 1)) * w / 2; // each band as low as the curve drawn over it, so the body (1.7 m with its ducked top) passes only where the eye stays under the arch
+      part(c - w / 2 + w * i / 8, c - w / 2 + w * (i + 1) / 8, top - w / 2 + Math.sqrt(Math.max(0, w * w / 4 - u * u)), y2); }
   }
   pier(a2);
 }
