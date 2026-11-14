@@ -487,6 +487,9 @@ function resize() {
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight); composer.setPixelRatio(renderer.getPixelRatio()); composer.setSize(innerWidth, innerHeight);
+  // The water samples the AO pass's depth texture earlier in the frame than that pass re-creates it. Told its new size here, it is
+  // re-created correctly; otherwise it comes back at the old size and the AO framebuffer is incomplete from then on.
+  Object.assign(ao.depthTexture.image, { width: ao.normalRenderTarget.width, height: ao.normalRenderTarget.height });
 }
 addEventListener('resize', resize); resize();
 
