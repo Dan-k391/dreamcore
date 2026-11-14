@@ -70,7 +70,7 @@ Lengths in mm are true sizes on the surface. No block makes an edge sharper than
 - `detail`: strength of the shared 10 cm micro normal. Dark materials get more of it and more gloss variation automatically: they are read by their highlights.
 - `dirt`, `dirtCol`: grime where walls meet the floor, dust on tops. `wear`, `edgeCol`: lightening on rounded convex edges (hard-edged boxes get none).
 - `vary: 1`: breaks the repeat with a turned second copy (isotropic sets only; it lowers fine contrast where the copies blend).
-- `sheen`, `back`, `emit: [colour, level]`.
+- `sheen`: pile seen along its length (at the rim) lighter, end-on darker; the rim lobe is as bright for a dark yarn as a light one (velvet about 1, carpets .2-.4). `back`, `emit: [colour, level]`.
 - `floor`: the height its dirt gathers at (default 0). `tri: 1`: triplanar in world space. `uv: [u, v]`: metres per unit of the geometry's own UVs, with `add(mat, geo, true)`. `swap: 1`: turn the grain 90 degrees.
 - Any `MeshStandardMaterial` property, except maps: a `*Map` option throws (a library material packs its own maps into the 6 free texture units).
 
@@ -85,8 +85,11 @@ Lengths in mm are true sizes on the surface. No block makes an edge sharper than
 
 ## Showroom
 
-Dev only (`?dev`), far from everything else. Station i (in the order the family files are imported, `Object.keys(LIB)`) is at x = -673.5 + 3i, with a wall panel, a sphere and a rounded cube of the material.
+Dev only (`?dev`), far from everything else. Station i (in the order the family files are imported, `Object.keys(LIB)`) is at x = -673.5 + 3i, with a 1.2 m wall panel, a 0.6 m sphere (triplanar) and a 0.6 m rounded cube (own UVs) of the material.
 
-- North side, lit from above: `#x-0.1,-0.86,0,-0.25` (1.5 m) and `#x-0.5,-1.96,0,-0.12` (0.4 m).
-- South side, raking light: `#x-0.1,0.86,3.14159,-0.25` (1.5 m) and `#x-0.5,1.96,3.14159,-0.12` (0.4 m).
+The rig is the same at every station, set up as a photographer would: light neutral walls and floor, a lit ceiling panel over each side (so the zone's probe, and every metal and glass, has bright and dark things to reflect), the game's own exposure and post.
+
+- North side, a soft frontal light from the ceiling in front of the panel: `#x-0.1,-0.86,0,-0.25` (1.5 m) and `#x-0.5,-1.96,0,-0.12` (0.4 m).
+- South side, a warm key high up to one side, close to the wall, raking down the panel at about 10 degrees (so pits and joints read as recessed, lit from above) and modelling the sphere and cube: `#x+0.2,0.86,3.14159,-0.25` (1.5 m, panel, sphere and most of the cube) and `#x-0.5,1.96,3.14159,-0.12` (0.4 m).
+- Never light a wall from below, or with the lamp in the wall's plane: everything then sits at the light's terminator, pits read as beads and joints break into per-pixel zigzags.
 - `dev.lib` has the bake's cost; `dev.texMem()` the material texture memory.

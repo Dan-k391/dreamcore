@@ -1,6 +1,8 @@
-// The material showroom (dev only: level.js loads it with ?dev): every library material on a 1.2 m wall panel, a 0.45 m sphere
-// (triplanar) and a 0.45 m rounded cube (its own UVs) on a plinth, labelled. North side lit from above, south side in raking
-// light from a lamp by the floor. Station i (LIB order) is centred at x = -673.5 + 3i; see AGENTS.md for the photo addresses.
+// The material showroom (dev only: level.js loads it with ?dev): every library material on a 1.2 m wall panel, a 0.6 m sphere
+// (triplanar) and a 0.6 m rounded cube (its own UVs) on a plinth, labelled. The rig is a photographer's, the same at every station:
+// north side a soft frontal light from above, south side a warm key from above and to one side (the right as you face the wall), raking down the panel at about
+// 10 degrees. Light neutral walls and a lit ceiling panel over each side give the zone's probe something to reflect.
+// Station i (LIB order) is centred at x = -673.5 + 3i; see docs/materials.md for the photo addresses.
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { scene, dry, zones, defZone } from '../core.js';
@@ -13,25 +15,26 @@ const tag = text => { // a small name plate (64 px tall: sign()'s 256 px plates 
   g.fillStyle = '#f0e2c0'; g.font = '600 38px Georgia, serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, 256, 34);
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = maxA;
   return new THREE.MeshBasicMaterial({ map: t, color: new THREE.Color(.9, .9, .9) }); };
-const names = Object.keys(LIB), per = 8, X0 = -675, h = 3.2, sphere = new THREE.SphereGeometry(.225, 64, 32), cube = new RoundedBoxGeometry(.45, .45, .45, 6, .04);
+const names = Object.keys(LIB), per = 8, X0 = -675, h = 3.2, sphere = new THREE.SphereGeometry(.3, 96, 48), cube = new RoundedBoxGeometry(.6, .6, .6, 6, .05);
 for (let j = 0; j * per < names.length; j++) {
   const x1 = X0 + 3 * per * j, x2 = x1 + 3 * per, id = 'sR' + j;
-  defZone(id, { ...dry, grp: 's', k: 1, exp: .34, fog: [.2, .17, .13, .002], bloom: .3, wet: 0, box: [x1, -2.4, x2, 2.4], probe: [(x1 + x2) / 2, 1.6, 0] });
-  const z = zones[id], W = M(z, 'plaster', { color: 0x57524b }), F = M(z, 'concreteFloor', { color: 0x9a948a }), plinth = M(z, 'plaster', { color: 0x2c2a27 });
+  defZone(id, { ...dry, grp: 's', k: 1.5, exp: .34, fog: [.2, .17, .13, .002], bloom: .3, wet: 0, box: [x1, -2.4, x2, 2.4], probe: [(x1 + x2) / 2, 1.6, 0] });
+  const z = zones[id], W = M(z, 'plaster', { color: 0xa29d94 }), F = M(z, 'concreteFloor', { color: 0x9a948a }), plinth = M(z, 'plaster', { color: 0x4a4640 });
   box(F, x1, -.2, -2.8, x2, 0, 2.8); box(W, x1, h, -2.8, x2, h + .2, 2.8); box(W, x1, 0, -2.8, x2, h, -2.4); box(W, x1, 0, 2.4, x2, h, 2.8);
   if (j === 0) box(W, x1 - .4, 0, -2.8, x1, h, 2.8);
   if (x2 >= X0 + 3 * names.length) box(W, x2, 0, -2.8, x2 + .4, h, 2.8);
   for (let i = per * j; i < Math.min(names.length, per * (j + 1)); i++) {
-    const n = names[i], x = X0 + 3 * i + 1.5, flat = M(z, n), tri = M(z, n, { tri: 1 }), own = M(z, n, { uv: [.45, .45] }), plate = tag(n.replace(/[A-Z]/g, c => ' ' + c.toLowerCase()));
+    const n = names[i], x = X0 + 3 * i + 1.5, flat = M(z, n), tri = M(z, n, { tri: 1 }), own = M(z, n, { uv: [.6, .6] }), plate = tag(n.replace(/[A-Z]/g, c => ' ' + c.toLowerCase()));
     for (const k of [-1, 1]) { // k -1: north wall, lit from above; 1: south wall, raking light
-      const wz = 2.4 * k, f = wz - .04 * k, pz = wz - .45 * k;
+      const wz = 2.4 * k, f = wz - .04 * k, pz = wz - .55 * k;
       box(flat, x - 1.1, .6, Math.min(wz, f), x + .1, 1.8, Math.max(wz, f)); // the panel
-      box(plinth, x + .35, 0, pz - .25, x + 1.15, .7, pz + .25); // sphere and cube on it
-      add(tri, sphere.clone().translate(x + .53, .925, pz)); add(own, cube.clone().translate(x + .97, .925, pz), true);
+      box(plinth, x + .2, 0, pz - .35, x + 1.6, .6, pz + .35); // sphere and cube on it
+      add(tri, sphere.clone().translate(x + .55, .9, pz)); add(own, cube.clone().translate(x + 1.22, .9, pz), true);
       const p = new THREE.Mesh(new THREE.PlaneGeometry(1.1, .1375), plate); p.position.set(x - .5, .42, wz - .01 * k); p.rotation.y = k < 0 ? 0 : Math.PI; scene.add(p);
     }
-    box(lampOn, x - .3, h - .012, -2.2, x + .3, h + .01, -1.0); lit(z, x, h - .08, -1.6, 40, [x, .6, -2.35], 1.25, 8, 0xffdcae); // above the north side
-    add(M(z, 'frostedGlobe'), new THREE.SphereGeometry(.04, 20, 12).translate(x - .5, .06, 2.3)); lit(z, x - .5, .1, 2.27, 30, [x - .5, 1.9, 2.37], .75, 6, 0xffcf98); // by the floor under the south panel, grazing up it
-    block(plinth, x - .56, 0, 2.24, x - .44, .02, 2.36);
+    // north: a soft light from the ceiling in front of the panel, aimed at it and the plinth
+    box(lampOn, x - .6, h - .012, -1.6, x + .2, h + .01, -.8); lit(z, x - .2, h - .08, -1.2, 50, [x - .1, .9, -2.4], 1.3, 9, 0xffdcae);
+    // south: the key, high and to one side, close to the wall, so it rakes down the panel and models the sphere and cube from above
+    box(lampOn, x - 1.3, h - .012, 1.9, x - .5, h + .01, 2.3); lit(z, x - .9, h - .15, 2.15, 70, [x, .7, 2.4], 1., 9, 0xffd29a);
   }
 }

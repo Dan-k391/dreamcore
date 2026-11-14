@@ -91,7 +91,10 @@ function libCompile(s) {
     .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\nif (uL3.x > .5) totalEmissiveRadiance *= la.a;')
     .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
       { float lAO = 1. - lGr; reflectedLight.indirectDiffuse *= lAO; reflectedLight.indirectSpecular *= mix(1., lAO, .6); } // grime holds back the room's ambient light
-      if (uL1.w > 0.) { float sh = uL1.w * (1.6 * pow(1. - saturate(dot(normal, geometryViewDir)), 2.5) - .3); reflectedLight.directDiffuse *= 1. + sh; reflectedLight.indirectDiffuse *= 1. + sh; }`);
+      if (uL1.w > 0.) { // pile seen end-on is darker, seen along its length (the rim) lighter: a lobe as bright for a dark yarn as for a
+        // light one (scaled by 1 / sqrt(albedo), the same as before at albedo .3), so a black velvet still glows at its rim
+        vec3 sh = uL1.w * (.88 * pow(1. - saturate(dot(normal, geometryViewDir)), 2.5) * inversesqrt(max(diffuseColor.rgb, vec3(.012))) - .3);
+        reflectedLight.directDiffuse *= 1. + sh; reflectedLight.indirectDiffuse *= 1. + sh; }`);
 }
 const col3 = c => new THREE.Vector3(...c);
 // A library material, not registered with any zone (M does that). o: the LIB entry's options overridden by the caller's.
