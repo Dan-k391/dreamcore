@@ -191,7 +191,7 @@ const P = (z, o) => { // a material that takes the zone's ambient light. Given o
   if (lib) { const { lib: _, map, normalMap, roughnessMap, aoMap, aoMapIntensity, ...rest } = o; return M(z, lib, rest); }
   const m = S(o); z.mats.push(m); return m; };
 const neon = (c, k = 6) => { const m = S({ color: 0, emissive: c, emissiveIntensity: k }); noCast.add(m); return m; };
-const voidMat = S({ color: 0x040404, roughness: 1 }), aisle = neon(0xffd9a0, 12);
+const voidMat = S({ color: 0x040404, roughness: 1 }), aisle = neon(0xffa646, 12);
 const label = (text, w, h, color = '#fff', bg = '#000', k = 3) => { // glowing lettering on a plate
   const c = document.createElement('canvas'), g = c.getContext('2d'); c.width = Math.round(256 * w / h); c.height = 256;
   g.fillStyle = bg; g.fillRect(0, 0, c.width, 256); g.fillStyle = color; g.font = '600 150px Georgia, serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, c.width / 2, 136, c.width * .86);

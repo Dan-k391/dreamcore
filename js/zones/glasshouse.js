@@ -23,9 +23,9 @@ onSun.push(sun => {
     prev.call(this, r, s, c, ...rest);
     // the place is drawn only for a camera near it: from the terrace, under the same sky, it lay in view 1.2 km off and cost 1.3 M triangles
     if (!mine) { const S = new Set(zones.gH.mats); mine = []; s.traverse(o => { if (o.isMesh && S.has(o.material)) mine.push(o); }); }
-    c.getWorldPosition(p); const near = p.x > 800 && p.x < 880 && p.z > -640 && p.z < -560 && Math.abs(sunDir.y - .1025) < .003;
+    p.setFromMatrixPosition(c.matrixWorld); const near = p.x > 800 && p.x < 880 && p.z > -640 && p.z < -560 && Math.abs(sunDir.y - .1025) < .003;
     for (const o of mine) o.visible = near;
-    c.getWorldPosition(p); const dusk = Math.abs(sunDir.y - .1025) < .003, inside = dusk && p.x > 820 && p.x < 860 && p.z > -612 && p.z < -588;
+    p.setFromMatrixPosition(c.matrixWorld); const dusk = Math.abs(sunDir.y - .1025) < .003, inside = dusk && p.x > 820 && p.x < 860 && p.z > -612 && p.z < -588;
     if (inside && !saved) { saved = [sun.target.position.clone(), sun.position.clone(), { left: cam.left, right: cam.right, top: cam.top, bottom: cam.bottom, far: cam.far }];
       aim(AT, sunDir.clone().multiplyScalar(40).add(AT), { left: -15, right: 15, top: 8, bottom: -8, far: 90 }, r); }
     else if (!inside && saved) { if (dusk) aim(...saved, r); saved = null; } // under another sky, setSky has already re-aimed it

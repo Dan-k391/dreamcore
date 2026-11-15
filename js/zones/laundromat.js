@@ -243,6 +243,6 @@ onSun.push(() => {
   const mine = new Set([...z.mats, ...zx.mats, lampLens]), meshes = [];
   scene.traverse(o => { if (o.isMesh && mine.has(o.material)) meshes.push(o); });
   const prev = scene.onBeforeRender;
-  scene.onBeforeRender = function (r, sc, c, ...a) { prev.call(this, r, sc, c, ...a); const p = c.getWorldPosition(near), on = p.x > 555 && p.x < 645 && p.z > -640 && p.z < -550; for (const m of meshes) m.visible = on; };
+  scene.onBeforeRender = function (r, sc, c, ...a) { prev.call(this, r, sc, c, ...a); const p = near.setFromMatrixPosition(c.matrixWorld), on = p.x > 555 && p.x < 645 && p.z > -640 && p.z < -550; for (const m of meshes) m.visible = on; };
 });
 const near = new THREE.Vector3();
