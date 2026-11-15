@@ -134,10 +134,11 @@ let sea;
 // so frustum culling works. Each zone listed in seen.js (made by tools/pvs.mjs) also gets a layer bit, and a camera draws only the
 // zones seen.js says can be seen from where it stands: places behind walls further down a view cost nothing. A zone not in seen.js
 // (a new place, until tools/pvs.mjs is run again) stays on layer 0, always drawn; a camera outside every listed zone draws all.
-// Shadow cameras and cube cameras (the bakes) always draw everything, so shadows and bakes are as before.
+// Shadow cameras always draw everything; a cube camera (a zone's ambient bake) draws what seen.js says its probe's zone sees.
 const bits = new Map(Object.keys(seen).slice(0, 31).map((id, i) => [id, i + 1])), masks = new Map(), _c = new THREE.Vector3();
 for (const [id, list] of Object.entries(seen)) if (bits.has(id)) masks.set(id, [id, ...list].reduce((m, q) => m | (bits.has(q) ? 1 << bits.get(q) : 0), 1));
-const zoneAt = (x, z) => Object.values(zones).find(q => inR(x, z, ...q.box));
+let zl; // the zones as a list, made once merge() starts: zoneAt runs once per piece of geometry
+const zoneAt = (x, z) => { for (const q of zl) { const b = q.box; if (x > b[0] && x < b[2] && z > b[1] && z < b[3]) return q; } };
 function maskAt(x, z) { // the layers a camera at (x, z) draws: -1 is all
   let m = 0, any = false;
   for (const q of Object.values(zones)) if (inR(x, z, ...q.box)) { any = true; const k = masks.get(q.id); if (k === undefined) return -1; m |= k; }
@@ -145,6 +146,7 @@ function maskAt(x, z) { // the layers a camera at (x, z) draws: -1 is all
 }
 function merge() { // once every place is built (level.js)
   for (const c of colliders) if (c.length === 4) c.push(-1e4, 1e4); // a bare rectangle is a wall of any height
+  zl = Object.values(zones);
   for (const [m, list] of geo) {
     const parts = new Map();
     for (const g of list) { g.computeBoundingBox(); g.boundingBox.getCenter(_c); const id = m === seaMat ? '' : zoneAt(_c.x, _c.z)?.id || ''; parts.has(id) ? parts.get(id).push(g) : parts.set(id, [g]); }
@@ -157,7 +159,7 @@ function merge() { // once every place is built (level.js)
   camera.layers.enableAll(); // until the first frame sets it: everything compiles and bakes as before
   scene.onBeforeRender = (r, s, cam) => {
     if (r.shadowMap.needsUpdate) for (const o of s.children) if (o.isLight && o.shadow) o.shadow.camera.layers.enableAll();
-    if (!cam.isPerspectiveCamera || cam.parent?.isCubeCamera) cam.layers.enableAll();
+    if (!cam.isPerspectiveCamera) cam.layers.enableAll();
     else cam.layers.mask = maskAt(cam.matrixWorld.elements[12], cam.matrixWorld.elements[14]);
   };
 }

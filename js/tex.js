@@ -21,11 +21,11 @@ function makeTex(n, meters, fn, bump = 1) {
   const col = new Uint8ClampedArray(n * n * 4), rgh = new Uint8ClampedArray(n * n * 4), nor = new Uint8ClampedArray(n * n * 4), hgt = new Float32Array(n * n);
   for (let y = 0, i = 0; y < n; y++) for (let x = 0; x < n; x++, i++) {
     const [r, g, b, h, ro] = fn(x / n, y / n, x, y);
-    col.set([r * 255, g * 255, b * 255, 255], i * 4); rgh.set([ro * 255, ro * 255, ro * 255, 255], i * 4); hgt[i] = h;
+    const j = i * 4; col[j] = r * 255; col[j + 1] = g * 255; col[j + 2] = b * 255; col[j + 3] = 255; rgh[j] = rgh[j + 1] = rgh[j + 2] = ro * 255; rgh[j + 3] = 255; hgt[i] = h;
   }
   for (let y = 0, i = 0; y < n; y++) for (let x = 0; x < n; x++, i++) {
-    const dx = (hgt[y * n + (x + 1) % n] - hgt[y * n + (x + n - 1) % n]) * bump, dy = (hgt[((y + 1) % n) * n + x] - hgt[((y + n - 1) % n) * n + x]) * bump, l = 127.5 / Math.hypot(dx, dy, 1);
-    nor.set([127.5 - dx * l, 127.5 - dy * l, 127.5 + l, 255], i * 4);
+    const dx = (hgt[y * n + (x + 1) % n] - hgt[y * n + (x + n - 1) % n]) * bump, dy = (hgt[((y + 1) % n) * n + x] - hgt[((y + n - 1) % n) * n + x]) * bump, l = 127.5 / Math.sqrt(dx * dx + dy * dy + 1);
+    const j = i * 4; nor[j] = 127.5 - dx * l; nor[j + 1] = 127.5 - dy * l; nor[j + 2] = 127.5 + l; nor[j + 3] = 255;
   }
   const T = (d, srgb) => {
     const t = new THREE.DataTexture(new Uint8Array(d.buffer), n, n);
@@ -38,11 +38,15 @@ function makeTex(n, meters, fn, bump = 1) {
 }
 
 const grime = makeTex(256, 9, (u, v) => [0, 0, 0, 0, .5 + .8 * fbm(u, v, 3, 5)]).roughnessMap; // large-scale mottling, breaks up tiling
-const waves = s => { // tileable ripple heightfield -> water normal map
+const waves = (s, n) => { // tileable ripple heightfield -> water normal map, on an n x n grid
   const w = []; for (let i = 0; i < 14; i++) w.push([Math.round(hash(i, s) * 12 - 6) || 1, Math.round(hash(i, s + 9) * 12 - 6), hash(i, s + 5) * 6.28]);
-  return (u, v) => { let h = 0; for (const [a, b, p] of w) h += Math.sin(6.2832 * (a * u + b * v) + p) / Math.hypot(a, b); return [0, 0, 0, h, 0]; };
+  // sin(A + B) = sin A cos B + cos A sin B, A from the column and B from the row: tables of 14 x n instead of 14 sines a texel
+  const T = w.map(([a, b, p]) => { const t = new Float64Array(n * 4), k = 1 / Math.hypot(a, b);
+    for (let i = 0; i < n; i++) { const A = 6.2832 * a * i / n + p, B = 6.2832 * b * i / n; t[i * 4] = Math.sin(A) * k; t[i * 4 + 1] = Math.cos(A) * k; t[i * 4 + 2] = Math.cos(B); t[i * 4 + 3] = Math.sin(B); }
+    return t; });
+  return (u, v, x, y) => { let h = 0; for (const t of T) h += t[x * 4] * t[y * 4 + 2] + t[x * 4 + 1] * t[y * 4 + 3]; return [0, 0, 0, h, 0]; };
 };
-const wn0 = makeTex(512, 6, waves(1), 2).normalMap, wn1 = makeTex(512, 6, waves(2), 2).normalMap;
+const wn0 = makeTex(512, 6, waves(1, 512), 2).normalMap, wn1 = makeTex(512, 6, waves(2, 512), 2).normalMap;
 
 // ---------- the material library: GPU-baked texture sets ----------
 // A set is the body of surf(uv, c, h, r, m, t): uv runs 0..1 over SZ metres and must tile. It writes linear albedo c, height h in
@@ -75,9 +79,21 @@ const rnd = new Float32Array(256 * 256 * 4); for (let i = 0, x = 12345; i < rnd.
 const tR = new THREE.DataTexture(rnd, 256, 256, THREE.RGBAFormat, THREE.FloatType); tR.needsUpdate = true;
 const rt = (n, srgb) => new THREE.WebGLRenderTarget(n, n, { depthBuffer: false, wrapS: THREE.RepeatWrapping, wrapT: THREE.RepeatWrapping, anisotropy: maxA,
   minFilter: THREE.LinearMipmapLinearFilter, magFilter: THREE.LinearFilter, generateMipmaps: true, colorSpace: srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace });
+const quad = new FullScreenQuad(), pre = new THREE.Scene(), preRT = new THREE.WebGLRenderTarget(1, 1, { type: THREE.FloatType, depthBuffer: false });
+const p1Of = s => new THREE.ShaderMaterial({ glslVersion: THREE.GLSL3, vertexShader: quadVS, uniforms: { tR: { value: tR }, uOne: { value: 1 }, uOut: { value: 0 } }, fragmentShader: `precision highp float; precision highp int;
+    varying vec2 vUv; uniform int uOut; layout(location = 0) out highp vec4 o0;
+    #define SZ ${s.m.toFixed(4)}
+    #define NPX ${Math.max(s.a, s.b).toFixed(1)}
+    ${GLIB}\n${s.glsl}
+    void main() { vec3 c = vec3(.5); float h = 0., r = .5, m = 0., t = 1.; surf(vUv, c, h, r, m, t); o0 = uOut == 0 ? vec4(c, h) : vec4(r, m, t, 0.); }` });
+function compileEarly(m) { // hand a bake program to the GPU now, while the places are still being built on the CPU: by bakeLibrary() it is compiled
+  const q = new THREE.Mesh(quad._mesh.geometry, m); q.frustumCulled = false; pre.add(q);
+  renderer.setRenderTarget(preRT); renderer.compile(q, new THREE.Camera(), pre); renderer.setRenderTarget(null); // for drawing into a float target, as it will be
+  renderer.getContext().flush(); pre.remove(q);
+}
 function libTex(name) {
   const s = sets[name]; if (!s) throw new Error('no texture set ' + name);
-  if (!s.B) { s.A = s.a ? rt(s.a, true) : null; s.B = rt(s.b, false); queue.push(s); }
+  if (!s.B) { s.A = s.a ? rt(s.a, true) : null; s.B = rt(s.b, false); queue.push(s); compileEarly(s.p1 = p1Of(s)); }
   return s;
 }
 const detailTex = libTex('detail').B.texture;
@@ -104,6 +120,7 @@ const pass2B = new THREE.ShaderMaterial({ glslVersion: THREE.GLSL3, vertexShader
       vec3 nn = normalize(vec3(-g / (128. * uMM), 1.));
       n += nn.xy; rm += texelFetch(t1, p % uN, 0).rg; }
     o0 = vec4(n / k2 * .5 + .5, rm / k2); }` });
+compileEarly(pass2A); compileEarly(pass2B);
 
 async function bakeLibrary() { // run once, after every place has asked for its materials and before anything is drawn (level.js)
   if (!queue.length) return;
@@ -113,13 +130,7 @@ async function bakeLibrary() { // run once, after every place has asked for its 
   // again, one after another, on its first draw (30-250 ms a set). Drawing it twice costs a few ms; the texels are the same.
   const sc0 = () => new THREE.WebGLRenderTarget(N, N, { type: THREE.FloatType, depthBuffer: false, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
   const scratch = [sc0(), sc0()];
-  for (const s of list) s.p1 = new THREE.ShaderMaterial({ glslVersion: THREE.GLSL3, vertexShader: quadVS, uniforms: { tR: { value: tR }, uOne: { value: 1 }, uOut: { value: 0 } }, fragmentShader: `precision highp float; precision highp int;
-    varying vec2 vUv; uniform int uOut; layout(location = 0) out highp vec4 o0;
-    #define SZ ${s.m.toFixed(4)}
-    #define NPX ${Math.max(s.a, s.b).toFixed(1)}
-    ${GLIB}\n${s.glsl}
-    void main() { vec3 c = vec3(.5); float h = 0., r = .5, m = 0., t = 1.; surf(vUv, c, h, r, m, t); o0 = uOut == 0 ? vec4(c, h) : vec4(r, m, t, 0.); }` });
-  const sc = new THREE.Scene(), quad = new FullScreenQuad();
+  const sc = new THREE.Scene(); // the programs were handed to the GPU as each set was first asked for (compileEarly): this waits for them
   for (const m of [...list.map(s => s.p1), pass2A, pass2B]) { const q = new THREE.Mesh(quad._mesh.geometry, m); q.frustumCulled = false; sc.add(q); }
   renderer.setRenderTarget(scratch[0]); // the programs must be made for drawing into a target, as they will be
   await renderer.compileAsync(sc, new THREE.Camera()); // all at once, in parallel where the browser can
@@ -134,7 +145,7 @@ async function bakeLibrary() { // run once, after every place has asked for its 
     s.p1.dispose(); delete s.p1;
     libStats.bytes += ((s.a * s.a) + s.b * s.b) * 4 * 1.33; libStats.sets++;
   }
-  renderer.setRenderTarget(null); for (const t of scratch) t.dispose(); pass2A.dispose(); pass2B.dispose(); quad.dispose(); // three remakes them if a later bake needs them
+  renderer.setRenderTarget(null); for (const t of scratch) t.dispose(); pass2A.dispose(); pass2B.dispose(); quad.dispose(); preRT.dispose(); // three remakes them if a later bake needs them
   libStats.programs += list.length + 2;
   libStats.ms += performance.now() - t0;
 }
