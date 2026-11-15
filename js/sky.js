@@ -23,7 +23,9 @@ dome.onBeforeRender = (r, sc, c) => { dome.position.setFromMatrixPosition(c.matr
 Object.assign(sky.material.uniforms.sunPosition.value, V(-1, .5, -.32).normalize()); sky.material.uniforms.turbidity.value = 2; sky.material.uniforms.rayleigh.value = 3.5;
 sky.material.uniforms.mieCoefficient.value = .004; sky.material.uniforms.mieDirectionalG.value = .85;
 const sun = new THREE.DirectionalLight(0xfff0dc, 15);
-sun.castShadow = true; sun.shadow.mapSize.set(4096, 2048); sun.shadow.bias = -.0004; sun.shadow.normalBias = .03; sun.shadow.autoUpdate = false;
+sun.castShadow = true; sun.shadow.mapSize.set(4096, 2048); sun.shadow.bias = 0; sun.shadow.normalBias = .03; sun.shadow.autoUpdate = false;
+// No depth bias: casters draw their back faces, so a lit face is a wall's thickness in front of its own shadow and needs none, while
+// any bias (-.0004 was 3.6 cm at far 90) let the sun past the end of a wall into the inside corner it makes: a bright sliver up the joint.
 scene.add(sun, sun.target);
 for (const f of onSun) f(sun); // things built before the sun that use its shadow map (the field's grass)
 // The far-off places each have their own sky. There is one sun and one shadow map: on arrival (in a dark passage, where

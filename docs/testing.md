@@ -64,4 +64,5 @@ A contact sheet: the images in a grid, each labelled with its file name.
 ## Other
 
 - `node tools/perf.mjs [--port 8200]`: for every view in `tools/views.json` at the default size, median frame time (ms), draw calls, triangles, programs, textures, load time to `dev.ready` (ms) and zone/sky; ends with the median load over all pages.
+- `node tools/corners.mjs <outDir> [--port 8200] [--size 400x250] [--flag-only]`: every inside corner of every room (found from the solids), photographed twice (wall-floor and wall-ceiling joins), and the photos with a thin bright line at the joint listed (`tools/corners.py`, `--show` marks them in red). Light leaking through a joint shows here. Known, real lines: the glasshouse's window bars, the laundromat's ceiling grid, the mall's clothes rail.
 - Screenshots go under `screenshots/` (ignored by git). The lead's stage photos and the audit photos live there too.
