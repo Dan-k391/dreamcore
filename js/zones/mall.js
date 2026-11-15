@@ -84,7 +84,7 @@ defZone('mL', { ...dry, grp: 'm', k: 1.15, exp: .3, fog: [.4, .38, .4, .0008], b
   }
   box(W, 1.8, 0, 24.4, 2.2, h, 44.5); box(W, 1.8, 0, 45.5, 2.2, h, 49.6); box(W, 1.8, 2.24, 44.5, 2.2, h, 45.5); // east, door to the hotel hallway: the
   // same 1 x 2.24 m hole as the hotel's side of the wall, so the passage's reveals are one face each side (the hotel's side owns x > 2.2)
-  door(z, 1.82, 0, 45, Math.PI / 2, { open: 1.85, color: 0x7a5a3c, frame: 0xd9d2c4 }); // swings into the mall, held back against the wall north of it
+  door(z, 1.817, 0, 45, Math.PI / 2, { open: 1.85, color: 0x7a5a3c, frame: 0xd9d2c4 }); // swings into the mall, held back against the wall north of it
   box(W, -27, 0, 24.4, -26.6, h, 34); box(W, -27, 0, 38, -26.6, h, 49.6); box(W, -27, 3, 34, -26.6, h, 38); // west, opening to the soft play room
   // ---- the open shops: a glazed aluminium front set into the wall's reveal (door locked: looked into, not entered) and behind it a room
   // 4.6 m wide, 2.45 m deep, 3.3 m high with its own floor, walls and dark ceiling, fitted out and lit by a few warm downlights ----

@@ -36,8 +36,8 @@ defZone('mT', { ...dry, sky: 'night', grp: 'q', k: .8, exp: .3, fog: [.012, .011
   box(Y, X0, -.1, -599.65, XP, -.002, -599.25);
   for (let x = X0; x < XP - .01; x += 1) A(L, rb(Math.min(1, XP - x) - .005, .12, .4, .012).translate(x + Math.min(1, XP - x) / 2, -.06, -599.85)); // jointed coping units
   solid(X0, -.12, -600.05, XP, 0, -599.65);
-  block(Ln, X0, -.001, -598.86, XP, .0012, -598.76); // the painted line behind the strip
-  for (let x = X0 + 1; x < XP; x += 1) block(Br, x - .002, -.002, -599.25, x + .002, .0008, ZW); // brass divider strips in the terrazzo
+  block(Ln, X0, -.001, -598.86, XP - .002, .0015, -598.76); // the painted line behind the strip, 1.5 mm thick, stopping short of the platform's end face
+  for (let x = X0 + 1; x < XP; x += 1) for (const [a, b] of [[-599.25, -598.86], [-598.76, ZW]]) block(Br, x - .002, -.002, a, x + .002, .0015, b); // brass divider strips 1.5 mm proud of the terrazzo, broken where the line crosses
   box(B, 692, YB - .2, ZF, 748, YB, ZE); box(B, XP, YB - .2, ZE, X1, YB, ZW);
   { // tactile blister tiles: 400 mm square, 6 x 6 flat-topped domes 5 mm proud
     const d = new THREE.LatheGeometry([[.0125, 0], [.0118, .0028], [.008, .0048], [0, .0052]].map(([a, b]) => new THREE.Vector2(a, b)), 8), gs = [];
@@ -74,15 +74,15 @@ defZone('mT', { ...dry, sky: 'night', grp: 'q', k: .8, exp: .3, fog: [.012, .011
     const D = M(z, 'concreteWall', { color: 0x4a443c, dirt: .6 });
     box(D, DOOR - .8, 0, ZW + .3, DOOR - .5, 2.4, ZW + 1.8); box(D, DOOR + .5, 0, ZW + .3, DOOR + .8, 2.4, ZW + 1.8); box(D, DOOR - .5, 2.24, ZW + .3, DOOR + .5, 2.4, ZW + 1.8);
     box(D, DOOR - .5, -.1, ZW + .3, DOOR + .5, 0, ZW + 1.8); // open at its far end onto the hotel's passage (zones/passages.js)
-    door(z, DOOR, 0, ZW + .075, PI, { leaf: false, frame: 0x2f5a6a });
+    door(z, DOOR, 0, ZW + .073, PI, { leaf: false, frame: 0x2f5a6a }); // its face 2 mm proud of the tiles
   }
 
   // ---- the track: concrete sleepers, base plates and clips, two rails, the dark third-rail cover on insulators
   { const rail = new THREE.Shape([[-.075, 0], [.075, 0], [.075, .011], [.0085, .032], [.0085, .125], [.036, .136], [.036, .166], [-.036, .166], [-.036, .136], [-.0085, .125], [-.0085, .032], [-.075, .011]].map(([a, b]) => new THREE.Vector2(a, b)));
     const head = new THREE.Shape(); head.moveTo(-.034, 0); head.lineTo(.034, 0); head.quadraticCurveTo(.035, .007, .026, .008); head.lineTo(-.026, .008); head.quadraticCurveTo(-.035, .007, -.034, 0);
-    const run = (s, m, y, zc) => A(m, new THREE.ExtrudeGeometry(s, { depth: 54, bevelEnabled: true, bevelThickness: .002, bevelSize: .0015, bevelSegments: 1, curveSegments: 4 }).rotateY(PI / 2).translate(693, y, zc));
+    const run = (s, m, y, zc, e = 0) => A(m, new THREE.ExtrudeGeometry(s, { depth: 54 - 2 * e, bevelEnabled: true, bevelThickness: .002, bevelSize: .0015, bevelSegments: 1, curveSegments: 4 }).rotateY(PI / 2).translate(693 + e, y, zc));
     const ry = YB + .12 + .016;
-    for (const s of [-1, 1]) { run(rail, Fe, ry, ZT + s * .7535); run(head, St, ry + .162, ZT + s * .7535); }
+    for (const s of [-1, 1]) { run(rail, Fe, ry, ZT + s * .7535); run(head, St, ry + .162, ZT + s * .7535, .002); } // the worn head stops 2 mm short of the rail's sawn ends
     const clip = new THREE.TorusGeometry(.03, .007, 6, 12, PI * 1.3).rotateY(PI / 2);
     for (let x = 692.3; x < 748; x += .65) {
       A(B, rb(.26, .14, 2.4, .02).translate(x, YB + .05, ZT));

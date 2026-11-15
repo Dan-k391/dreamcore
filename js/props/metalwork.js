@@ -130,7 +130,7 @@ function door(z, x, y, zc, ry = 0, o = {}) {
   for (const sx of [-1, 1]) { K.p(F, rbox(.04, .004, .1, .0015).translate(sx * (Wc / 2 + .05), .002, 0)); K.p(St, screw(.004).translate(sx * (Wc / 2 + .05), .004, 0)); } // floor anchor tabs, screwed down
   if (!dbl) for (const yy of [.4, 1.25, 2.0]) K.p(Rb, lathe([[.0045, 0], [.0042, .0012], [.003, .0022], [0, .0026]], 8).rotateX(-Math.PI / 2).translate(Wc / 2 + RB / 2 - SH / 2, yy, .025)); // silencers on the stop
   // threshold: a brushed saddle with chamfered nosings, grain along its length
-  K.p(St, planar(prism(rshape([[-.085, 0], [.085, 0], [.085, .002], [.05, .011], [-.05, .011], [-.085, .002]], .002), Wc + .03).translate(0, 0, -(Wc + .03) / 2).rotateY(Math.PI / 2), 'x', 'z'), true);
+  K.p(St, planar(prism(rshape([[-.085, -.002], [.085, -.002], [.085, .002], [.05, .011], [-.05, .011], [-.085, .002]], .002), Wc + .03).translate(0, 0, -(Wc + .03) / 2).rotateY(Math.PI / 2), 'x', 'z'), true);
   // strike plate on the lock jamb, two countersunk screws; hinge leaves let into the hinge jamb
   if (!dbl) { K.p(St, rbox(.002, .115, .025, .0008).translate(Wc / 2 + RB - .0005, 1.05, -.0085)); // its face 1.5 mm proud of the soffit
   K.p(Rb, rbox(.0022, .022, .009, .0006).translate(Wc / 2 + RB - .0019, 1.05, -.0055)); // the latch hole, a dark slot 1.5 mm proud of the plate
@@ -474,7 +474,7 @@ function signPost(z, x, y, zc, ry = 0, o = {}) {
   for (const ry2 of [cy + ph * .27, cy - ph * .27]) {
     K.p(Al, along2(rshape([[0, -.0125], [.012, -.0125], [.012, -.009], [.003, -.009], [.003, .009], [.012, .009], [.012, .0125], [0, .0125]], .0008), pw - .07).translate(0, ry2, R + .002)); // the channel rail
     K.p(St, lathe([[R + .0003, -.008], [R + .0013, -.0075], [R + .0013, .0075], [R + .0003, .008]], 32).translate(0, ry2, 0)); // band
-    K.p(St, rbox(.034, .022, .01, .002).translate(0, ry2, R + .006)); // the clip that takes the band and slides in the rail
+    K.p(St, rbox(.034, .022, .011, .002).translate(0, ry2, R + .0055)); // the clip that takes the band and slides in the rail, its back on the post 2 mm behind the rail's
     for (const s of [-1, 1]) K.p(St, rbox(.005, .016, .012, .0015).translate(s * .0055, ry2, -R - .006)); // the band's ears
     K.p(St, hex(.01, .005).rotateZ(Math.PI / 2).translate(.0085 + .005, ry2, -R - .008)); K.p(St, cyl(.003, .03, 8).rotateZ(Math.PI / 2).translate(0, ry2, -R - .008));
   }

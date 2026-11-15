@@ -22,11 +22,11 @@ let grass;
 { const z = zones.fD, W = wallMat(z, 0xf4f1ea), G = M(z, 'grassGround'), stone = P(z, { ...concrete, color: 0xd8d2c4 }),
     red = P(z, { color: 0xc8322c, roughness: .35 }), blue = P(z, { color: 0x2f6fc0, roughness: .35 }), y0 = 3.2;
   const g = new THREE.PlaneGeometry(180, 180, 240, 240).rotateX(-Math.PI / 2).translate(4, 0, 712), q = g.attributes.position;
-  for (let i = 0; i < q.count; i++) { q.setY(i, hill(q.getX(i), q.getZ(i))); g.attributes.uv.setXY(i, q.getX(i), q.getZ(i)); }
+  for (let i = 0; i < q.count; i++) { const x = q.getX(i), zz = q.getZ(i); q.setY(i, zz < 665.2 && Math.abs(x - 3.8) < 3 ? -5 : hill(x, zz)); g.attributes.uv.setXY(i, x, zz); } // sunk under the passage behind the end wall: it has its own floor
   g.computeVertexNormals(); const land = new THREE.Mesh(g, G); land.castShadow = land.receiveShadow = true; scene.add(land);
   flats.push([-60, 665.6, 70, 790, hill]); colliders.push([-46, 665, -44, 760], [52, 665, 54, 760], [-46, 757, 54, 759], [-90, 665.2, 2.8, 665.65], [4.8, 665.2, 98, 665.65]); // the hills climb higher than the end wall either side of the door: it stops you at any height
   box(W, -90, -3, 665.2, 2.8, 9, 665.65); box(W, 4.8, -3, 665.2, 98, 9, 665.65); box(W, 2.8, 2.4, 665.2, 4.8, 9, 665.65); // one long white wall across the hills, and the door you came through
-  block(stone, 2, -.2, 665.65, 5.6, .03, 668.6);
+  block(stone, 2, -.2, 665.2, 5.6, .03, 668.6); // the hardstanding runs back through the doorway as its threshold
   // a tarmac path from the door down to the playground, draped on the hill: straight runs with round joins (the grass below keeps off the same shape)
   { const pts = [[3.8, 668.3], [2.6, 672.2], [-11.9, 697.6], [-11.9, 706.6]], hw = .7, st = [], pos = [], idx = [];
     for (let i = 0; i + 1 < pts.length; i++) { const [x1, z1] = pts[i], [x2, z2] = pts[i + 1], L = Math.hypot(x2 - x1, z2 - z1), n = Math.ceil(L / .4), nx = -(z2 - z1) / L, nz = (x2 - x1) / L;

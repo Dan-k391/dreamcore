@@ -202,9 +202,9 @@ cart(602.55, -596.3, .35); cart(598.7, -604.7, 1.45);
   K.p(Gl, new THREE.BoxGeometry(.54, 1.04, .006).translate(-.1, 1.2, .376)); for (const [gw, gh, gx, gy] of [[.56, .014, -.1, .68], [.56, .014, -.1, 1.72], [.014, 1.05, -.375, 1.2], [.014, 1.05, .175, 1.2]]) K.p(Rb, RB(gw, gh, .012, .005).translate(gx, gy, .376));
   for (let r = 0; r < 4; r++) for (let c = 0; c < 3; c++) K.p(Ch, RB(.034, .024, .012, .005).translate(.24 + (c - 1) * .045, 1.3 - r * .036, .374));
   K.p(Ch, RB(.08, .12, .01, .004).translate(.27, 1.05, .373)); K.p(Rb, RB(.007, .045, .004, .0015).translate(.27, 1.06, .378));
-  K.p(lampLens, RB(.09, .045, .012, .008).translate(.25, 1.52, .372)); K.p(Ch, RB(.1, .055, .006, .003).translate(.25, 1.52, .369));
+  K.p(lampLens, RB(.09, .045, .012, .008).translate(.25, 1.52, .3735)); K.p(Ch, RB(.1, .055, .006, .003).translate(.25, 1.52, .369));
   K.p(Ch, fwd(lathe([[.017, 0], [.017, .006], [.014, .01], [0, .011]], 20)).translate(.3, .85, .37));
-  K.p(Dk, new THREE.BoxGeometry(.58, .2, .01).translate(-.08, .3, .366)); K.p(Dc, RB(.56, .18, .014, .005).rotateX(-.08).translate(-.08, .3, .376));
+  K.p(Dk, new THREE.BoxGeometry(.58, .2, .01).translate(-.08, .3, .367)); // the flap's housing 2 mm proud of the cabinet K.p(Dc, RB(.56, .18, .014, .005).rotateX(-.08).translate(-.08, .3, .376));
   K.place(595.95, 0, -604.5, PI / 2); solidAt(595.95, 0, -604.5, PI / 2, 0, .91, 0, .86, 1.82, .74);
   const C = kit(); // change machine on the wall, front +z: a note slot in its bezel, a coin cup, the lamp, the lock
   C.p(Dc, RB(.42, .64, .26, .012).translate(0, 0, 0)); C.p(Dk, RB(.15, .04, .02, .008).translate(0, .16, .13)); C.p(Rb, RB(.11, .006, .004, .002).translate(0, .16, .141));

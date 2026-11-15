@@ -18,16 +18,18 @@ defZone('sK', { ...dry, sky: 'dusk', air: .7, grp: 's', k: 1, exp: .3, fog: [.95
     for (let i = 0; i < n; i++) if (alongX) pier(z, x1 + u * (i + .5), y, (z1 + z2) / 2, 0, { w: u, d, h: .6, color: 0xffffff }); else pier(z, (x1 + x2) / 2, y, z1 + u * (i + .5), PI / 2, { w: u, d, h: .6, color: 0xffffff });
     edge(x1, z1, x2, z2, y + .6, side); };
   box(Ls, 649.9, -8, 560, 650.45, 16, 648.4); box(Ls, 649.9, -8, 650.4, 650.45, 16, 740); box(Ls, 649.9, 2.4, 648.4, 650.45, 16, 650.4); // the wall the passage comes out of, running out of sight both ways
+  block(Ls, 649.9, -.2, 648.4, 650.45, 0, 650.4); // its doorway's floor
   block(Ls, 650.45, -8, 647.9, 664, 0, 650.9); rail(650.45, 647.6, 664, 647.9, 0, 'n'); rail(650.45, 650.9, 664, 651.2, 0, 's'); // causeway
   for (let x = 652.5; x < 664; x += 3.8) for (const zc of [647.1, 651.7]) column(z, x, -8, zc, 0, { h: 15, r: .24, color: 0xffffff }); // columns rising out of the cloud beside it
   block(Ls, 664, -8, 639.4, 684, 0, 659.4); // the court
-  rail(664, 639.1, 684, 639.4, 0, 'n'); rail(664, 659.4, 684, 659.7, 0, 's'); rail(663.7, 639.1, 664, 647.9, 0, 'w'); rail(663.7, 650.9, 664, 659.7, 0, 'w'); rail(684, 639.1, 684.3, 645.4, 0, 'e'); rail(684, 653.4, 684.3, 659.7, 0, 'e');
+  rail(664, 639.1, 684, 639.4, 0, 'n'); rail(664, 659.4, 684, 659.7, 0, 's'); rail(663.7, 639.1, 664, 647.9, 0, 'w'); rail(663.7, 650.9, 664, 659.7, 0, 'w'); rail(684, 639.1, 684.3, 645, 0, 'e'); rail(684, 653.8, 684.3, 659.7, 0, 'e'); // stopping at the stair's walls, not in their faces
   const arches = c0 => [0, 1, 2, 3].map(i => ['arch', c0 + 1.9 + 3.4 * i, 2.6, 4.6]);
   for (const zc of [642.4, 655.9]) slab(Su, 'x', zc, .5, 667, 681, 0, 6, arches(667), true);
   for (const x of [667, 680.5]) slab(Su, 'z', x, .5, 642.4, 656.4, 0, 6, arches(642.4), true);
-  for (const zc of [642.65, 656.15]) for (const x of [670.6, 674, 677.4]) pier(z, x, 0, zc, 0, { w: .8, h: 3.3, mat: "stucco", color: 0xfff4e6, course: .22 }); // stone piers under the rendered arcade, imposts at the springing
-  for (const x of [667.25, 680.75]) for (const zc of [646, 649.4, 652.8]) pier(z, x, 0, zc, PI / 2, { w: .8, h: 3.3, mat: "stucco", color: 0xfff4e6, course: .22 });
-  for (const x of [667.25, 680.75]) for (const zc of [642.65, 656.15]) pier(z, x, 0, zc, 0, { w: .7, d: .7, h: 3.3, mat: "stucco", color: 0xfff4e6, course: .22 }); // the corners
+  // stone piers under the rendered arcade, imposts at the springing; 5 mm wider each side than the slab's jambs they stand in, so the jambs are behind their faces
+  for (const zc of [642.65, 656.15]) for (const x of [670.6, 674, 677.4]) pier(z, x, 0, zc, 0, { w: .81, h: 3.3, mat: "stucco", color: 0xfff4e6, course: .22 });
+  for (const x of [667.25, 680.75]) for (const zc of [646, 649.4, 652.8]) pier(z, x, 0, zc, PI / 2, { w: .81, h: 3.3, mat: "stucco", color: 0xfff4e6, course: .22 });
+  for (const x of [667.25, 680.75]) for (const zc of [642.65, 656.15]) pier(z, x, 0, zc, 0, { w: .71, d: .71, h: 3.3, mat: "stucco", color: 0xfff4e6, course: .22 }); // the corners
   doorway(blue, blue, 674, 0, 649.4, PI / 2, 2.2);
   block(Su, 684, -8, 645.4, 694, 0, 653.4); steps(z, 689, 0, 649.4, -PI / 2, { n: 20, r: .25, g: .5, w: 8, color: 0xffffff, insert: 0x8a8276 }); // the stair, between stepped walls
   for (let i = 0; i < 4; i++) for (const zc of [645, 653.4]) { box(Su, 684 + 2.5 * i, -8, zc, 686.5 + 2.5 * i, 1.25 * (i + 1) + .9, zc + .4); edge(684 + 2.5 * i, zc, 686.5 + 2.5 * i, zc + .4, 1.25 * (i + 1) + .9, zc < 649 ? 'n' : 's'); }

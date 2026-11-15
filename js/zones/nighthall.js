@@ -55,7 +55,7 @@ const plan = s => { if (s < L1) return [40.4, -2.75 - s]; if (s < L1 + L2) { con
 // the fall: a flat start tub, 11.5% down the lead-in, 15% round the helix (2.26 m between the turns where they cross), 17% out, a flat splash run
 const knots = [[1.5, .5, 0, .115], [L1, .5, .115, .15], [L1 + L2, .5, .15, .17], [L1 + L2 + 2.6, .6, .17, .02]];
 const grade = s => knots.reduce((g, [c, h, a, b]) => g + (b - a) * ss(c - h, c + h, s), 0);
-const YT = [HD]; for (let i = 1; i <= FLEN * 100 + 10; i++) YT.push(YT[i - 1] - grade((i - .5) / 100) * .01);
+const YT = [HD - .002]; for (let i = 1; i <= FLEN * 100 + 10; i++) YT.push(YT[i - 1] - grade((i - .5) / 100) * .01); // the bed starts 2 mm under the deck it runs out from
 const bedY = s => { const f = Math.min(Math.max(s, 0), FLEN + .05) * 100, i = Math.floor(f); return YT[i] + (YT[i + 1] - YT[i]) * (f - i); };
 const flare = s => .22 * (1 - ss(.4, 1.8, s)); // the start tub: a flat strip let into the bed's middle, 44 cm at the back
 const frame = s => { const [x, z] = plan(s), [x1, z1] = plan(s + .01), [x0, z0] = plan(s - .01);

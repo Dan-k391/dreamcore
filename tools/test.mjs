@@ -133,6 +133,9 @@ for (const [name, hash, calls, tris] of [['gallery-pool', '23.2,14.2,3.14159,-0.
 { const f = run(base + '?dev&bare', `({ steps: dev.waterCheck(0.5, -5.3, 0, -0.95), column: dev.waterCheck(28, -4.5, 0, -0.7) })`);
   const s = f.result?.steps, c = f.result?.column;
   check('the pools\' lens and mirror pictures match direct renders (no seam, nothing piercing the water lost)', s && c && s.lens.seam < 4 && c.lens.mean < 5.3 && s.mirror.mean < 6 && c.mirror.mean < 6, JSON.stringify({ s, c })); }
+// No two faces of different materials in one plane (they z-fight, the flicker on door frames and passages): tools/seams.mjs --scan, every sky's places.
+try { execFileSync(process.execPath, [fileURLToPath(new URL('./seams.mjs', import.meta.url)), '--port', base.split(':')[2].slice(0, -1), '--scan'], { encoding: 'utf8' }); check('no coplanar overlapping faces (tools/seams.mjs --scan)', true); }
+catch (e) { check('no coplanar overlapping faces (tools/seams.mjs --scan)', false, String(e.stdout || e.message).slice(0, 600)); }
 // What can be seen from where: js/seen.js must still cover every zone the eye can see from each zone (a new doorway or window needs tools/pvs.mjs run again).
 try { execFileSync(process.execPath, [fileURLToPath(new URL('./pvs.mjs', import.meta.url)), '--port', base.split(':')[2].slice(0, -1), '--check'], { encoding: 'utf8' }); check('js/seen.js covers what each zone can see (tools/pvs.mjs --check)', true); }
 catch (e) { check('js/seen.js covers what each zone can see (tools/pvs.mjs --check)', false, String(e.stdout || e.message).slice(0, 600)); }

@@ -24,6 +24,8 @@ A new file in `js/zones/` and one import line in `js/level.js`, plus these share
 
 Shapes go into one list per material and are merged into one mesh each (`add(mat, geometry)`), so use few materials and get few draw calls. `add()` gives box-projected UVs in metres; `add(mat, geometry, true)` keeps the geometry's own UVs (for materials with a direction: brushed metal, wood, cloth).
 
+No two faces in one plane: one surface per plane (trim the hidden face, let one place own a shared face, a twin passage takes `passage()`'s wall depth so the doorway's reveal is the place's); trim, inlays and linings that sit proud stand at least 1.5 mm proud. The suite checks it (`node tools/seams.mjs --scan`).
+
 ## Making things solid
 
 Used by `js/player.js` and `js/physics.js`. A solid blocks the body where it overlaps it above step height (0.35 m), its top is ground you can stand on, and its underside stops a jump. A jump peaks at about 0.84 m and carries about 2.1 m walking (2.85 m/s) and 4.5 m running (6 m/s), so a gap narrower than that onto anything standable is reachable.

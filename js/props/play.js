@@ -168,7 +168,7 @@ function slide(z, x, y, zc, ry = 0, o = {}) {
   L.push([P, ch]);
   const zr = 2.08; L.push([S, tubeG(fillet([[-.2, .004, zr], [-.2, .233, zr], [.2, .233, zr], [.2, .004, zr]], .06, 6), .02, 12)]); // the hoop under the run-out
   for (const s of [-1, 1]) footPlate(S, G, s * .2, zr, [0, 1, 0], .02, .12, L);
-  L.push([G, rbox(.46, .004, .045, .0015).translate(0, .2565, zr)]); // the strap it hangs the chute on
+  L.push([G, rbox(.46, .004, .045, .0015).translate(0, .253, zr)]); // the strap it hangs the chute on, under the chute's bottom
   place(L, x, y, zc, ry, 'slide');
   // solids: the frames, the deck and treads (stand on them), the chute stepped down its run (stand on it, slide down it)
   for (const s of [-1, 1]) { const [px, pz] = spot(x, zc, ry, s * sx, zf); round(px, pz, .03, y, y + 1.93);
@@ -222,7 +222,7 @@ function springRider(z, x, y, zc, ry = 0, o = {}) {
   L.push([G, lathe([[0, .49], [.16, .49], [.16, .502], [0, .502]], .003, 32)]);
   for (let k = 0; k < 4; k++) L.push([G, nutG(.009).translate(.135 * Math.cos(k * PI / 2 + PI / 4), .502, .135 * Math.sin(k * PI / 2 + PI / 4))]);
   if (!o.rider) // the moulded cover the rider would bolt over: a stepped rim, a grip ring of ribs, a domed boss with its drain hole
-    L.push([P, lathe([[0, .566], [.006, .566], [.008, .575], [.05, .571], [.1, .558], [.112, .548], [.118, .553], [.13, .54], [.136, .544], [.146, .53], [.15, .516], [.156, .514], [.156, .502], [0, .502]], .003, 32, 1)]);
+    L.push([P, lathe([[0, .566], [.006, .566], [.008, .575], [.05, .571], [.1, .558], [.112, .548], [.118, .553], [.13, .54], [.136, .544], [.146, .53], [.15, .516], [.156, .514], [.156, .502]], .003, 32, 1)]); // open underneath: the flange's top is the face it sits on
   else { // o.rider: a generic moulded seat body bolted on the flange, rubber saddle pad, a T handlebar and a footrest bar with grips
     const R = M(z, 'rubber'), side = fillet2([[-.27, 0], [.27, 0], [.27, .13], [.2, .24], [.14, .2], [.08, .15], [-.12, .15], [-.2, .2], [-.27, .2]], [.03, .03, .04, .04, .05, .06, .06, .05, .04], 5); // its side, z and y
     L.push([P, sweep([[-.11, .51, 0], [.11, .51, 0]], side, { round: .04, rn: 4 })]);

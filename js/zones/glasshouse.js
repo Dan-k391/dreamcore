@@ -156,11 +156,11 @@ onSun.push(sun => {
     for (let x = 830.06; x < 849.9; x += .5) { const xa = x + .016, xb = Math.min(x + .5, 849.94) - .016, vent = s > 0 && vents.some(v => Math.abs(v - (x + .25)) < .6);
       for (let i = 0; i < 5; i++) { const t1 = i / 5 - (i ? .012 : 0), t2 = Math.min((i + 1) / 5, vent ? .865 : 1); if (t1 >= t2) continue; const o = .004 + (i % 2) * .005, m = choose(); if (!m) continue;
         paneAt(m, [rp(xa, s, t1, o), rp(xb, s, t1, o), rp(xb, s, t2, o), rp(xa, s, t2, o)], n);
-        if (m === G && R() < .7) paneAt(Du, [rp(xa, s, t1, o + .003), rp(xb, s, t1, o + .003), rp(xb, s, t1 + .012 + .02 * R(), o + .003), rp(xa, s, t1 + .012 + .02 * R(), o + .003)], n); } }
+        if (m === G && R() < .7) paneAt(Du, [rp(xa + .002, s, t1, o + .003), rp(xb - .002, s, t1, o + .003), rp(xb - .002, s, t1 + .012 + .02 * R(), o + .003), rp(xa + .002, s, t1 + .012 + .02 * R(), o + .003)], n); } } // the dust 2 mm in from the pane's edges: its ends not in theirs
   }
   for (const zc of [Z0 - EZ, Z0 + EZ]) { const n = V(0, 0, Math.sign(zc - Z0)), pz = zc + n.z * .028;
     for (let x = 830.0; x < 849.9; x += .5) for (const [y1, y2] of [[(zc > Z0 ? GCAP : CAP) + .045, 1.705], [1.735, EY - .15]]) { const m = choose(); if (!m) continue;
-      paneAt(m, [[x + .02, y1, pz], [x + .48, y1, pz], [x + .48, y2, pz], [x + .02, y2, pz]], n); if (m === G && R() < .8) paneAt(Du, [[x + .02, y1, pz + n.z * .004], [x + .48, y1, pz + n.z * .004], [x + .48, y1 + .03 + .04 * R(), pz + n.z * .004], [x + .02, y1 + .03 + .04 * R(), pz + n.z * .004]], n); }
+      paneAt(m, [[x + .02, y1, pz], [x + .48, y1, pz], [x + .48, y2, pz], [x + .02, y2, pz]], n); if (m === G && R() < .8) paneAt(Du, [[x + .022, y1, pz + n.z * .004], [x + .478, y1, pz + n.z * .004], [x + .478, y1 + .03 + .04 * R(), pz + n.z * .004], [x + .022, y1 + .03 + .04 * R(), pz + n.z * .004]], n); }
   }
   // the gable at x 850: glazing bars every 500 mm over the dwarf wall, a transom at the eaves, the triangle above; a pair of glazed
   // doors in the middle, shut, painted green, over a timber bottom panel, with a brass knob and an escutcheon
@@ -255,7 +255,7 @@ onSun.push(sun => {
     const tx = new THREE.DataTexture(d, n, n); tx.wrapS = tx.wrapT = THREE.ClampToEdgeWrapping; tx.magFilter = THREE.LinearFilter; tx.minFilter = THREE.LinearMipmapLinearFilter; tx.generateMipmaps = true; tx.center.set(.5, .5); tx.needsUpdate = true;
     const water = new THREE.Mesh(new THREE.CircleGeometry(1.13, 96).rotateX(-PI / 2).translate(X0, .39, Z0), P(z, { color: 0x06100c, roughness: .04, metalness: .1, normalMap: tx, normalScale: new THREE.Vector2(1, 1), envMapIntensity: 1.4 }));
     water.receiveShadow = true; water.onBeforeRender = () => tx.repeat.setScalar(Math.pow(q, -((uTime.value / 7) % 1))); scene.add(water);
-    block(Pit, X0 - 1.01, .2, Z0 - 1.01, X0 + 1.01, .25, Z0 + 1.01); }
+    block(Pit, X0 - 1.01, .2, Z0 - 1.01, X0 + 1.01, .247, Z0 + 1.01); } // 3 mm under the kerb's inner step
   round(X0, Z0, 1.38, 0, .25); for (let k = 0; k < 18; k++) { const t = k * PI / 9; turned(X0 + 1.25 * Math.cos(t), Z0 + 1.25 * Math.sin(t), .14, .24, -t, .25, .435); }
 
   // ---- raised beds: half-brick walls with a brick-on-edge coping, dark soil and bark, planted

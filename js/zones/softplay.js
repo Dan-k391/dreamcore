@@ -28,7 +28,7 @@ defZone('sP', { ...dry, step: 'carpet', wade: 1, grp: 'm', k: 1.15, exp: .3, fog
   solid(-41, -1, 28, -27, 0, 30); solid(-41, -1, 37, -27, 0, 44); solid(-41, -1, 30, -40, 0, 37); solid(-33, -1, 30, -27, 0, 37); // the floor round the pit, whose sides keep the balls in
   // the pit, 85 cm deep, lined with blue pads, and two foam steps under the balls to climb out by
   box(V[1], -40, -1, 30, -33, -.85, 37); flats.push([-40, 30, -33, 37, () => -.85], [-34.4, 33, -33.7, 35, () => -.57], [-33.7, 33, -33, 35, () => -.29]);
-  run(30, 37, 7, (a, b) => { pad(1, -40.05, -.86, a, -40, 0, b, .02); pad(1, -33, -.86, a, -32.95, 0, b, .02); });
+  run(30, 37, 7, (a, b) => { pad(1, -40.05, -.86, a, -40, 0, b, .02); pad(1, -33, -.86, a, -32.997, 0, b, .02); }); // the east side stops at the mats' edge, not under it
   run(-40, -33, 7, (a, b) => { pad(1, a, -.86, 29.95, b, 0, 30, .02); pad(1, a, -.86, 37, b, 0, 37.05, .02); });
   pad(2, -34.4, -.86, 33.002, -33.702, -.57, 34.998, .05); pad(2, -33.698, -.86, 33.002, -33.002, -.29, 34.998, .05); solid(-34.4, -1, 33, -33.7, -.57, 35); solid(-33.7, -1, 33, -33, -.29, 35);
   // its rim: a 24 x 20 cm padded bolster on the floor round the edge, open where the slide runs in and at the climb-out steps
@@ -54,7 +54,7 @@ defZone('sP', { ...dry, step: 'carpet', wade: 1, grp: 'm', k: 1.15, exp: .3, fog
   // wall pads: 6 cm sewn panels to 1.2 m on every wall, an aluminium capping strip along their top
   const wallRun = (x1, z1, x2, z2, n, c) => { const along = x2 - x1 > z2 - z1;
     run(along ? x1 : z1, along ? x2 : z2, n, (a, b, k) => along ? pad(c[k % 2], a + .002, 0, z1, b - .002, 1.2, z2, .025) : pad(c[k % 2], x1, 0, a + .002, x2, 1.2, b - .002, .025));
-    along ? add(Al, new RoundedBoxGeometry(x2 - x1, .02, z2 - z1 + .012, 1, .004).translate((x1 + x2) / 2, 1.21, (z1 + z2) / 2)) : add(Al, new RoundedBoxGeometry(x2 - x1 + .012, .02, z2 - z1, 1, .004).translate((x1 + x2) / 2, 1.21, (z1 + z2) / 2));
+    along ? add(Al, new RoundedBoxGeometry(x2 - x1 - .004, .02, z2 - z1 + .012, 1, .004).translate((x1 + x2) / 2, 1.21, (z1 + z2) / 2)) : add(Al, new RoundedBoxGeometry(x2 - x1 + .012, .02, z2 - z1 - .004, 1, .004).translate((x1 + x2) / 2, 1.21, (z1 + z2) / 2)); // 2 mm short of each end: its ends never in a wall's reveal
     solid(x1, 0, z1, x2, 1.2, z2); };
   wallRun(-41, 28.4, -40.94, 43.6, 15, [1, 3]); wallRun(-40.94, 28.4, -27.06, 28.46, 14, [0, 2]); wallRun(-40.94, 43.54, -27.06, 43.6, 14, [2, 1]);
   wallRun(-27.06, 28.46, -27, 34, 6, [3, 0]); wallRun(-27.06, 38, -27, 43.54, 6, [3, 0]); // either side of the way in from the mall

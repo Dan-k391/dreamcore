@@ -53,14 +53,17 @@ function flight(mat, x1, z1, x2, z2, axis, up, y0, n, rise = .25, base = y0 - .2
 // A dark passage with aisle lights along the floor, built twice: once here and once at its twin's place. Walking into the
 // closed half of either puts you at the same spot in the other, whose open end leads somewhere else entirely. Both look
 // the same and the dark hides the far ends, so the move can't be seen.
-function passage(x1, z1, x2, z2, lo, dx, dz) {
+// t: the depth of the twin place's wall the twin's open end runs into; the twin stops at that wall's back face, so the doorway's
+// reveal, soffit and floor are the place's own faces, not the passage's lying in the same planes.
+function passage(x1, z1, x2, z2, lo, dx, dz, sky, t = 0) {
   const X = x2 - x1 > z2 - z1;
   for (const c of [0, 1]) {
     const ox = c * dx, oz = c * dz, [a1, b1, a2, b2] = X ? [x1 + ox, z1 + oz, x2 + ox, z2 + oz] : [z1 + oz, x1 + ox, z2 + oz, x2 + ox], mid = (a1 + a2) / 2, high = lo === !c; // high: closed at its high end
     const B = (m, p1, y1, q1, p2, y2, q2) => X ? box(m, p1, y1, q1, p2, y2, q2) : box(m, q1, y1, p1, q2, y2, p2);
-    B(voidMat, a1, -.2, b1, a2, 0, b2); B(voidMat, a1, 2.4, b1, a2, 2.6, b2); B(voidMat, a1, 0, b1 - .3, a2, 2.4, b1); B(voidMat, a1, 0, b2, a2, 2.4, b2 + .3);
+    const e1 = high && c ? a1 + t : a1, e2 = high || !c ? a2 : a2 - t; // the walls' ends: the open end trimmed for the twin
+    B(voidMat, e1, -.2, b1, e2, 0, b2); B(voidMat, e1, 2.4, b1, e2, 2.6, b2); B(voidMat, e1, 0, b1 - .3, e2, 2.4, b1); B(voidMat, e1, 0, b2, e2, 2.4, b2 + .3);
     B(voidMat, high ? a2 : a1 - .3, 0, b1 - .3, high ? a2 + .3 : a1, 2.6, b2 + .3);
-    for (let a = a1 + .5; a < a2; a++) for (const b of [b1 + .08, b2 - .08]) B(aisle, a - .03, 0, b - .03, a + .03, .012, b + .03);
+    for (let a = a1 + .5; a < e2; a++) if (a > e1) for (const b of [b1 + .08, b2 - .08]) B(aisle, a - .03, 0, b - .03, a + .03, .012, b + .03);
     const [h1, h2] = high ? [mid, a2] : [a1, mid], s = c ? -1 : 1;
     warps.push(X ? [h1, b1, h2, b2, s * dx, s * dz] : [b1, h1, b2, h2, s * dx, s * dz]);
   }

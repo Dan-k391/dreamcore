@@ -3,8 +3,9 @@ import { dry, zones, defZone } from '../core.js';
 import { warps, passage, box, lit } from '../build.js';
 import { voidMat } from '../mat.js';
 
-// Dark passages come in pairs, far apart. Each is [x1, z1, x2, z2, open at its low end?, x and z offset to its twin, the twin's sky]; see passage()
-const tunnels = [[2.8, 51.6, 4.8, 65.6, true, 0, 600, 'hill'], [67, 13, 81, 15, true, 600, 0, 'night'], [36.4, 48.4, 50.4, 50.4, true, 600, 600, 'dusk'],
+// Dark passages come in pairs, far apart. Each is [x1, z1, x2, z2, open at its low end?, x and z offset to its twin, the twin's sky,
+// the depth of the wall the twin opens through (its reveal is that place's)]; see passage()
+const tunnels = [[2.8, 51.6, 4.8, 65.6, true, 0, 600, 'hill', .4], [67, 13, 81, 15, true, 600, 0, 'night', .45], [36.4, 48.4, 50.4, 50.4, true, 600, 600, 'dusk', .5],
   // from the hotel hallway's open room doors (z 42, 45.6, 49 on its east wall) to the laundromat, the metro platform and the glasshouse
   [5.4, 41.3, 11.2, 42.7, true, 585.1, -650.55, 'night'], [5.4, 44.9, 11.2, 46.3, true, 690, -638.6, 'night'], [5.4, 48.3, 11.2, 49.7, true, 817.2, -649, 'dusk']];
 const t = { ...dry, grp: 'v', k: 0, exp: .3, fog: [0, 0, 0, .5], bloom: .3, wet: .5 };
