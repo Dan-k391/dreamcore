@@ -2,7 +2,7 @@
 // The registries here are how places hand things to the rest of the game without knowing about each other.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { scene, camera, V, H, inR, zones } from './core.js';
+import { renderer, scene, camera, V, H, inR, zones } from './core.js';
 import seen from './seen.js';
 import { seaMat, noCast, voidMat, aisle } from './mat.js';
 
@@ -169,8 +169,11 @@ function merge() { // once every place is built (level.js)
     }
   }
   camera.layers.enableAll(); // until the first frame sets it: everything compiles and bakes as before
+  // three culls shadow casters by the viewing camera's layers, not the shadow camera's: a map redrawn while you stand in one zone
+  // would lack every wall that zone cannot see, and its light would pour through them once you walk round (the backrooms' sun wedge).
+  const sm = renderer.shadowMap, drawShadows = sm.render;
+  sm.render = (lights, s, cam) => { const m = cam.layers.mask; cam.layers.enableAll(); drawShadows.call(sm, lights, s, cam); cam.layers.mask = m; };
   scene.onBeforeRender = (r, s, cam) => {
-    if (r.shadowMap.needsUpdate) for (const o of s.children) if (o.isLight && o.shadow) o.shadow.camera.layers.enableAll();
     if (!cam.isPerspectiveCamera) cam.layers.enableAll();
     else cam.layers.mask = maskAt(cam.matrixWorld.elements[12], cam.matrixWorld.elements[14]);
   };
