@@ -28,22 +28,22 @@ const panel = (w, h, r, hole, hy, d, bev) => { const s = rrect(w, h, r); s.holes
 const kit = () => { const L = []; return { L, p: (m, g, own = false) => L.push([m, g, own]), place: (x, y, zc, ry = 0) => { for (const [m, g, own] of L) add(m, put(g.clone(), x, y, zc, ry), own); } }; };
 const smooth = g => { g.deleteAttribute('normal'); g.deleteAttribute('uv'); g = mergeVertices(g, 1e-5); g.computeVertexNormals(); g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2)); return g; };
 
-defZone('lW', { ...dry, sky: 'night', air: .08, grp: 'w', k: .45, exp: .34, fog: [.012, .014, .022, .005], bloom: .36, wet: .05, hum: .55, box: [595.3, -607.9, 604.7, -594], probe: [600, 1.6, -600] });
+defZone('lW', { ...dry, sky: 'night', air: .03, grp: 'w', k: .24, exp: .34, fog: [.012, .014, .022, .005], bloom: .36, wet: .05, hum: .55, box: [595.3, -607.9, 604.7, -594], probe: [600, 1.6, -600] });
 defZone('lX', { ...dry, sky: 'night', air: .5, grp: 'w', k: 1, exp: .34, fog: [.012, .016, .03, .004], bloom: .4, wet: .3, box: [570, -594, 630, -566], probe: [600, 1.6, -590] });
 
 const z = zones.lW, zx = zones.lX, X0 = 595.5, X1 = 604.5, ZB = -606, ZF = -594, HT = 3;
-const Fl = M(z, 'terrazzo', { color: 0x9a8e7a, roughness: .2, macro: .24, grime: .32, dirt: .6, dirtCol: [.36, .33, .28] }); // damp sheen, scuffed where the room is walked
-const Wl = M(z, 'plaster', { color: 0xb3a487, dirt: .4, grime: .16 }), Tl = M(z, 'poolTile', { color: 0x93a48e, roughness: .16, dirt: .6, dirtCol: [.5, .46, .38] });
+const Fl = M(z, 'terrazzo', { color: 0x776c5b, roughness: .2, macro: .24, grime: .32, dirt: .6, dirtCol: [.36, .33, .28] }); // damp sheen, scuffed where the room is walked
+const Wl = M(z, 'plaster', { color: 0x8c7f67, dirt: .4, grime: .16 }), Tl = M(z, 'poolTile', { color: 0x93a48e, roughness: .16, dirt: .6, dirtCol: [.5, .46, .38] });
 const Cap = M(z, 'paintedSteel', { color: 0x8a9a84, roughness: .28, wear: .4, edgeCol: [.86, .88, .82] }), Dr = M(z, 'plaster', { color: 0x2b2722, grime: .3 });
-const En = M(z, 'paintedSteel', { color: 0xe3ded1, roughness: .3, wear: .3, edgeCol: [.78, .76, .72], dirt: .45, dirtCol: [.44, .41, .35] }); // stove enamel of the machines
+const En = M(z, 'paintedSteel', { color: 0xcdc6b5, roughness: .3, wear: .3, edgeCol: [.78, .76, .72], dirt: .45, dirtCol: [.44, .41, .35] }); // stove enamel of the machines
 const Br = M(z, 'brushedSteel', { roughness: .3, dirt: .3, dirtCol: [.42, .4, .36] }), Ch = M(z, 'chrome'), Gl = M(z, 'glass'), Rb = M(z, 'rubber', { color: 0x1d1c1b, roughness: .55 });
-const Dk = M(z, 'hardPlastic', { color: 0x2b2a28, roughness: .38, wear: .2 }), Lt = M(z, 'hardPlastic', { color: 0xd9d4c6, roughness: .32, wear: .25 });
+const Dk = M(z, 'hardPlastic', { color: 0x2b2a28, roughness: .38, wear: .2 }), Lt = M(z, 'hardPlastic', { color: 0xc0baab, roughness: .32, wear: .25 });
 const Dc = M(z, 'paintedSteel', { color: 0x25282b, roughness: .36, wear: .45, edgeCol: [.42, .42, .4], dirt: .4, dirtCol: [.4, .38, .34] }); // dark cabinets, rails, frames
 const lampLens = neon(0xffb45a, 3.2);
 
 // ===== the room: terrazzo floor, painted walls over a tiled dado, a suspended ceiling =====
 box(Fl, X0 - .2, -.2, ZB - .15, X1 + .2, 0, ZF);
-box(M(z, 'ceilingTile', { color: 0xbdb3a0, dirt: .3 }), X0 - .2, HT, ZB - .15, X1 + .2, HT + .2, ZF);
+box(M(z, 'ceilingTile', { color: 0x8e8472, dirt: .3 }), X0 - .2, HT, ZB - .15, X1 + .2, HT + .2, ZF);
 box(Wl, X0 - .2, 0, ZB - .15, X0, HT, ZF); box(Wl, X1, 0, ZB - .15, X1 + .2, HT, ZF); // west, east
 box(Wl, X0 - .2, 0, ZB - .15, 596.4, HT, ZB); box(Wl, 597.6, 0, ZB - .15, X1 + .2, HT, ZB); box(Wl, 596.4, 2.34, ZB - .15, 597.6, HT, ZB); // back, the entry's opening
 const D = 1.25, t = .012; // the dado: 100 mm glazed tiles to 1.25 m, a rounded capping along the top
@@ -58,8 +58,8 @@ box(Dr, 596.3, 2.24, -607.85, 597.7, 2.44, ZB - .15); // open at its far end ont
 // the shopfront, full width and height, its door locked; the street beyond
 shopfront(z, 600, 0, ZF, 0, { w: X1 - X0, h: HT, th: 2.3, door: 1, dx: 2.9, open: 0 });
 // ceiling fittings on the 600 mm grid: one dead over the dryers' corner, one dimmer by the window
-for (const x of [597.3, 600.3, 603.3]) for (const zc of [-603.6, -600, -596.4])
-  troffer(z, x, HT, zc, 0, x === 603.3 && zc === -603.6 ? { on: false } : { power: x === 597.3 && zc === -596.4 ? 22 : 50 });
+for (const x of [597.3, 600.3, 602.7]) for (const zc of [-603.6, -600, -596.4]) // the east row a tile in from the washers, so its light reaches into the open drum
+  troffer(z, x, HT, zc, 0, x === 602.7 && zc === -603.6 ? { on: false } : { power: x === 597.3 && zc === -596.4 ? 14 : 36 });
 
 // ===== front-loading washer: own frame, front toward +z, feet at y 0 =====
 // An enamelled cabinet (side and top panels with rolled edges, a pressed front panel round the port) on four screw feet, a brushed console
@@ -112,7 +112,7 @@ function towel(w, d, t, seed, sag = () => 0) {
 }
 
 { // the row of eight washers on a tiled plinth along the east wall, fronts toward the room (-x); the sixth stands open with towels in its drum
-  const [K, Dd] = washerKits(), ry = -PI / 2, x = 604.1, y = .12, T1 = M(z, 'loopCarpet', { color: 0xfffaf0, macro: .06, grime: 0, roughness: .95 }), T2 = M(z, 'loopCarpet', { color: 0xc4d8e8, macro: .06, grime: 0, roughness: .95 });
+  const [K, Dd] = washerKits(), ry = -PI / 2, x = 604.1, y = .12, T1 = M(z, 'loopCarpet', { color: 0xfffaf0, macro: .06, grime: 0, roughness: .95, emit: [0xffe6c0, .12] }), T2 = M(z, 'loopCarpet', { color: 0xc4d8e8, macro: .06, grime: 0, roughness: .95, emit: [0xd8dcd8, .1] }); // emit: the light the steel drum bounces onto them, which its shadow cuts off
   box(Tl, 603.7, 0, -602.92, X1 - t, y, -597.08); add(Cap, cyl([603.7, y - .002, -602.92], [603.7, y - .002, -597.08], .01, 10));
   solid(603.7, y, -602.9, X1, 1.13, -597.1);
   for (let i = 0; i < 8; i++) { const zc = -602.52 + i * .72; K.place(x, y, zc, ry);
@@ -151,7 +151,7 @@ function towel(w, d, t, seed, sag = () => 0) {
 }
 
 // ===== folding table: a laminated top with a rolled edge on a welded square-tube frame, six legs on glides =====
-{ const x = 600, zc = -600.4, L = 3, Tt = M(z, 'hardPlastic', { color: 0xddd2bc, roughness: .3, wear: .45, edgeCol: [.9, .87, .8], macro: .15 });
+{ const x = 600, zc = -600.4, L = 3, Tt = M(z, 'hardPlastic', { color: 0x9e917a, roughness: .34, wear: .45, edgeCol: [.9, .87, .8], macro: .15 });
   add(Tt, RB(.8, .03, L, .009).translate(x, .885, zc));
   for (const sx of [-1, 1]) { add(Dc, RB(.03, .06, L - .1, .005).translate(x + sx * .34, .84, zc)); add(Dc, RB(.025, .025, L - .1, .004).translate(x + sx * .34, .16, zc)); }
   for (const dz of [-1.42, 0, 1.42]) { add(Dc, RB(.65, .05, .025, .005).translate(x, .845, zc + dz));
@@ -214,13 +214,13 @@ cart(602.55, -596.3, .35); cart(598.7, -604.7, 1.45);
 }
 
 // ===== a wall clock with no hands, a noticeboard with blank cards =====
-{ const K = kit(), Face = M(z, 'hardPlastic', { color: 0xefe8d8, roughness: .5 });
+{ const K = kit(), Face = M(z, 'hardPlastic', { color: 0xcfc7b6, roughness: .5 });
   K.p(Dk, fwd(lathe([[.17, 0], [.17, .03], [.166, .04]], 64))); K.p(Dk, new THREE.TorusGeometry(.162, .013, 10, 64).translate(0, 0, .04));
   K.p(Face, new THREE.CircleGeometry(.152, 64).translate(0, 0, .03)); K.p(Gl, new THREE.CircleGeometry(.152, 64).translate(0, 0, .048));
   for (let k = 0; k < 60; k++) { const a = k / 60 * 2 * PI, big = k % 5 === 0; K.p(Dk, new THREE.BoxGeometry(big ? .006 : .0025, big ? .024 : .009, .001).translate(0, .136 - (big ? .012 : .0045), .0305).rotateZ(a)); }
   K.p(Dk, fwd(lathe([[.008, 0], [.008, .004], [0, .006]], 16)).translate(0, 0, .03)); // the boss where the hands would be
   K.place(X0 + t, 2.35, -602.4, PI / 2);
-  const B = kit(), Felt = M(z, 'loopCarpet', { color: 0x56604c, macro: .1, grime: .2 }), Al = M(z, 'anodised', { color: 0xb8b4aa, roughness: .35 }), Card = M(z, 'hardPlastic', { color: 0xefe9d9, roughness: .75, detail: .1 });
+  const B = kit(), Felt = M(z, 'loopCarpet', { color: 0x56604c, macro: .1, grime: .2 }), Al = M(z, 'anodised', { color: 0xb8b4aa, roughness: .35 }), Card = M(z, 'hardPlastic', { color: 0xb9b19f, roughness: .75, detail: .1 });
   B.p(Felt, new THREE.BoxGeometry(.96, .62, .012).translate(0, 0, .006));
   for (const [w, h, x, y] of [[1.0, .022, 0, .32], [1.0, .022, 0, -.32], [.022, .66, -.49, 0], [.022, .66, .49, 0]]) B.p(Al, RB(w, h, .024, .006).translate(x, y, .012));
   const pin = (x, y) => B.p(M(z, 'brass'), fwd(lathe([[.005, 0], [.005, .004], [.004, .007], [0, .0075]], 12)).translate(x, y, .0145));
