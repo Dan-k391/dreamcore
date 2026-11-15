@@ -157,19 +157,28 @@ catch (e) { check('every shadow map has every caster (tools/leaks.mjs --fast)', 
 
 // Every registered ladder (plain ?dev, so the yard's dry one too), from the water: forward facing it, forward at 0.9 rad off it, jump alone,
 // run; from the deck: walk off toward the water, and back down facing it. Each must arrive (on the deck, or standing in the water) with the
-// eye never moving more than 4 cm in a frame (the climb itself is 3). Ladders once only worked from one side of a pool.
+// eye never moving more than 4 cm in a frame (the climb itself is 3). Then, at the bottom, off it turned away, left and right, and back up.
+// Ladders once only worked from one side of a pool, and later held the body at the bottom for good.
 { const f = run(base + '?dev', `(async () => { const { ladders } = await import('/js/build.js'), P = Math.PI, out = [];
   for (const [x1, z1, x2, z2, dx, dz, top] of ladders) { const cx = (x1 + x2) / 2, cz = (z1 + z2) / 2, yaw = Math.atan2(-dx, -dz), b = () => { const s = dev.state(); return .15 - ((s.x - cx) * dx + (s.z - cz) * dz); };
     const up = () => { const s = dev.state(); return Math.abs(s.y - top) < .02 && !s.air && b() < .1; }, dn = () => { const s = dev.state(); return s.y < top - .5 && !s.air && b() > .25; };
+    // off: in the pool, a metre from the ladder and out of its zone; or, where a pool wall is nearer than that (the gallery's ladders are 0.7 m
+    // from its south wall), stopped against it at least 0.3 m to the side, three times what the rails' hold allowed
+    const away = () => { let q, n = 0; return () => { const s = dev.state(), a = Math.abs((s.x - cx) * -dz + (s.z - cz) * dx), still = q && Math.hypot(s.x - q.x, s.z - q.z) < .001; q = s; n = still ? n + 1 : 0;
+      return s.y < top - .3 && (Math.hypot(s.x - cx, s.z - cz) > 1 && !(s.x > x1 && s.x < x2 && s.z > z1 && s.z < z2) || n > 10 && a > .3); }; };
     const hold = (keys, face, until, n) => { dev.camera.rotation.set(0, face, 0, 'YXZ'); for (const c of keys) dev.key(c, true); let y0 = dev.camera.position.y, jump = 0, i = 0;
       for (; i < n && !until(); i++) { dev.step(1); const y = dev.camera.position.y; jump = Math.max(jump, Math.abs(y - y0)); y0 = y; } for (const c of keys) dev.key(c, false); dev.step(5); return i < n ? +jump.toFixed(3) : -1; };
     const water = () => { dev.reset(cx - dx * .5, cz - dz * .5, yaw); dev.step(20); }, onto = () => hold(['KeyW'], yaw, () => b() < -.5, 60), r = { at: [+cx.toFixed(1), +cz.toFixed(1)] };
+    const down = () => { water(); hold(['KeyW'], yaw, up, 300); onto(); return hold(['KeyS'], yaw, dn, 200); };
     water(); r.upW = hold(['KeyW'], yaw, up, 300); water(); r.upSide = hold(['KeyW'], yaw + .9, up, 300);
     water(); r.upJump = hold(['Space'], yaw, up, 300); onto(); r.downW = hold(['KeyW'], yaw + P, dn, 200);
-    r.upRun = hold(['KeyW', 'ShiftLeft'], yaw, up, 300); onto(); r.downBack = hold(['KeyS'], yaw, dn, 200); out.push(r); }
-  return out; })()`, '--wait', '200000');
+    r.upRun = hold(['KeyW', 'ShiftLeft'], yaw, up, 300); onto(); r.downBack = hold(['KeyS'], yaw, dn, 200);
+    // then off at the bottom: turned round and walking away, then back up; and sideways either way, facing the ladder
+    r.offAway = hold(['KeyW'], yaw + P, away(), 120); r.again = hold(['KeyW'], yaw, up, 400);
+    down(); r.offLeft = hold(['KeyA'], yaw, away(), 120); down(); r.offRight = hold(['KeyD'], yaw, away(), 120); out.push(r); }
+  return out; })()`, '--wait', '300000');
   const bad = (f.result || []).filter(r => Object.entries(r).some(([k, v]) => k !== 'at' && !(v >= 0 && v <= .04)));
-  check('every ladder climbs up from the water and down from the deck, either way round, smoothly', f.result?.length >= 7 && !bad.length && !f.errors.length, JSON.stringify(bad.length ? bad : f).slice(0, 600)); }
+  check('every ladder climbs up from the water and down from the deck, either way round, smoothly, and lets go at the bottom', f.result?.length >= 7 && !bad.length && !f.errors.length, JSON.stringify(bad.length ? bad : f).slice(0, 600)); }
 
 // The settings panel (js/settings.js): High is the default render; volume and quality set through the panel reach the master gain and the
 // pixel ratio and come back from storage (load() is what a reload runs); the fps readout gives a plausible number once on, and its toggle is saved.

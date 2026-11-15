@@ -87,10 +87,13 @@ const frame = dt => { // one game frame of dt seconds: the loop below passes the
   const warp = warps.find(w => inR(p.x, p.z, w[0], w[1], w[2], w[3]));
   if (warp) { p.x += warp[4]; p.z += warp[5]; }
   // Ladders: at one, moving toward its deck (whichever way you face) or jumping climbs, moving toward the water descends; once holding on, gravity lets go of you.
+  // Moving sideways, or away at the bottom, lets go of the ladder (it once held the body between the rails for good).
   const lad = ladders.find(l => inR(p.x, p.z, l[0], l[1], l[2], l[3])), top = lad ? lad[6] : 0;
   const toward = lad && (ix || iy) ? ((ix * cs - iy * sn) * lad[4] + (-ix * sn - iy * cs) * lad[5]) / Math.hypot(ix, iy) : 0, below = lad && Math.min(feet, floorH(p.x, p.z)) < top - .01; // below: not standing on the deck
-  const climb = toward < -.3 ? -1 : toward > .3 || (below && k('Space')) ? 1 : 0, at = !!lad && (below || toward < -.3);
-  const hang = grip && at && feet < top - .05; // on the rungs below the deck: the body stays on the ladder
+  const bottom = lad && feet < top - .05 && feet <= groundAt(p.x, p.z, feet) + .01; // below the deck with nothing left to descend
+  const climb = toward < -.3 ? bottom ? 0 : -1 : toward > .3 || (below && k('Space')) ? 1 : 0, at = !!lad && (below || toward < -.3);
+  const off = (ix || iy) && !climb; // moving sideways, or away at the bottom: let go of the ladder
+  const hang = grip && at && !off && feet < top - .05; // on the rungs below the deck: the body stays on the ladder
   let mx = vel.x * dt, mz = vel.y * dt;
   if (lad && k('Space') && !iy && !ix && Math.abs(feet - top) < .03 && (p.x - (lad[0] + lad[2]) / 2) * lad[4] + (p.z - (lad[1] + lad[3]) / 2) * lad[5] < .5) { mx += lad[4] * 1.5 * dt; mz += lad[5] * 1.5 * dt; } // jump held at the top: step off onto the deck
   const ox = p.x, oz = p.z, n = Math.max(1, Math.ceil(Math.hypot(mx, mz) / .1));
@@ -106,7 +109,7 @@ const frame = dt => { // one game frame of dt seconds: the loop below passes the
   if (tall(p.x, p.z)) { if (!tall(p.x, oz)) p.z = oz; else if (!tall(ox, p.z)) p.x = ox; else { p.x = ox; p.z = oz; } }
   const ground = groundAt(p.x, p.z, feet), was = feet;
   let landed = false, hit = 0;
-  grip = at && (grip || climb !== 0);
+  grip = at && !off && (grip || climb !== 0);
   if (grip) { feet = Math.max(Math.min(ground, feet + 4 * dt), Math.min(top, feet + climb * 1.8 * dt)); vy = 0; }
   else if (vy > 0 || feet > ground + (air ? .001 : .12)) { // off the ground: gravity, and drag once the legs are under water. Walking off a ledge is a fall; walking down a slope is not
     vy -= 11 * dt; if (pool && feet < WY) vy -= vy * Math.min(1, 4 * dt);
