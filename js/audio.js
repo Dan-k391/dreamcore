@@ -2,9 +2,11 @@
 
 // ---------- audio: generative ambient music, room tone and footsteps, all synthesised ----------
 let sfx;
+const sound = { level: 1, muted: false, gain: null, onchange: null, // the master volume (0-1) and mute, kept before the sound starts (settings.js)
+  set(level, muted) { this.level = level; this.muted = muted; if (this.gain) this.gain.value = muted ? 0 : level; this.onchange?.(); } };
 function startAudio(zone) { // zone: where you are when it starts
   const ac = new AudioContext(), master = ac.createGain(), verb = ac.createConvolver(), comp = ac.createDynamicsCompressor();
-  master.connect(comp).connect(ac.destination);
+  master.connect(comp).connect(ac.destination); sound.gain = master.gain; sound.set(sound.level, sound.muted);
   const bus = (vol, ...to) => { const g = ac.createGain(); g.gain.value = vol; for (const n of to) g.connect(n); return g; };
   const ir = ac.createBuffer(2, ac.sampleRate * 5, ac.sampleRate), noise = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate); // hall reverb impulse, white noise
   for (let c = 0; c < 2; c++) for (let d = ir.getChannelData(c), i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length) ** 4;
@@ -47,9 +49,9 @@ function startAudio(zone) { // zone: where you are when it starts
       s.connect(b).connect(g); s.start(t, Math.random()); s.stop(t + dur + .1);
     },
     zone(z) { const t = ac.currentTime; hum.gain.setTargetAtTime(z.hum * .07, t, .8); water.gain.setTargetAtTime(z.water * .4, t, .8); wet.gain.setTargetAtTime(z.wet, t, .8); wind.gain.setTargetAtTime((z.air || 0) * .25, t, 1.5); },
-    mute() { master.gain.value = master.gain.value ? 0 : 1; },
+    mute() { sound.set(sound.level, !sound.muted); },
   };
   sfx.zone(zone);
 }
 
-export { sfx, startAudio };
+export { sfx, startAudio, sound };

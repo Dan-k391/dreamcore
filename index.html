@@ -13,6 +13,22 @@
   #h { position: fixed; left: 0; right: 0; bottom: 20px; text-align: center; pointer-events: none; color: #fff;
        font: 13px Georgia, serif; letter-spacing: .12em; text-shadow: 0 0 8px #000 }
   #x { position: fixed; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px; border-radius: 50%; background: rgba(255,255,255,.55); pointer-events: none }
+  #p { position: fixed; left: 50%; top: calc(50% + 78px); transform: translateX(-50%); width: min(330px, calc(100% - 32px)); box-sizing: border-box;
+       padding: 14px 18px 10px; background: rgba(0,0,0,.45); border: 1px solid rgba(243,234,216,.18); color: #f3ead8;
+       font: 13px/1.6 Georgia, serif; letter-spacing: .12em; text-shadow: 0 0 8px #000 }
+  @media (max-width: 700px) { #p { top: calc(50% + 112px) } } /* the start line wraps to three lines */
+  #o[style*="none"] ~ #p { display: none } /* the panel shows only while paused, with the start overlay */
+  #p div { display: flex; align-items: center; gap: 10px; margin-bottom: 8px }
+  #p span { width: 4.6em; flex: none; opacity: .75 }
+  #p input { flex: 1; min-width: 0; margin: 0; accent-color: #e9d9b4 }
+  #p button { flex: 1; padding: 3px 0; border: 1px solid rgba(243,234,216,.22); background: none; color: inherit; font: inherit; letter-spacing: .1em; cursor: pointer }
+  #p button[aria-pressed=true] { background: rgba(243,234,216,.16); border-color: rgba(243,234,216,.5) }
+  #p button:focus-visible, #p input:focus-visible { outline: 1px solid #e9d9b4; outline-offset: 2px }
+  #p small { display: block; text-align: center; font-size: 11px; opacity: .55 }
+  #f { position: fixed; right: 12px; top: 12px; display: flex; align-items: center; gap: 8px; padding: 4px 8px; background: rgba(0,0,0,.35);
+       color: #f3ead8; font: 12px Georgia, serif; letter-spacing: .08em; pointer-events: none }
+  #f[hidden] { display: none }
+  #f b { font-weight: 400; min-width: 4.2em; text-align: right }
   #o b { display: block; font-weight: 300; font-size: 46px; letter-spacing: .55em; margin-left: .55em }
 </style>
 <script type="importmap">
@@ -23,9 +39,16 @@
 </script>
 </head>
 <body>
-<div id="h" hidden>this window won't let the page capture the mouse, so mouse look stops at its edges — Q / E turn further · click to try again, or open the page in its own browser tab</div>
+<div id="h" hidden>this window won't let the page capture the mouse, so mouse look stops at its edges — Q / E turn further · click to try again, or open the page in its own browser tab · p settings</div>
 <div id="x" hidden></div>
 <button id="o"><b>dreamcore</b><span id="s">loading…</span></button>
+<div id="p" role="group" aria-label="settings">
+  <div><span id="pvl">sound</span><input id="pv" type="range" min="0" max="100" step="1" value="100" aria-labelledby="pvl"><button id="pm" aria-pressed="false" style="flex:none;width:4.2em">mute</button></div>
+  <div role="group" aria-labelledby="pql"><span id="pql">quality</span><button data-q="0">low</button><button data-q="1">medium</button><button data-q="2">high</button></div>
+  <div><span>fps</span><button id="pf" aria-pressed="true">show fps</button></div>
+  <small>p settings · f fps · click the view to play</small>
+</div>
+<div id="f" hidden aria-hidden="true"><b>&nbsp;</b><canvas width="90" height="28" style="width:90px;height:28px"></canvas></div>
 <script type="module" src="js/main.js"></script>
 </body>
 </html>

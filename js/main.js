@@ -4,6 +4,7 @@ import { renderer } from './core.js';
 import { frame } from './player.js';
 
 import './dev.js';
+import './settings.js';
 
 const clock = new THREE.Clock();
 let drawn = false;

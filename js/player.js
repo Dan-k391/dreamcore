@@ -35,7 +35,7 @@ document.addEventListener('pointerlockerror', () => refused());
 document.addEventListener('pointerlockchange', () => { clearTimeout(again); if (locked()) setFree(false); else if (!free) { o.style.display = ''; letGo(); } }); // Esc pauses
 addEventListener('blur', letGo); // a key held while the window loses focus never reports its release
 addEventListener('mousemove', e => { // mouse look: captured pointer where the browser allows it, bare cursor movement where it doesn't
-  if (!locked() && !free) return;
+  if (paused() || (!locked() && !free)) return; // paused: the settings panel is open under the bare cursor
   const m = free ? 60 : 250, cl = v => Math.max(-m, Math.min(m, v)); // drop the one-event jumps browsers report on re-entry or under capture
   turn(cl(e.movementX) * .0022 * Math.min(72, camera.fov) / 72, cl(e.movementY) * .0022 * Math.min(72, camera.fov) / 72); // slower while zoomed in, the same while running widens the view
 });

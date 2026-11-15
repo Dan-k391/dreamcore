@@ -24,6 +24,8 @@ const ao = new GTAOPass(scene, camera, 1, 1);
 ao.updateGtaoMaterial({ radius: .9, distanceExponent: 1.5, thickness: 1, scale: 1.3, samples: 16 });
 ao.output = GTAOPass.OUTPUT.Off; ao.needsSwap = false; // it only makes its denoised AO picture; atmos multiplies it in (was a copy and a multiply blend, two full-screen passes)
 composer.addPass(ao);
+const quality = { scale: 1, msaa: 4, ao: 1 }; // render scale, scene samples, AO resolution: High, what the game always drew (settings.js sets the rest)
+const aoSize = ao.setSize.bind(ao); ao.setSize = (w, h) => aoSize(Math.round(w * quality.ao), Math.round(h * quality.ao));
 const aoRender = ao.render.bind(ao); // the AO pass sees the water's surface: occlusion worked out from the pool floor would darken the water where
 const noAO = seeThrough; // the floor lies unbent, a ghost under what the water shows bent (water.js skips its pictures for that pass). The rest see-through is left out
 ao.render = (...a) => { const on = noAO.map(w => w.visible); for (const w of noAO) w.visible = false; aoRender(...a); noAO.forEach((w, i) => w.visible = on[i]); };
@@ -76,11 +78,12 @@ const film = new THREE.ShaderMaterial({ // lens fringing, per-zone grade, vignet
 composer.addPass(new ShaderPass(film));
 function resize() {
   if (!innerWidth || !innerHeight) return; // hidden tab
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2) * quality.scale);
   camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight); composer.setPixelRatio(renderer.getPixelRatio()); composer.setSize(innerWidth, innerHeight); msaa.setSize(innerWidth * renderer.getPixelRatio(), innerHeight * renderer.getPixelRatio());
 }
 addEventListener('resize', resize); resize();
+function setQuality(q) { Object.assign(quality, q); if (msaa.samples !== quality.msaa) { msaa.samples = quality.msaa; msaa.dispose(); } resize(); } // at once: targets resized, no shader changes
 { // and every program the passes draw with, for the target each draws into: found by one frame through the composer with the
   // draws left out (passes set their defines as they render), not compiled one after another on the first frame
   // (each draw's materials collected as it is asked for: the full-screen passes share one quad and swap its material)
@@ -91,4 +94,4 @@ addEventListener('resize', resize); resize();
 }
 performance.mark('load: passes compiled');
 
-export { composer, ao, look, atmos, bloom, film };
+export { composer, ao, look, atmos, bloom, film, setQuality };

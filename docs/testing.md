@@ -21,6 +21,7 @@ All tools are dependency-free (Node 22; the two image tools use Python 3 with Pi
 - `dev.reset(x, z, yaw = 0, pitch = 0)`: put everything a walk leaves behind back to a fresh load's start at (x, z): keys, `lift`, fov, shader clock, sky, shared lamps and shadows, waves, loose bodies and rings, eye adaptation. A `eval` that changes some other state of its own must put it back itself.
 - `dev.lift`: metres added to the eye height (default 0; exists only with `?dev`).
 - `dev.bodies()` lists the loose bodies and rings.
+- `dev.settings`: `{ load, s, levels }` from `js/settings.js` (the pause panel: volume, mute, quality Low / Medium / High, fps readout; saved in localStorage `dreamcore.settings`; quality levels are `setQuality` in `js/post.js`). Under `?dev` the fps readout and the P / F keys stay off unless `dev.fps = true` (then `dev.settings.load()`).
 - Also `camera`, `scene`, `renderer`, `zones`, `cost()`, `info()`, `lib` (the texture bake's cost), `texMem()` (material texture memory).
 
 ## `tools/browse.mjs`

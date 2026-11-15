@@ -168,6 +168,21 @@ catch (e) { check('nothing pops in crossing an opening (tools/seams.mjs --pop --
   const bad = (f.result || []).filter(r => Object.entries(r).some(([k, v]) => k !== 'at' && !(v >= 0 && v <= .04)));
   check('every ladder climbs up from the water and down from the deck, either way round, smoothly', f.result?.length >= 7 && !bad.length && !f.errors.length, JSON.stringify(bad.length ? bad : f).slice(0, 600)); }
 
+// The settings panel (js/settings.js): High is the default render; volume and quality set through the panel reach the master gain and the
+// pixel ratio and come back from storage (load() is what a reload runs); the fps readout gives a plausible number once on, and its toggle is saved.
+{ const f = run(base + '?dev&bare', `(async () => { const a = await import('/js/audio.js'), $ = id => document.getElementById(id), r = {};
+    r.def = [dev.renderer.getPixelRatio(), dev.settings.s.q, document.querySelector('[data-q="2"]').getAttribute('aria-pressed')];
+    a.startAudio(Object.values(dev.zones)[0]); $('pv').value = 50; $('pv').dispatchEvent(new Event('input')); document.querySelector('[data-q="0"]').click();
+    r.set = [+a.sound.gain.value.toFixed(3), dev.renderer.getPixelRatio()];
+    a.sound.set(1, false); dev.settings.s.q = 2; dev.settings.s.vol = 100; dev.settings.load(); r.back = [+a.sound.gain.value.toFixed(3), dev.renderer.getPixelRatio()];
+    document.querySelector('[data-q="2"]').click(); r.high = dev.renderer.getPixelRatio(); r.hid = $('f').hidden;
+    dev.fps = true; dev.settings.load(); await new Promise(ok => setTimeout(ok, 1200)); r.fps = +$('f').dataset.fps; $('pf').click();
+    r.saved = JSON.parse(localStorage.getItem('dreamcore.settings')); r.off = $('f').hidden; return r; })()`);
+  const r = f.result || {};
+  check('settings: High is the default and draws at the full pixel ratio', r.def?.[0] === 1 && r.def[1] === 2 && r.def[2] === 'true' && r.high === 1, JSON.stringify(r));
+  check('settings: the panel sets the master gain and the pixel ratio, and they survive a reload', r.set?.[0] === .25 && r.set[1] === .6 && r.back?.[0] === .25 && r.back[1] === .6, JSON.stringify(r));
+  check('settings: fps readout hidden under ?dev, plausible when on, toggle saved', r.hid === true && r.fps > 5 && r.fps < 1000 && r.off === true && r.saved?.fps === false && !f.errors.length, JSON.stringify(f).slice(0, 600)); }
+
 // Production address: no window.dev, the start overlay is up once the level is built.
 const prod = run(base, `await new Promise(ok => { const t = setInterval(() => /click to enter/.test(document.getElementById('s').textContent) && (clearInterval(t), ok()), 100); }),
   { dev: typeof window.dev, overlay: getComputedStyle(document.getElementById('o')).display !== 'none' }`, '--wait', '15000', '--settle', '0'); // browse.mjs waits out --wait for a dev.ready that never comes here
