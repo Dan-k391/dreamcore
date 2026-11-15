@@ -70,10 +70,10 @@ defZone('mT', { ...dry, sky: 'night', grp: 'q', k: .8, exp: .3, fog: [.012, .011
       box(Void, cl - .15, YB, TC - TW / 2, cl + .15, TS + TW / 2, TC + TW / 2);
     }
   }
-  { // the doorway's recess: 1.5 m deep, dark, closed by a solid (to be joined to a passage)
+  { // the doorway's recess: 1.5 m deep, dark, open at its far end onto the passage from the hotel
     const D = M(z, 'concreteWall', { color: 0x4a443c, dirt: .6 });
     box(D, DOOR - .8, 0, ZW + .3, DOOR - .5, 2.4, ZW + 1.8); box(D, DOOR + .5, 0, ZW + .3, DOOR + .8, 2.4, ZW + 1.8); box(D, DOOR - .5, 2.24, ZW + .3, DOOR + .5, 2.4, ZW + 1.8);
-    box(D, DOOR - .5, -.1, ZW + .3, DOOR + .5, 0, ZW + 1.8); box(Void, DOOR - .5, 0, ZW + 1.8, DOOR + .5, 2.24, ZW + 1.95);
+    box(D, DOOR - .5, -.1, ZW + .3, DOOR + .5, 0, ZW + 1.8); // open at its far end onto the hotel's passage (zones/passages.js)
     door(z, DOOR, 0, ZW + .075, PI, { leaf: false, frame: 0x2f5a6a });
   }
 

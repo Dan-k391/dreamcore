@@ -42,6 +42,17 @@ const walks = [
   ['softArch', [-37, 38.8, P, "['KeyW']", 2], { zone: 'sP', z: 40.8 }], // through a 2.05 m arch of the soft play wall
   ['softArchSide', [-36.62, 38.8, P, "['KeyW']", 2], { zone: 'sP', z: 40.8, x: -36.77 }], // off-centre: the arch's curve guides you in toward its middle
   ['fieldWall', [-27, 668, 0, "['KeyW']", 2], { zone: 'fD', z: 665.95 }], // the end wall stops you where the hill is higher than it
+  // the hotel's three open doors (east wall, z 42, 45.6, 49): run in, through the dark passage (its turn, for the two that have one), into the place and back out of the same door
+  ['toLaundromat', [3.8, 42, -P / 2, R, 2.5], { zone: 'j3', sky: 'night', x: 597.4, z: -608.55 }],
+  ['laundromatIn', [597, -608.55, P, R, 1.5], { zone: 'lW', sky: 'night', x: 597, z: -602.6 }],
+  ['laundromatOut', [597, -603, 0, R, 2], { zone: 'j3', sky: 'night', z: -608.95 }],
+  ['laundromatBack', [597, -608.55, P / 2, R, 3], { zone: 'hT', sky: 'day', x: 2.9, z: 42 }],
+  ['toMetro', [3.8, 45.6, -P / 2, R, 2.5], { zone: 'j4', sky: 'night', x: 702.5, z: -593 }],
+  ['metroIn', [702, -593, 0, R, 1], { zone: 'mT', sky: 'night', x: 702, z: -597, y: 0 }],
+  ['metroOut', [702, -597, P, R, 1.5], { zone: 'j4', sky: 'night', z: -592.6 }],
+  ['metroBack', [702, -593, P / 2, R, 3], { zone: 'hT', sky: 'day', x: 2.9, z: 45.6 }],
+  ['toGlasshouse', [3.8, 49, -P / 2, R, 4], { zone: 'gH', sky: 'dusk', z: -600 }],
+  ['glasshouseBack', [837, -600, P / 2, R, 5], { zone: 'hT', sky: 'day', x: 2.9, z: 49 }],
 ];
 
 const dev = run(base + '?dev&bare', `[${walks.map(([, a]) => `dev.go(${a.join(',')})`).join(',')}]`);
@@ -58,6 +69,7 @@ const solids = [
   ['jump onto the mall bench: standing on its seat', 'return dev.go(-18, 33.9, P, ["KeyW", "Space"], .35)', s => near(s.y, .45, .02) && !s.air && near(s.z, 34.6, .2)],
   ['walk into the bench from the front, west and east', 'return [dev.go(-18, 33.4, P, ["KeyW"], 1.5).z, dev.go(-20.2, 34.7, -P / 2, ["KeyW"], 1.5).x, dev.go(-15.8, 34.7, P / 2, ["KeyW"], 1.5).x]', ([s, w, e]) => near(s, 34.18) && near(w, -19.3) && near(e, -16.7)],
   ['walk into the field bench from behind: its back stops you', 'return dev.go(-9.5, 705.4, P / 2, ["KeyW"], 1.5)', s => near(s.x, -9.88) && s.y < 3.3],
+  ['the leaf of an open hotel door, swung into its passage, stops you (the passage wall is 0.3 m further)', 'return dev.go(5.7, 42.3, 0, ["KeyW"], 1.5)', s => s.z > 41.75 && s.zone === 't3'],
   ['walk under the bus shelter roof to its bench', 'return dev.go(688, 31.6, 0, ["KeyW"], 2)', s => near(s.z, 30.15) && near(s.y, 0, .01)],
   ['a jump under the shelter roof stops at it', 'dev.go(688, 30.4, 0); dev.key("Space", true); dev.step(1); dev.key("Space", false); let hi = 0; for (let i = 0; i < 60; i++) { dev.step(1); hi = Math.max(hi, dev.state().y); } return hi', hi => hi > .5 && hi <= 2.4 - 1.75 + .01],
   ['wading through a ring pushes it and it stays in its pool', 'const a = dev.bodies().rings[0]; dev.go(-1.6, -7.2, 0, ["KeyW"], 2.2); dev.step(300); return [a, dev.bodies().rings[0]]', ([a, b]) => Math.hypot(b.x - a.x, b.z - a.z) > .3 && b.x - .55 >= b.pool[0] - 1e-3 && b.x + .55 <= b.pool[2] + 1e-3 && b.z - .55 >= b.pool[1] - 1e-3 && b.z + .55 <= b.pool[3] + 1e-3 && b.y > -.2 && b.y < .1],

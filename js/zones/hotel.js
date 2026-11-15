@@ -3,8 +3,8 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { dry, zones, defZone } from '../core.js';
 import { hotelTex } from '../tex.js';
-import { dirt, P, M, sign } from '../mat.js';
-import { add, block, box, solid, put } from '../build.js';
+import { dirt, P, M, sign, voidMat } from '../mat.js';
+import { add, block, box, solid, turned, put } from '../build.js';
 import { door } from '../props/metalwork.js';
 import { sconce, opalPanel } from '../props/lights.js';
 import { skirting } from '../props/structure.js';
@@ -35,6 +35,7 @@ defZone('hT', { ...dry, step: 'carpet', grp: 'm', k: 1, exp: .34, fog: [.3, .2, 
   const z = zones.hT, h = 2.8, C = P(z, { map: hotelTex.map, normalMap: hotelTex.normalMap, ...dirt });
   const W = M(z, 'damask', { color: 0xe0cba0 }), Pl = M(z, 'plaster', { color: 0xe9dcc0 }), Wd = M(z, 'hardwood', { color: 0x6a4030, swap: 1 });
   const Rl = M(z, 'gelcoat', { color: 0x4a2c1e, wear: 0, roughness: .3, macro: .05 }), Br = M(z, 'brass', { roughness: .3, dirt: .6 }), K = P(z, { color: 0x050403, roughness: 1 });
+  const OPEN = [42, 45.6, 49], LEAF = 1.5; // the room doors standing open on the passages to the far-off places (zones/passages.js), and how far
   const nums = [], txt = lettering(z, Array.from({ length: 13 }, (_, i) => String(301 + i)));
   box(C, 2.2, -.2, 21.4, 5.4, 0, 51.6); box(Pl, 2.2, h, 21.4, 5.4, h + .2, 51.6); box(W, 2.6, 2.24, 51.55, 5, h, 51.75);
   for (const [x1, x2, f, k, gap, doors] of [[2.2, 2.6, 2.6, 1, 45, [24, 27.6, 31.2, 34.8, 38.4, 49]], [5, 5.4, 5, -1, 31, [24, 27.6, 34.8, 38.4, 42, 45.6, 49]]]) { // west wall (way to the mall), east wall (way to the cinema)
@@ -42,11 +43,17 @@ defZone('hT', { ...dry, step: 'carpet', grp: 'm', k: 1, exp: .34, fog: [.3, .2, 
     let z0 = 21.4;
     for (const [c, isDoor] of ops) { // the wall round each 1.0 x 2.24 m opening; a room door's opening is shut by its leaf and a dark backing
       box(W, x1, 0, z0, x2, h, c - .5); box(W, x1, 2.24, c - .5, x2, h, c + .5); z0 = c + .5;
-      if (isDoor) { solid(x1, 0, c - .5, x2, 2.24, c + .5); block(K, k > 0 ? x1 : x2 - .2, 0, c - .5, k > 0 ? x1 + .2 : x2, 2.24, c + .5); }
-      door(z, f - k * .05, 0, c, ry, isDoor ? { color: 0x4b2418, frame: 0xd8ccb4 } : { leaf: false, frame: 0xd8ccb4 });
-      if (isDoor) { // a door viewer in the leaf, and the room number on a brass plate on the wall by the latch
-        add(Br, put(new THREE.LatheGeometry([[0, .009], [.009, .009], [.011, .007], [.0115, .003], [.0115, 0]].map(([r, y]) => new THREE.Vector2(r, y)), 24).rotateX(Math.PI / 2).translate(0, 1.52, -.05 + .0225), f, 0, c, ry));
-        add(K, put(new THREE.CircleGeometry(.005, 16).translate(0, 1.52, -.05 + .0225 + .0092), f, 0, c, ry));
+      const open = isDoor && k < 0 && OPEN.includes(c), shut = isDoor && !open;
+      if (shut) { solid(x1, 0, c - .5, x2, 2.24, c + .5); block(K, k > 0 ? x1 : x2 - .2, 0, c - .5, k > 0 ? x1 + .2 : x2, 2.24, c + .5); }
+      door(z, f - k * .05, 0, c, ry, isDoor ? { color: 0x4b2418, frame: 0xd8ccb4, open: open ? LEAF : 0 } : { leaf: false, frame: 0xd8ccb4 });
+      if (open) { // swung in against the passage wall (its solid); the wall's back lined dark (the warm light from beyond is the passage's: zones/passages.js)
+        const hx = f - k * .0795, hz = c - .5095, S = Math.sin(LEAF), C = Math.cos(LEAF); // its hinge axis (the kit's), then the leaf 1.026 x 45 mm about it
+        turned(hx + .5095 * S - .0295 * C, hz + .5095 * C + .0295 * S, .513, .023, LEAF - Math.PI / 2, 0, 2.24);
+        for (const [a1, a2, y1] of [[c - .7, c - .5, 0], [c + .5, c + .7, 0], [c - .5, c + .5, 2.24]]) block(voidMat, x2, y1, a1, x2 + .02, 2.4, a2);
+      }
+      if (shut) add(Br, put(new THREE.LatheGeometry([[0, .009], [.009, .009], [.011, .007], [.0115, .003], [.0115, 0]].map(([r, y]) => new THREE.Vector2(r, y)), 24).rotateX(Math.PI / 2).translate(0, 1.52, -.05 + .0225), f, 0, c, ry)); // the door viewer
+      if (shut) add(K, put(new THREE.CircleGeometry(.005, 16).translate(0, 1.52, -.05 + .0225 + .0092), f, 0, c, ry));
+      if (isDoor) { // the room number on a brass plate on the wall by the latch
         add(Br, put(new RoundedBoxGeometry(.17, .095, .008, 2, .003).translate(.74, 1.5, .004), f, 0, c, ry));
         const [m, q] = txt(nums.length, .15, .075); nums.push(c); add(m, put(q.translate(.74, 1.5, .0085), f, 0, c, ry), true);
         for (const sx of [-.072, .072]) add(Br, put(new THREE.SphereGeometry(.004, 10, 4, 0, 2 * Math.PI, 0, Math.PI / 2).scale(1, 1, .5).rotateX(Math.PI / 2).translate(.74 + sx, 1.5, .008), f, 0, c, ry));

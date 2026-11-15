@@ -108,10 +108,10 @@ onSun.push(sun => {
   brickFace('z', 830, 1, -604, -596, 0, 78, backKeep);
   add(St, cbox(.12, .17, 1.48, .008).translate(829.99 + .03, 2.43, Z0));
   door(z, 829.9, 0, Z0, PI / 2, { leaf: false, frame: 0x3c5244 });
-  // the recess behind it: dark, closed 1.5 m in (the passage joins here later)
+  // the recess behind it: dark, 1.25 m deep, then the passage from the hotel
   const K = P(z, { color: 0x1a1714, roughness: .95 });
-  block(K, 828.4, -.1, -600.62, 829.65, 0, -599.38); block(K, 828.4, 2.24, -600.62, 829.65, 2.4, -599.38); block(K, 828.4, 0, -600.7, 829.65, 2.4, -600.5); block(K, 828.4, 0, -599.5, 829.65, 2.4, -599.3); block(K, 828.35, 0, -600.7, 828.5, 2.4, -599.3);
-  solid(828.3, 0, -600.8, 828.5, 3, -599.2); solid(828.3, 0, -601, 829.66, 3, -600.5); solid(828.3, 0, -599.5, 829.66, 3, -599); solid(828.3, 2.24, -600.6, 829.66, 3, -599.4);
+  block(K, 828.4, -.1, -600.62, 829.65, 0, -599.38); block(K, 828.4, 2.24, -600.62, 829.65, 2.4, -599.38); block(K, 828.4, 0, -600.7, 829.65, 2.4, -600.5); block(K, 828.4, 0, -599.5, 829.65, 2.4, -599.3);
+  solid(828.4, 0, -601, 829.66, 3, -600.5); solid(828.4, 0, -599.5, 829.66, 3, -599); solid(828.4, 2.24, -600.6, 829.66, 3, -599.4); // open at x 828.4 onto the hotel's passage (zones/passages.js)
   // the shell's solids: the back wall either side of and over the door, the side walls and their glass, the gable and its shut door
   solid(829.6, 0, -604.5, 830, 8, -600.5); solid(829.6, 0, -599.5, 830, 8, -595.5); solid(829.6, 2.24, -600.6, 830, 8, -599.4);
   solid(829.6, 0, -604.5, 850.5, 8, -603.98); solid(829.6, 0, -596.02, 850.5, 8, -595.5); solid(850, 0, -604.5, 850.5, 8, -595.5);

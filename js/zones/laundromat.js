@@ -51,10 +51,10 @@ block(Tl, X0, 0, ZB, X0 + t, D, ZF); block(Tl, X1 - t, 0, ZB, X1, D, ZF);
 for (const [a, b] of [[X0 + t, 596.4], [597.6, 600.14], [602.86, X1 - t]]) block(Tl, a, 0, ZB, b, D, ZB + t);
 add(Cap, cyl([X0 + t - .003, D, ZB + t], [X0 + t - .003, D, ZF], .011, 10)); add(Cap, cyl([X1 - t + .003, D, ZB + t], [X1 - t + .003, D, ZF], .011, 10));
 for (const [a, b] of [[X0 + t, 596.4], [597.6, 600.14], [602.86, X1 - t]]) add(Cap, cyl([a, D, ZB + t - .003], [b, D, ZB + t - .003], .011, 10));
-// the entry: a 1.0 x 2.24 m opening in a steel frame, a dark recess 1.5 m deep behind it, closed for now (a passage joins it later)
+// the entry: a 1.0 x 2.24 m opening in a steel frame, a dark recess 1.5 m deep behind it, open onto the dark passage from the hotel
 door(z, 597, 0, ZB - .075, 0, { leaf: false, frame: 0xd8d2c4 });
 box(Fl, 596.3, -.2, -607.85, 597.7, 0, ZB - .15); box(Dr, 596.3, 0, -607.85, 596.5, 2.44, ZB - .15); box(Dr, 597.5, 0, -607.85, 597.7, 2.44, ZB - .15);
-box(Dr, 596.3, 2.24, -607.85, 597.7, 2.44, ZB - .15); box(Dr, 596.5, 0, -607.85, 597.5, 2.24, -607.65);
+box(Dr, 596.3, 2.24, -607.85, 597.7, 2.44, ZB - .15); // open at its far end onto the hotel's passage (zones/passages.js)
 // the shopfront, full width and height, its door locked; the street beyond
 shopfront(z, 600, 0, ZF, 0, { w: X1 - X0, h: HT, th: 2.3, door: 1, dx: 2.9, open: 0 });
 // ceiling fittings on the 600 mm grid: one dead over the dryers' corner, one dimmer by the window
