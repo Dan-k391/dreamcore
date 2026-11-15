@@ -131,6 +131,12 @@ for (const [name, hash, calls, tris] of [['gallery-pool', '23.2,14.2,3.14159,-0.
 // What can be seen from where: js/seen.js must still cover every zone the eye can see from each zone (a new doorway or window needs tools/pvs.mjs run again).
 try { execFileSync(process.execPath, [fileURLToPath(new URL('./pvs.mjs', import.meta.url)), '--port', base.split(':')[2].slice(0, -1), '--check'], { encoding: 'utf8' }); check('js/seen.js covers what each zone can see (tools/pvs.mjs --check)', true); }
 catch (e) { check('js/seen.js covers what each zone can see (tools/pvs.mjs --check)', false, String(e.stdout || e.message).slice(0, 600)); }
+// Every zone seen.js lists is culled: its meshes have a layer bit of their own group, not layer 0 (drawn from everywhere). Bits once ran
+// out at 31 zones and the 32nd on stayed on layer 0 unnoticed.
+{ const f = run(base + '?dev&bare', `(async () => { const seen = (await import('/js/seen.js')).default, bad = new Set(), got = new Set();
+    dev.scene.traverse(o => { const id = o.userData?.zone; if (o.isMesh && id in seen) { got.add(id); if (o.layers.mask === 1) bad.add(id); } });
+    return { bad: [...bad], none: Object.keys(seen).filter(id => !got.has(id)) }; })()`);
+  check('every zone in js/seen.js is culled (its meshes on a layer bit, not drawn from everywhere)', f.result && !f.result.bad.length && !f.result.none.length, JSON.stringify(f.result)); }
 
 // Production address: no window.dev, the start overlay is up once the level is built.
 const prod = run(base, `await new Promise(ok => { const t = setInterval(() => /click to enter/.test(document.getElementById('s').textContent) && (clearInterval(t), ok()), 100); }),

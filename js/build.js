@@ -135,7 +135,16 @@ let sea;
 // zones seen.js says can be seen from where it stands: places behind walls further down a view cost nothing. A zone not in seen.js
 // (a new place, until tools/pvs.mjs is run again) stays on layer 0, always drawn; a camera outside every listed zone draws all.
 // Shadow cameras always draw everything; a cube camera (a zone's ambient bake) draws what seen.js says its probe's zone sees.
-const bits = new Map(Object.keys(seen).slice(0, 31).map((id, i) => [id, i + 1])), masks = new Map(), _c = new THREE.Vector3();
+// Only 31 bits: zones seen from exactly the same zones (a place and its passage, say) share one, which culls exactly as well; past
+// 31 such groups the two whose viewers differ least are merged, so a few zones are drawn from a little further, never from everywhere.
+const ids = Object.keys(seen), groups = [];
+for (const q of ids) { const by = new Set(ids.filter(c => c === q || seen[c].includes(q))), g = groups.find(g => g.by.size === by.size && [...by].every(c => g.by.has(c)));
+  g ? g.ids.push(q) : groups.push({ ids: [q], by }); }
+while (groups.length > 31) { let best, cost = Infinity; // cost: zone-from-zone pairs drawn that seen.js does not ask for
+  for (let i = 0; i < groups.length; i++) for (let j = i + 1; j < groups.length; j++) { const [a, b] = [groups[i], groups[j]];
+    const c = a.ids.length * [...b.by].filter(v => !a.by.has(v)).length + b.ids.length * [...a.by].filter(v => !b.by.has(v)).length; if (c < cost) { cost = c; best = [i, j]; } }
+  const [a, b] = [groups[best[0]], groups[best[1]]]; a.ids.push(...b.ids); for (const v of b.by) a.by.add(v); groups.splice(best[1], 1); }
+const bits = new Map(groups.flatMap((g, i) => g.ids.map(id => [id, i + 1]))), masks = new Map(), _c = new THREE.Vector3();
 for (const [id, list] of Object.entries(seen)) if (bits.has(id)) masks.set(id, [id, ...list].reduce((m, q) => m | (bits.has(q) ? 1 << bits.get(q) : 0), 1));
 let zl; // the zones as a list, made once merge() starts: zoneAt runs once per piece of geometry
 const zoneAt = (x, z) => { for (const q of zl) { const b = q.box; if (x > b[0] && x < b[2] && z > b[1] && z < b[3]) return q; } };

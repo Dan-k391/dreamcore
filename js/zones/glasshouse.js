@@ -16,15 +16,11 @@ defZone('gH', { ...dry, sky: 'dusk', air: .25, grp: 'gh', k: 1.35, exp: .42, fog
 // The dusk sky aims its one sun shadow map at the terrace. While a camera is in here under that sky, aim it here instead (a 30 x 16 m
 // map, 7 mm a texel: the glazing bars come out sharp) and put it back once the camera leaves; scene.onBeforeRender runs before the shadow pass.
 onSun.push(sun => {
-  const cam = sun.shadow.camera, AT = V(X0, 2, Z0), p = V(); let saved = null, mine = null;
+  const cam = sun.shadow.camera, AT = V(X0, 2, Z0), p = V(); let saved = null;
   const aim = (t, s, e, r) => { sun.target.position.copy(t); sun.position.copy(s); Object.assign(cam, e); cam.updateProjectionMatrix(); sun.target.updateMatrixWorld(); sun.updateMatrixWorld(); sun.shadow.needsUpdate = r.shadowMap.needsUpdate = true; };
   const prev = scene.onBeforeRender;
   scene.onBeforeRender = function (r, s, c, ...rest) {
     prev.call(this, r, s, c, ...rest);
-    // the place is drawn only for a camera near it: from the terrace, under the same sky, it lay in view 1.2 km off and cost 1.3 M triangles
-    if (!mine) { const S = new Set(zones.gH.mats); mine = []; s.traverse(o => { if (o.isMesh && S.has(o.material)) mine.push(o); }); }
-    p.setFromMatrixPosition(c.matrixWorld); const near = p.x > 800 && p.x < 880 && p.z > -640 && p.z < -560 && Math.abs(sunDir.y - .1025) < .003;
-    for (const o of mine) o.visible = near;
     p.setFromMatrixPosition(c.matrixWorld); const dusk = Math.abs(sunDir.y - .1025) < .003, inside = dusk && p.x > 820 && p.x < 860 && p.z > -612 && p.z < -588;
     if (inside && !saved) { saved = [sun.target.position.clone(), sun.position.clone(), { left: cam.left, right: cam.right, top: cam.top, bottom: cam.bottom, far: cam.far }];
       aim(AT, sunDir.clone().multiplyScalar(40).add(AT), { left: -15, right: 15, top: 8, bottom: -8, far: 90 }, r); }

@@ -160,8 +160,8 @@ defZone('mL', { ...dry, grp: 'm', k: 1.15, exp: .3, fog: [.4, .38, .4, .0008], b
       for (let i = 0; i < 5; i++) { const q = f1 - .12 - i * .26, wid = .42 + .04 * hash(i, 9), len = .85 + .25 * hash(i, 10), r = .1 * (hash(i, 11) - .5);
         p(cloth[(i + 1) % 3], at(fx, fy, q, garment(len, wid, .07, i + 40), r)); p(Ok, at(fx, fy, q, hangerBar(wid), r)); p(Ch, at(fx, fy, q, hook().rotateY(PI / 2), r)); }
       stack(-1.0, plinth(-1.0, -1.3, .7, .55, .45), -1.3, 5, 81, .15); stack(-1.45, plinth(-1.45, -.85, .45, .45, .8), -.85, 3, 82, -.3);
-      [sx, sy, sz, tx2, ty2, tz2] = [1.2, 3.25, -1.05, 1.1, .8, -1.5];
-      light(-1.2, 3.25, -2.1, 45, -.5, 1.3, B, .95, 6, 0xffcf96); // the wall rail
+      [sx, sy, sz, tx2, ty2, tz2] = [1.2, 3.25, -1.05, .3, .6, -1.4]; // between the floor rail and the plinths: dark cloth needs more light than linen
+      light(-1.2, 3.25, -2.1, 110, 0, 1.2, B, 1.05, 6, 0xffcf96); // the wall rail, the whole length of it
     } else { // emptied after hours: bare concrete, uprights without shelves, chairs stacked to go, the counter left; one downlight left on over it
       shelving([-2.2, -1.1, 0, 1.1, 2.2], [], false); p(Ok, at(-1.65, 1.26, B + .19, RB(1.06, .026, .34, .004)));
       counter(-1.05, -1.55, 1.3);
@@ -170,7 +170,7 @@ defZone('mL', { ...dry, grp: 'm', k: 1.15, exp: .3, fog: [.4, .38, .4, .0008], b
       [sx, sy, sz, tx2, ty2, tz2] = [-1.2, 3.25, -2.1, -1.05, .9, -1.55];
     }
     for (const [m, g] of L) add(m, put(g, cx, 0, zw, ry));
-    if (kind === 'empty') light(sx, sy, sz, 40, tx2, ty2, tz2, .55, 5, 0xffb870); else light(sx, sy, sz, 75, tx2, ty2, tz2, .9, 7, 0xffcf96); // the shop's bright spot (over the counter alone when emptied)
+    if (kind === 'empty') light(sx, sy, sz, 40, tx2, ty2, tz2, .55, 5, 0xffb870); else light(sx, sy, sz, kind === 'clothes' ? 150 : 75, tx2, ty2, tz2, kind === 'clothes' ? 1 : .9, 7, 0xffcf96); // the shop's bright spot (over the counter alone when emptied)
   }
   const signs = [0xff8fb8,0xffb060, 0xffd28a, 0xff9a8a, 0xe8a0ff], PD = .25; // PD: how far the piers and fascias stand off the wall
   for (const [zw, k] of [[24.4, 1], [49.6, -1]]) {
