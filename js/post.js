@@ -9,7 +9,7 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { renderer, scene, camera, uTime, sunDir, quadVS } from './core.js';
 import { seeThrough } from './build.js';
 import { sun } from './sky.js';
-import { ponds } from './water.js';
+import './water.js';
 
 import { zone0 as zone } from './lights.js'; // the starting zone: the look starts from it
 // ---------- post ----------
@@ -24,8 +24,8 @@ const ao = new GTAOPass(scene, camera, 1, 1);
 ao.updateGtaoMaterial({ radius: .9, distanceExponent: 1.5, thickness: 1, scale: 1.3, samples: 16 });
 ao.output = GTAOPass.OUTPUT.Off; ao.needsSwap = false; // it only makes its denoised AO picture; atmos multiplies it in (was a copy and a multiply blend, two full-screen passes)
 composer.addPass(ao);
-const aoRender = ao.render.bind(ao); // the AO pass leaves the water out: its normals and depth then describe the pool floor, and the water isn't asked to re-render its pictures
-const noAO = [...ponds, ...seeThrough]; // and anything else see-through
+const aoRender = ao.render.bind(ao); // the AO pass sees the water's surface: occlusion worked out from the pool floor would darken the water where
+const noAO = seeThrough; // the floor lies unbent, a ghost under what the water shows bent (water.js skips its pictures for that pass). The rest see-through is left out
 ao.render = (...a) => { const on = noAO.map(w => w.visible); for (const w of noAO) w.visible = false; aoRender(...a); noAO.forEach((w, i) => w.visible = on[i]); };
 const ahead = []; // programs compiling in parallel, awaited together once the passes are set up
 { // the AO pass draws every mesh in its normal material: compile that now in each kind of mesh there is (plain, instanced, instanced

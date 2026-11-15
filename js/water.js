@@ -20,9 +20,13 @@ import './level.js';
 // far back, the line of sight skims over a staircase, and the camera's underwater picture holds no pixel of it. Tracing
 // against that picture's depth instead (tried twice) smears streaks along pool edges. The colour of the point the ray
 // reaches comes from the live underwater picture when the camera can see that point, and otherwise from the pool's plan,
-// a top-down picture of its floor made once.
+// a top-down picture of its floor made once. The height map is coarse and knows only floors and colliders (a column's collider
+// is 10% wider than its stone; rails and rungs are not in it), so along the ray the first point that lies just behind the live
+// picture's surface wins over it: where the picture holds that surface, the ray stops on the real stone, and the plan, which
+// shows columns and steps only from above, is not used for them.
 // Where the water is thin against a step or wall it fades out, so the shoreline is soft instead of a hard cut.
 const OVER = 1.45;
+const uTest = { value: 0 }; // ?dev measurement (dev.waterCheck): 1 the lens picture alone, 2 the mirror alone, both with the surface flat; 3 a mask
 const DROPS = 8; // disturbances one step takes: the player's and the loose things'
 const simMat = new THREE.ShaderMaterial({ uniforms: { tSim: { value: null }, uPx: { value: null }, uDrop: { value: Array.from({ length: DROPS }, () => V(0, 0, 0)) } }, vertexShader: quadVS,
   fragmentShader: `uniform sampler2D tSim; uniform vec2 uPx; uniform vec3 uDrop[${DROPS}]; varying vec2 vUv;
@@ -34,7 +38,7 @@ const simMat = new THREE.ShaderMaterial({ uniforms: { tSim: { value: null }, uPx
 const simQuad = new FullScreenQuad(simMat);
 const waterVS = 'varying vec3 vW; void main() { vec4 w = modelMatrix * vec4(position, 1.); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }';
 const waterFS = `uniform sampler2D tMirror, tUnder, tUnderZ, tPlan, tGround, tNormalMap0, tNormalMap1, tSim;
-    uniform mat4 projectionMatrix, uLens; uniform vec4 uPond; uniform vec2 uPx; uniform vec3 uScatter; uniform float uFloor, uTime, uMain, uCaus; varying vec3 vW;
+    uniform mat4 projectionMatrix, uLens; uniform vec4 uPond; uniform vec2 uPx; uniform vec3 uScatter; uniform float uFloor, uTime, uMain, uCaus, uTest; varying vec3 vW;
     ${causticsGLSL}
     vec4 clip(vec3 p) { return projectionMatrix * viewMatrix * vec4(p, 1.); } // .w is the distance from the camera
     vec2 wide(vec4 c) { return c.xy / c.w * ${(.5 / OVER).toFixed(5)} + .5; } // a clip position's place in the two wider pictures
@@ -46,6 +50,7 @@ const waterFS = `uniform sampler2D tMirror, tUnder, tUnderZ, tPlan, tGround, tNo
     float ground(vec2 xz) { return texture2D(tGround, (xz - uPond.xy) / (uPond.zw - uPond.xy)).r; } // height of whatever is under the water there
     vec2 onScreen(vec2 from, vec2 to) { vec2 d = to - from, room = max(mix(from, 1. - from, step(0., d)), 1e-4); return from + sign(d) * room * (1. - exp(-abs(d) / room)); } // a lookup that would leave the picture is eased toward its edge; clamping smears streaks
     void main() {
+      if (uTest == 3.) { gl_FragColor = vec4(-1., -1., -1., 1.); return; } // ?dev: where the water is
       vec4 c0 = clip(vW); vec2 here = wide(c0);
       float gap = mix(9., seen(here) - c0.w, uMain); // metres of water between this bit of surface and what lies under it
       float body = smoothstep(0., .1, gap); // 0 at the shore, 1 in open water
@@ -53,15 +58,21 @@ const waterFS = `uniform sampler2D tMirror, tUnder, tUnderZ, tPlan, tGround, tNo
       float hx = texture2D(tSim, s - vec2(uPx.x, 0.)).r - texture2D(tSim, s + vec2(uPx.x, 0.)).r, hz = texture2D(tSim, s - vec2(0., uPx.y)).r - texture2D(tSim, s + vec2(0., uPx.y)).r;
       vec2 calm = (texture2D(tNormalMap0, vW.xz * .23 + uTime * vec2(.011, .007)).rg + texture2D(tNormalMap1, vW.xz * .37 - uTime * vec2(.009, .013)).rg - 1.) * .09; // water is never glass-flat
       vec3 n = normalize(vec3((hx * 10. + calm.x) * body, 1., (hz * 10. + calm.y) * body)), V = normalize(cameraPosition - vW);
+      if (uTest > 0.) n = vec3(0., 1., 0.); // ?dev measurement: flat
       vec3 R = reflect(-V, n); R.y = -max(R.y, .03); // mirrored: the mirror picture shows the room upside-down below the surface
       vec2 ru = onScreen(here, wide(clip(vW + R * 9.))), o = vec2(.0016, 0.); ru.x = 1. - ru.x; // four taps: a real surface is never a perfect mirror
       vec3 refl = (texture2D(tMirror, ru + o.xy).rgb + texture2D(tMirror, ru - o.xy).rgb + texture2D(tMirror, ru + o.yx).rgb + texture2D(tMirror, ru - o.yx).rgb) * .25;
-      vec3 T = refract(-V, n, .75); // air to water
+      vec3 T = refract(-V, n, uTest == 1. ? 1. : .75); // air to water (?dev measurement: straight through)
       vec2 tw = mix(vW.xz - uPond.xy, uPond.zw - vW.xz, step(0., T.xz)) / (abs(T.xz) + 1e-5);
       float t = clamp(min((uFloor - vW.y) / min(T.y, -.001), min(tw.x, tw.y)), 0., 30.); // furthest the ray can go: the basin's floor or wall. Never negative, or exp() below overflows
       { float lo = 0., hi = t; bool found = false; // stop where the ray goes under the floor, a step or into a column
         for (int i = 1; i <= 32; i++) { float ti = t * float(i) / 32.; vec3 q = vW + T * ti; if (q.y < ground(q.xz)) { hi = ti; found = true; break; } lo = ti; }
         if (found) { for (int i = 0; i < 6; i++) { float tm = .5 * (lo + hi); vec3 q = vW + T * tm; if (q.y < ground(q.xz)) hi = tm; else lo = tm; } t = hi; }
+      }
+      if (uMain > 0.) { float lo = 0., st = t / 16.; // the height map's columns are their colliders, a few cm proud of the stone, and it has no rails or rungs: so the
+        for (int i = 1; i <= 16; i++) { float ti = st * float(i); vec4 cq = clip(vW + T * ti); vec2 uq = wide(cq); float dz = off(uq) ? -1. : cq.w - seen(uq); // first point the ray reaches
+          if (dz > 0. && dz < .1 + st) { float hi = ti; for (int k = 0; k < 4; k++) { float tm = .5 * (lo + hi); vec4 cm = clip(vW + T * tm); if (cm.w > seen(wide(cm))) hi = tm; else lo = tm; } t = hi; break; } // just behind the
+          lo = ti; } // underwater picture's surface is what it really meets, and the picture holds it; the height map stays the fallback where the picture has nothing
       }
       vec3 hit = vW + T * t; vec4 ch = clip(hit); vec2 hu = wide(ch);
       float live = off(hu) ? 0. : uMain * (1. - smoothstep(.05 + .02 * ch.w, .14 + .05 * ch.w, abs(ch.w - seen(hu)))); // can the camera see the point the ray reached? (its depth there must match)
@@ -70,6 +81,8 @@ const waterFS = `uniform sampler2D tMirror, tUnder, tUnderZ, tPlan, tGround, tNo
       float lap = texture2D(tSim, hs - vec2(e.x, 0.)).r + texture2D(tSim, hs + vec2(e.x, 0.)).r + texture2D(tSim, hs - vec2(0., e.y)).r + texture2D(tSim, hs + vec2(0., e.y)).r - 4. * texture2D(tSim, hs).r;
       float cz = (max(caus(hit) + clamp(-lap * 30., -.6, 2.5), 0.) - .22) * smoothstep(${WY}, ${WY} - .3, hit.y);
       still *= max(.3, 1. + mix(.9, 2.2, smoothstep(.25, 1., max(still.r, max(still.g, still.b)))) * uCaus * cz); // stronger where the floor is in direct light, as on the tiles
+      if (uTest == 1.) { gl_FragColor = vec4(mix(texture2D(tUnder, here).rgb, mix(still, texture2D(tUnder, hu).rgb, live), body), 1.); return; } // ?dev: the lens picture alone
+      if (uTest == 2.) { gl_FragColor = vec4(texture2D(tMirror, ru).rgb, 1.); return; } // ?dev: the mirror picture alone
       vec3 refr = mix(still, texture2D(tUnder, hu).rgb, live) * exp(-vec3(.42, .085, .06) * t); // red is absorbed first
       refr += uScatter * (1. - exp(-.3 * t)); // and the water itself scatters the room's light back, giving deep water a pale body
       vec3 col = mix(refr, refl, .02 + .98 * pow(1. - max(dot(V, n), 0.), 5.));
@@ -96,7 +109,7 @@ const ponds = pools.map(([x1, z1, x2, z2, floor, zid, seen, scatter]) => {
   const planCam = new THREE.OrthographicCamera((x1 - x2) / 2, (x2 - x1) / 2, (z2 - z1) / 2, (z1 - z2) / 2, .001, 1.6); // looking straight down from the surface
   planCam.position.set((x1 + x2) / 2, WY, (z1 + z2) / 2); planCam.up.set(0, 0, -1); planCam.lookAt((x1 + x2) / 2, WY - 1, (z1 + z2) / 2);
   const U = { uCaus: zones[zid].tileU.uCaus, tMirror: { value: mirror.getRenderTarget().texture }, tPlan: { value: planRT.texture }, tGround: { value: ground }, tUnder: { value: under.texture }, tUnderZ: { value: under.depthTexture }, uLens: { value: lens.camera.projectionMatrix }, tNormalMap0: { value: wn0 }, tNormalMap1: { value: wn1 },
-              tSim: { value: sim[0].texture }, uPond: { value: rect }, uPx: { value: px }, uFloor: { value: floor }, uScatter: { value: V(...scatter) }, uMain: { value: 0 }, uTime };
+              tSim: { value: sim[0].texture }, uPond: { value: rect }, uPx: { value: px }, uFloor: { value: floor }, uScatter: { value: V(...scatter) }, uMain: { value: 0 }, uTest, uTime };
   const w = new THREE.Mesh(g, new THREE.ShaderMaterial({ uniforms: U, vertexShader: waterVS, fragmentShader: waterFS, transparent: true }));
   Object.assign(w, { lens, seen, rect, px, sim, tileU: zones[zid].tileU, zone: zones[zid], twin: twin(x1, z1, x2, z2) });
   w.drawPlan = () => { // once, while the zone's lamps are lit for its bake; caustics off, since the plan is a still and they move
@@ -110,7 +123,7 @@ const ponds = pools.map(([x1, z1, x2, z2, floor, zid, seen, scatter]) => {
   const wideCam = new THREE.PerspectiveCamera();
   w.onBeforeRender = (r, s, c) => {
     U.uMain.value = +(c === camera);
-    if (c !== camera) return; // only the main view makes the two pictures
+    if (c !== camera || s.overrideMaterial) return; // only the main view makes the two pictures (not the AO pass's normals, drawn from the same camera)
     wideCam.copy(c); wideCam.projectionMatrix.elements[0] /= OVER; wideCam.projectionMatrix.elements[5] /= OVER; wideCam.projectionMatrixInverse.copy(wideCam.projectionMatrix).invert();
     const on = ponds.map(q => q.visible); // every pool is at the same level, so none belongs in another's mirror or underwater picture
     for (const q of ponds) q.visible = false;
@@ -163,4 +176,4 @@ function resetWater() { // ?dev only (dev.reset): every pool flat and still, as 
   renderer.setRenderTarget(t); renderer.setClearColor(c, a);
 }
 
-export { ponds, ripple, resetWater };
+export { ponds, ripple, resetWater, uTest };
