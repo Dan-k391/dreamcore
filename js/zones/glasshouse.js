@@ -11,7 +11,7 @@ import { parkBench, palmPlanter, pottedPlant } from '../props/garden.js';
 // One nave x[830,850] z[-604,-596] (inner faces), floor 0, eaves 2.75, ridge 6. The entry is a doorway in the brick back wall at
 // x 830, centred on z -600, into a dark recess x[828.5,830]; the sun comes in through the glazed gable at x 850 and the north side.
 const X0 = 840, Z0 = -600, EZ = 4.17, EY = 2.75, RY = 6, CAP = .735, GCAP = .285, PI = Math.PI; // GCAP: the sunlit gable is glazed down to a low plinth
-defZone('gH', { music: 'glass', ...dry, sky: 'dusk', air: .25, grp: 'gh', k: 1.35, exp: .42, fog: [.42, .27, .15, .012], tint: [1.03, 1, .94], sat: 1.06, bloom: .16, shaft: .9, wet: .25, box: [828, -606, 852, -594], probe: [836, 1.8, -600.4], env: [[828, 0, -604.2], [852, 4.4, -595.8]] });
+defZone('gH', { music: 'glass', ...dry, sky: 'dusk', air: .25, grp: 'gh', k: 1.35, exp: .42, fog: [.42, .27, .15, .012], tint: [1.03, 1, .94], sat: 1.06, bloom: .16, shaft: .9, wet: .25, box: [828.4, -606, 852, -594], probe: [836, 1.8, -600.4], env: [[828, 0, -604.2], [852, 4.4, -595.8]] });
 
 // The dusk sky aims its one sun shadow map at the terrace. While a camera is in here under that sky, aim it here instead (a 30 x 16 m
 // map, 7 mm a texel: the glazing bars come out sharp) and put it back once the camera leaves; scene.onBeforeRender runs before the shadow pass.

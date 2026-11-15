@@ -4,7 +4,7 @@ import { renderer, camera, uTime, V, WY, zones, inR } from './core.js';
 import { colliders, emitters, warps, ladders, floorH, clear, out, near } from './build.js';
 import { setSky, sun } from './sky.js';
 import { ponds, ripple, resetWater } from './water.js';
-import { relight, zone0, lights } from './lights.js';
+import { relight, zone0, lights, weights } from './lights.js';
 import { composer, look, atmos, bloom, film } from './post.js';
 import { sfx, startAudio } from './audio.js';
 import { wakes, stepLoose, drawLoose, resetLoose } from './physics.js';
@@ -154,9 +154,10 @@ const frame = dt => { // one game frame of dt seconds: the loop below passes the
 
   const here = Object.values(zones).find(z => inR(p.x, p.z, ...z.box));
   if (here && here !== zone) { zone = here; sfx?.zone(zone); setSky(zone.sky || 'day'); }
-  if (warp) relight(p, zone, 1); // arrived somewhere else: the lamps come at once
-  relight(p, zone, warp ? 1 : dt * 3);
-  for (const w of ponds) w.visible = w.seen.includes(zone.id);
+  const wts = weights(p.x, p.z, zone);
+  if (warp) relight(p, zone, 1, wts); // arrived somewhere else: the lamps come at once
+  relight(p, zone, warp ? 1 : dt * 3, wts);
+  for (const w of ponds) w.visible = wts.some(([z]) => w.seen.includes(z.id)); // drawn from near a doorway of a zone that sees it, not only once through
   const wake = pool && ground < 0 && !air ? Math.min(Math.hypot(p.x - ox, p.z - oz) / dt, 4) * .006 : 0; // wading leaves a wake, by how far the body really moved (pressed against a wall it would heap the water on one spot); `drop` is a pending splash
   // 60 Hz: the loose things, then the waves, with the ripples both leave
   simT += dt; const steps = Math.min(4, Math.floor(simT * 60 + 1e-6)); simT = steps === 4 ? 0 : simT - steps / 60; // as many as the frame's time holds; a long stall is dropped, not caught up
@@ -169,13 +170,26 @@ const frame = dt => { // one game frame of dt seconds: the loop below passes the
     drop = 0;
   }
   if (me.shoved) { const sx = p.x, sz = p.z; p.x = me.x; p.z = me.z; if (!collide(p, feet)) { p.x = sx; p.z = sz; } } // a ring or ball held against something stops the body
-  looseCost.ms = drawLoose(zone.id);
-  const a = 1 - Math.exp(-dt * 1.5); // eye adaptation and mood drift between zones
-  for (const key of ['exp', 'shaft', 'sat', 'bloom']) look[key] += (zone[key] - look[key]) * a;
-  look.fog.lerp(zone.fog, a); look.tint.lerp(zone.tint, a);
-  renderer.toneMappingExposure = look.exp; bloom.strength = look.bloom; atmos.uniforms.uShaft.value = look.shaft; film.uniforms.uSat.value = look.sat;
+  looseCost.ms = drawLoose(wts.map(q => q[0].id));
+  mood(wts, 1 - Math.exp(-dt * 8));
   composer.render(dt);
 };
+// The look is where you stand: each zone in weights() has a share, eased toward it in time (about 0.12 s) so a teleport or the small
+// steps where several openings meet never show as a one-frame jump (a: share of the way this frame, 1 = at once). Exposure mixes on
+// a log scale; the fog is not mixed as numbers but as pictures (post.js), up to the three largest shares.
+const tint = new THREE.Vector3();
+function mood(wts, a) {
+  const m = look.w; let sum = 0, e = 0, sh = 0, sa = 0, bl = 0;
+  for (const [z] of wts) if (!m.has(z)) m.set(z, 0);
+  for (const [z, v] of m) { const t = wts.find(q => q[0] === z)?.[1] || 0, n = v + (t - v) * a; if (n < 1e-3 && !t) m.delete(z); else { m.set(z, n); sum += n; } }
+  const ws = [...m].map(([z, v]) => [z, v / sum]).sort((p, q) => q[1] - p[1]); tint.set(0, 0, 0);
+  for (const [z, v] of ws) { e += v * Math.log(z.exp); sh += v * z.shaft; sa += v * z.sat; bl += v * z.bloom; tint.addScaledVector(z.tint, v); }
+  Object.assign(look, { exp: Math.exp(e), shaft: sh, sat: sa, bloom: bl }); look.tint.copy(tint);
+  const F = atmos.uniforms.uFog.value, top = ws.slice(0, 3), s3 = top.reduce((s, q) => s + q[1], 0);
+  atmos.uniforms.uFogW.value.set(...[0, 1, 2].map(i => top[i] ? top[i][1] / s3 : 0)); top.forEach(([z], i) => F[i].copy(z.fog));
+  renderer.toneMappingExposure = look.exp; bloom.strength = look.bloom; atmos.uniforms.uShaft.value = look.shaft; film.uniforms.uSat.value = look.sat;
+}
+{ const w0 = weights(camera.position.x, camera.position.z, zone); mood(w0, 1); relight(camera.position, zone, 1, w0); relight(camera.position, zone, 1, w0); } // the start: as if standing there a while
 
 const looseCost = { ms: 0 }; // what the loose things cost the last frame, in ms
 
@@ -185,9 +199,9 @@ function resetAll(x, z, yaw, pitch) {
   place(x, z, yaw, pitch); stride = foot = vy = drop = simT = hitP = fallP = coy = buf = spaceWas = 0; grip = splashP = false; vel.set(0, 0);
   zone = Object.values(zones).find(q => inR(x, z, ...q.box)) || zones.bA; // as lights.js picks zone0
   resetWater(); resetLoose();
-  setSky(zone.sky || 'day'); relight(camera.position, zone, 1); relight(camera.position, zone, 1);
+  const wts = weights(x, z, zone); setSky(zone.sky || 'day'); relight(camera.position, zone, 1, wts); relight(camera.position, zone, 1, wts);
   for (const l of lights) l.shadow.needsUpdate = true; sun.shadow.needsUpdate = renderer.shadowMap.needsUpdate = true; // the loose things moved: every shadow is drawn again
-  Object.assign(look, { exp: zone.exp, shaft: 0, sat: zone.sat, bloom: zone.bloom }); look.fog.copy(zone.fog); look.tint.copy(zone.tint);
+  mood(wts, 1);
 }
 
-export { eye, o, zone, feet, air, frame, place, looseCost, resetAll };
+export { eye, o, zone, feet, air, frame, place, looseCost, resetAll, mood };

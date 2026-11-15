@@ -281,6 +281,37 @@ catch (e) { check('every shadow map has every caster (tools/leaks.mjs --fast)', 
   check('the served game requests nothing from any other host', dev.requests?.length > 0 && !other.length, other.join(' ').slice(0, 600)); }
 
 // Production address: no window.dev, the start overlay is up once the level is built.
+// Between places: every opening found at load can be walked straight through its middle (none lies on a wall), and walking out
+// of a dark passage the view from its mouth never gets brighter than both its ends anywhere (the grey haze the mood once eased through).
+{ const f = run(base + '?dev&bare', `(async () => { const L = await import('/js/lights.js'), PL = await import('/js/player.js'), r = dev.renderer, gl = r.getContext(), out = { walls: [], n: L.openings?.length };
+  for (const o of L.openings || []) { const c = (o.lo + o.hi) / 2, [x, z] = o.ax ? [c, o.at - 1] : [o.at - 1, c]; const s = dev.go(x, z, o.ax ? Math.PI : -Math.PI / 2, ['KeyW'], 2 / 2.85);
+    if (s.zone !== o.q.id) out.walls.push(o.p.id + '>' + o.q.id + ' ended in ' + s.zone); }
+  const W = gl.drawingBufferWidth, H = gl.drawingBufferHeight, px = new Uint8Array(W * H * 4), grab = () => { r.setRenderTarget(null); gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, px); const g = new Float32Array(W * H); for (let i = 0; i < g.length; i++) g[i] = .2126 * px[4 * i] + .7152 * px[4 * i + 1] + .0722 * px[4 * i + 2]; return g; };
+  out.wash = {}; for (const [n, x, z0, dz] of [['u0>fD', 3.8, 665.6, 1], ['t3>hT', 5.3, 41.95, 0], ['u2>sK', 650.4, 649.4, 0]]) { // [name, mouth x, z, walking +z (else +x)]
+    const yaw = dz ? Math.PI : -Math.PI / 2, at = s => dz ? [x, z0 + s] : [x + s, z0], y = dev.floorH(x, z0) + 1.62, hs = [];
+    dev.reset(...at(-2.5), yaw, 0); for (let s = -2.5; s <= 1.2; s += 2.85 / 60) { PL.place(...at(s), yaw, 0); dev.uTime.value = -1 / 60; dev.step(1); /* the grain held still */ dev.view(x, y, z0, yaw, 0); hs.push(grab()); }
+    for (let k = 0; k < 16; k++) { dev.uTime.value = -15 / 60; dev.step(15); dev.view(x, y, z0, yaw, 0); hs.push(grab()); } // then 4 s standing: the end state is the settled one
+    const a = hs[0], b = hs[hs.length - 1]; let worst = 0; for (const h of hs) { let t = 0; for (let i = 0; i < h.length; i++) t += Math.max(0, h[i] - Math.max(a[i], b[i]) - 2); worst = Math.max(worst, t / h.length); }
+    out.wash[n] = +worst.toFixed(2); }
+  // the shares as you walk: a 10 cm lattice flooded from both sides of every opening, carrying the zone you would be in (the box there,
+  // else the last), its largest change between neighbours; and both ends of every passage warp (a few points of its strip, and where each lands)
+  const Z = Object.values(dev.zones), { colliders, floorH, warps } = await import('/js/build.js'), S = .1, inb = (x, z, b) => x >= b[0] && x <= b[2] && z >= b[1] && z <= b[3], boxz = (x, z) => Z.find(q => inb(x, z, q.box));
+  const vec = (x, z, zn) => { const m = new Map(); for (const [q, v] of L.weights(x, z, zn)) m.set(q.id, (m.get(q.id) || 0) + v); return m; }, dist = (a, b) => Math.max(...[...new Set([...a.keys(), ...b.keys()])].map(k => Math.abs((a.get(k) || 0) - (b.get(k) || 0))));
+  const near = (x, z) => L.openings.some(o => { const [s, t] = o.ax ? [x, z] : [z, x]; return Math.max(o.lo - s, s - o.hi, 0) <= 3 && Math.abs(t - o.at) <= 3; });
+  const fc = new Map(), free = (i, j) => { const k = i + ',' + j, x = i * S, z = j * S; if (!fc.has(k)) { const f = floorH(x, z); fc.set(k, near(x, z) && !colliders.some(c => x > c[0] - .28 && x < c[2] + .28 && z > c[1] - .28 && z < c[3] + .28 && c[4] < f + 1.7 && c[5] > f + .35)); } return fc.get(k); };
+  const seen = new Set(), q = L.openings.flatMap(o => [[o.p, -1], [o.q, 1]].map(([zn, t]) => { const c = (o.lo + o.hi) / 2, [x, z] = o.ax ? [c, o.at + t] : [o.at + t, c]; return [Math.round(x / S), Math.round(z / S), zn]; }));
+  out.jump = { d: 0 }; while (q.length) { const [i, j, zn] = q.pop(), key = i + ',' + j + zn.id; if (seen.has(key) || !free(i, j)) continue; seen.add(key); const ma = vec(i * S, j * S, zn), f0 = floorH(i * S, j * S);
+    for (const [di, dj] of [[1, 0], [0, 1], [1, 1], [1, -1], [-1, 0], [0, -1], [-1, -1], [-1, 1]]) { const i2 = i + di, j2 = j + dj; if (!free(i2, j2) || Math.abs(floorH(i2 * S, j2 * S) - f0) > .35) continue;
+      const zb = boxz(i2 * S, j2 * S) || zn, d = dist(ma, vec(i2 * S, j2 * S, zb)); if (d > out.jump.d) out.jump = { d: +d.toFixed(3), at: [i * S, j * S].map(v => +v.toFixed(2)), from: zn.id, to: zb.id }; q.push([i2, j2, zb]); } }
+  const look = m => ['exp', 'bloom', 'sat', 'shaft'].map(k => [...m].reduce((s, [id, v]) => s + v * dev.zones[id][k], 0)).concat([...m].reduce((s, [id, v]) => s + v * dev.zones[id].fog.w, 0));
+  out.warp = 0; for (const w of warps) for (const u of [.02, .5, .98]) for (const v of [.02, .5, .98]) { const x = w[0] + (w[2] - w[0]) * u, z = w[1] + (w[3] - w[1]) * v, a = look(vec(x, z, boxz(x, z))), b = look(vec(x + w[4], z + w[5], boxz(x + w[4], z + w[5])));
+    out.warp = Math.max(out.warp, ...a.map((e, k) => Math.abs(e - b[k]))); }
+  return out; })()`, '--size', '480x270');
+  check('every opening between places can be walked through (none on a wall)', f.result?.n > 20 && !f.result.walls.length, JSON.stringify(f.result?.walls ?? f.errors));
+  check('the shares of the mood never jump between neighbouring 10 cm steps around an opening (one zone to the next)', f.result?.jump?.d < .1, JSON.stringify(f.result?.jump ?? f.errors));
+  check('both ends of every passage warp show the same mood', f.result?.warp === 0, JSON.stringify(f.result?.warp ?? f.errors));
+  check('no grey wash leaving a dark passage', f.result && Object.values(f.result.wash).every(v => v < .3), JSON.stringify(f.result?.wash ?? f.errors)); }
+
 const prod = run(base, `await new Promise(ok => { const t = setInterval(() => /click to enter/.test(document.getElementById('s').textContent) && (clearInterval(t), ok()), 100); }),
   { dev: typeof window.dev, overlay: getComputedStyle(document.getElementById('o')).display !== 'none' }`, '--wait', '15000', '--settle', '0'); // browse.mjs waits out --wait for a dev.ready that never comes here
 check('production loads without console errors', !prod.errors.length, prod.errors.join(' | ').slice(0, 600));

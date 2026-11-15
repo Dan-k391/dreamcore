@@ -8,6 +8,7 @@
 // area: % of the picture that step moved by over 8; total: before against settled; settle: s until within noise of settled.
 // Cause split: the before view drawn again with one mechanism already at the new zone's state (sky; look = exposure, fog, grade,
 // bloom, shaft; lamps = relight snapped for the new zone) - the share of `total` each removes. other: pools, culling, interactions.
+// Walk: see walkThrough below; mood, step and wash there.
 // Hitch: a separate run from 1.5 m before to 0.5 s after, real ms per frame (GPU synced): worst frame from the crossing on, against
 // the walk's median, and what that frame did (lamp/sun shadow maps redrawn, sky swap, programs and textures first used).
 import { execFileSync } from 'node:child_process';
@@ -16,7 +17,7 @@ import { walkList } from './walk.mjs';
 import { fileURLToPath } from 'node:url';
 
 const argv = process.argv.slice(2), arg = (k, d) => { const i = argv.indexOf('--' + k); return i < 0 ? d : argv[i + 1]; };
-const port = arg('port', '8200'), out = arg('out', 'screenshots/transitions'), opts = { only: arg('only', ''), strips: +arg('strips', 3) };
+const port = arg('port', '8200'), out = arg('out', 'screenshots/transitions'), opts = { only: arg('only', ''), strips: +arg('strips', 3), curve: argv.includes('--curve') };
 
 async function page(o) {
   const B = await import('/js/build.js'), S = await import('/js/sky.js'), L = await import('/js/lights.js'), P = await import('/js/post.js'), PL = await import('/js/player.js'), C = await import('/js/core.js');
@@ -28,7 +29,7 @@ async function page(o) {
   const X = [];
   for (const w of walkList(B, zl, { fast: true, only: o.only }).walks.filter(w => w.kind === 'door')) for (const d of [1, -1]) {
     const [x, z] = w.ax ? [w.c, w.at] : [w.at, w.c], [dx, dz] = w.ax ? [0, d] : [d, 0];
-    X.push({ name: d > 0 ? `${w.a}>${w.b}` : `${w.b}>${w.a}`, x, z, dx, dz, lead: 1.5 });
+    X.push({ name: d > 0 ? `${w.a}>${w.b}` : `${w.b}>${w.a}`, x, z, dx, dz, lead: 1.5, mouth: [w.a, w.b].some(id => B.warps.some(q => C.inR((q[0] + q[2]) / 2, (q[1] + q[3]) / 2, ...dev.zones[id].box))) });
   }
   for (const w of B.warps) {
     const cx = (w[0] + w[2]) / 2, cz = (w[1] + w[3]) / 2, Z = zoneAt(cx, cz), T = zoneAt(cx + w[4], cz + w[5]); if (!Z || !T) continue;
@@ -50,7 +51,6 @@ async function page(o) {
   const photo = () => { read(); const id = new ImageData(W, H); for (let j = 0; j < H; j++) id.data.set(px.subarray((H - 1 - j) * W * 4, (H - j) * W * 4), j * W * 4);
     cv.getContext('2d').putImageData(id, 0, 0); c2.getContext('2d').drawImage(cv, 0, 0, 320, 180); return c2.toDataURL('image/png'); };
   // the walk: placed at each point, one frame each; returns the index where it crosses (the frame not yet run)
-  const lookKeys = ['exp', 'shaft', 'sat', 'bloom'], apply = () => { r.toneMappingExposure = P.look.exp; P.bloom.strength = P.look.bloom; P.atmos.uniforms.uShaft.value = P.look.shaft; P.film.uniforms.uSat.value = P.look.sat; };
   const path = (c, k, lead) => [c.x - c.dx * lead + c.dx * V * k * DT, c.z - c.dz * lead + c.dz * V * k * DT];
   const crosses = (c, x, z) => { const wp = warpAt(x, z); if (c.warp) return !!wp; const nz = zoneAt(x + (wp ? wp[4] : 0), z + (wp ? wp[5] : 0)); return nz && nz.id !== dev.state().zone; };
   const pop = (c, cap) => {
@@ -65,9 +65,7 @@ async function page(o) {
     const B0 = view(); if (cap) caps.push(['before', photo()]);
     // the cause split, before view with one mechanism already at the new zone's state, each put back after
     const bSky = (() => { const was = S.skyNow; S.setSky(nz.sky || 'day'); const g = view(); S.setSky(was); return g; })();
-    const bLook = (() => { const was = { ...P.look, fog: P.look.fog.clone(), tint: P.look.tint.clone() };
-      for (const q of lookKeys) P.look[q] = nz[q]; P.look.fog.copy(nz.fog); P.look.tint.copy(nz.tint); apply(); const g = view();
-      for (const q of lookKeys) P.look[q] = was[q]; P.look.fog.copy(was.fog); P.look.tint.copy(was.tint); apply(); return g; })();
+    const bLook = (() => { const was = [...P.look.w]; PL.mood([[nz, 1]], 1); const g = view(); PL.mood(was, 1); return g; })();
     const bLamp = (() => { const ls = L.lights, was = ls.map(l => ({ k: l.k, e: l.e, p: l.position.clone(), t: l.target.position.clone(), c: l.color.clone(), a: l.angle, dist: l.distance, i: l.intensity })), el = B.emitters.map(e => e.light);
       const here = new dev.THREE.Vector3(x, y, z); L.relight(here, nz, 1); L.relight(here, nz, 1); const g = view();
       ls.forEach((l, i) => { const s = was[i]; Object.assign(l, { k: s.k, e: s.e, angle: s.a, distance: s.dist, intensity: s.i }); l.position.copy(s.p); l.target.position.copy(s.t); l.color.copy(s.c); l.shadow.needsUpdate = true; });
@@ -112,8 +110,29 @@ async function page(o) {
     const w = fr[wi] || {}, lampMaps = fr.slice(N).reduce((s, f) => s + f.lamp, 0);
     return { worst: +(ms[wi] || 0).toFixed(1), med: +med.toFixed(1), atN: +(ms[N] || 0).toFixed(1), wAt: wi - N, wLamp: w.lamp, wSun: w.sun, wSky: w.sky, wProg: w.prog, wTex: w.tex, first: +(fr[fi]?.ms || 0).toFixed(1), fAt: fi - N, lampMaps };
   };
+  // walking through: from up to 3 m before the edge to up to 3 m past it (short of a warp or a solid), one 1/60 s frame per step.
+  // step: the largest change between two frames of what you see (motion included; median: the walk's typical step from motion alone);
+  // mood: the same from one fixed spot, the edge, drawn with each frame's state (look, lamps, sky, pools), so motion is left out;
+  // wash (passage mouths only): the most any frame's view from that spot is brighter than both end states there, pixel by pixel (a grey haze lifting dark parts).
+  const walkThrough = (c) => {
+    if (c.warp) return {};
+    const yaw = yawOf(c.dx, c.dz), ok = s => { const x = c.x + c.dx * s, z = c.z + c.dz * s; return !warpAt(x, z) && zoneAt(x, z) || Math.abs(s) < .4; };
+    let a = 0, b = 0; while (a < 3 && ok(-a - .1)) a += .1; while (b < 3 && ok(b + .1)) b += .1;
+    const n = Math.floor((a + b) / (V * DT)), y = B.floorH(c.x, c.z) + 1.62; dev.reset(c.x - c.dx * a, c.z - c.dz * a, yaw, 0); uTime.value = 0;
+    const G = [], Hs = [];
+    for (let k = 0; k <= n; k++) { const s = -a + k * V * DT, x = c.x + c.dx * s, z = c.z + c.dz * s;
+      PL.place(x, z, yaw, 0); uTime.value = -DT; PL.frame(DT); if (Math.hypot(camera.position.x - x, camera.position.z - z) > .02) break; // a solid: the walk ends there
+      G.push(grab()); dev.view(c.x, y, c.z, yaw, 0); Hs.push(grab()); }
+    const m = G.length - 1; if (m < 1) return { wMiss: 'blocked at start' };
+    let st = 0, mo = 0, moAt = 0, wash = 0; const steps = [];
+    for (let k = 1; k <= m; k++) { const v = d(G[k], G[k - 1]); steps.push(v); st = Math.max(st, v); const u = d(Hs[k], Hs[k - 1]); if (u > mo) { mo = u; moAt = -a + k * V * DT; } }
+    const e0 = Hs[0], e1 = Hs[m];
+    for (const h of Hs) { let s = 0; for (let i = 0; i < h.length; i++) s += Math.max(0, h[i] - Math.max(e0[i], e1[i])); wash = Math.max(wash, s / h.length); }
+    steps.sort((p, q) => p - q);
+    return { wTot: +d(e0, e1).toFixed(2), wStep: +st.toFixed(2), wMed: +(steps[steps.length >> 1] || 0).toFixed(2), wMood: +mo.toFixed(2), wMoodAt: +moAt.toFixed(2), wCurve: o.curve ? Hs.map(h => +(h.reduce((p, q) => p + q, 0) / h.length).toFixed(1)) : undefined, wash: c.mouth ? +wash.toFixed(2) : null, wSpan: [+a.toFixed(1), +(m * V * DT - a).toFixed(1)] };
+  };
   const rows = [];
-  for (const c of X) { const p = pop(c, false); if (typeof p === 'string') { rows.push({ name: c.name, miss: p }); continue; } delete p.caps; rows.push({ name: c.name, warp: !!c.warp, ...p, ...hitch(c) }); }
+  for (const c of X) { const p = pop(c, false); if (typeof p === 'string') { rows.push({ name: c.name, miss: p }); continue; } delete p.caps; rows.push({ name: c.name, warp: !!c.warp, ...p, ...walkThrough(c), ...hitch(c) }); }
   SM.render = draw;
   rows.sort((a, b) => (b.abrupt || 0) - (a.abrupt || 0));
   const strips = rows.filter(r => !r.miss).slice(0, o.strips).map(row => ({ name: row.name, caps: pop(X.find(c => c.name === row.name), true).caps }));
@@ -130,10 +149,12 @@ const R = res.result || {}, rows = R.rows || [], ok = rows.filter(r => !r.miss),
 if (arg('json')) writeFileSync(arg('json'), JSON.stringify(rows, null, 1));
 const pct = v => v === null ? '  -' : String(v).padStart(3);
 console.log(`transitions: ${R.n} crossings in ${R.secs} s${rows.length - ok.length ? `, ${rows.length - ok.length} not walkable: ${rows.filter(r => r.miss).map(r => `${r.name} (${r.miss})`).join(' ')}` : ''}`);
-console.log('crossing                 abrupt area@s     jump total settle | sky look lamps | ms: crossing frame, worst after (walk median) +frames: lamp/sun maps, sky, new programs/textures; first-run worst');
-for (const r of ok.slice(0, top)) console.log(`${r.name.padEnd(24)} ${String(r.abrupt).padStart(6)} ${String(r.area).padStart(3)}%@${r.abT.toFixed(2)} ${String(r.jump).padStart(6)} ${String(r.total).padStart(5)} ${String(r.settle).padStart(5)}s | ${pct(r.sky)} ${pct(r.look)} ${pct(r.lamps)}  | ${String(r.atN).padStart(5)} ${String(r.worst).padStart(5)} (${r.med}) +${r.wAt}: ${r.wLamp}/${r.wSun}${r.wSky ? ' sky' : ''}${r.wProg ? ` +${r.wProg}prog` : ''}${r.wTex ? ` +${r.wTex}tex` : ''}, ${r.lampMaps} lamp maps after; first ${r.first} +${r.fAt}`);
+console.log('crossing                 abrupt area@s     jump total settle | walk: step (median) mood wash | sky look lamps | ms: crossing frame, worst after (walk median) +frames: lamp/sun maps, sky, new programs/textures; first-run worst');
+for (const r of ok.slice(0, top)) console.log(`${r.name.padEnd(24)} ${String(r.abrupt).padStart(6)} ${String(r.area).padStart(3)}%@${r.abT.toFixed(2)} ${String(r.jump).padStart(6)} ${String(r.total).padStart(5)} ${String(r.settle).padStart(5)}s | ${r.warp ? '                     ' : `${String(r.wStep).padStart(5)} (${String(r.wMed).padStart(4)}) ${String(r.wMood).padStart(4)} ${r.wash === null ? '   -' : String(r.wash).padStart(4)}`} | ${pct(r.sky)} ${pct(r.look)} ${pct(r.lamps)}  | ${String(r.atN).padStart(5)} ${String(r.worst).padStart(5)} (${r.med}) +${r.wAt}: ${r.wLamp}/${r.wSun}${r.wSky ? ' sky' : ''}${r.wProg ? ` +${r.wProg}prog` : ''}${r.wTex ? ` +${r.wTex}tex` : ''}, ${r.lampMaps} lamp maps after; first ${r.first} +${r.fAt}`);
 const med = k => { const v = ok.map(r => r[k]).sort((a, b) => a - b); return v[v.length >> 1]; };
 console.log(`median crossing: abrupt ${med('abrupt')} total ${med('total')} settle ${med('settle')}s worst frame ${med('worst')} ms (walk median ${med('med')} ms)`);
+const wk = ok.filter(r => !r.warp && r.wMood !== undefined), mx = k => Math.max(...wk.map(r => r[k])), at = k => wk.find(r => r[k] === mx(k))?.name;
+console.log(`walking: largest mood step ${mx('wMood')} (${at('wMood')}), largest step ${mx('wStep')} (${at('wStep')}), largest wash at a passage mouth ${mx('wash')} (${at('wash')}); standing: largest abrupt ${Math.max(...ok.map(r => r.abrupt))}, ${ok.filter(r => r.settle > .6).length} of ${ok.length} settle over 0.6 s, warps' largest total ${Math.max(0, ...ok.filter(r => r.warp).map(r => r.total))}`);
 if (R.strips?.length) {
   R.strips.forEach((s, i) => s.caps.forEach(([lab, url], j) => writeFileSync(`${out}/${i + 1}-${s.name.replace(/[^\w]+/g, '_')}-${j}-${lab.replace('+', 'p').replace('.', '_')}.png`, Buffer.from(url.split(',')[1], 'base64'))));
   console.log(`strips: ${out}`); }

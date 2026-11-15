@@ -243,14 +243,14 @@ function stepLoose(me) {
   for (const f of floaters) if (f.w.visible) stepRing(f, me);
   ms += performance.now() - t0;
 }
-function drawLoose(zone) { // once a frame, after the steps: meshes, and the shadows of whatever moved. zone: the player's
+function drawLoose(near) { // once a frame, after the steps: meshes, and the shadows of whatever moved. near: the ids of the zones the player stands in or near (lights.js weights)
   const t0 = performance.now();
-  for (const g of groups) { if (g.seen) g.mesh.visible = g.seen.includes(zone); /* drawn only where it can be seen from, as pools are */ if (g.shown) g.mesh.count = g.awake || g.inside || g.bq >= 0 ? g.n : g.shown; }
+  for (const g of groups) { if (g.seen) g.mesh.visible = near.some(id => g.seen.includes(id)); /* drawn only where it can be seen from, as pools are */ if (g.shown) g.mesh.count = g.awake || g.inside || g.bq >= 0 ? g.n : g.shown; }
   for (const g of groups) if (g.fine && (g.fine.visible = g.mesh.visible)) fine(g); // every frame: the eye moves when the balls don't
   for (const g of groups) if (!g.drawn) { draw(g, 0); g.drawn = true;
     if (g.moved > .01) { const [x1, z1, x2, z2] = g.region; if (g.n > 1) reshade((x1 + x2) / 2, 0, (z1 + z2) / 2, Math.hypot(x2 - x1, z2 - z1) / 2); else reshade(g.p[0], g.p[1], g.p[2], g.r); g.moved = 0; } }
   for (const f of floaters) { f.m.position.set(f.x, f.y, f.z); f.m.rotation.set(f.az, f.yaw, f.ax);
-    const s = f.shade; if (f.w.zone.id === zone && Math.hypot(f.x - s[0], f.z - s[2]) + Math.abs(f.y - s[1]) + .5 * (Math.abs(f.ax - s[3]) + Math.abs(f.az - s[4])) > .04) { reshade(f.x, f.y, f.z, RO); f.shade = [f.x, f.y, f.z, f.ax, f.az]; } } // its pose when its shadow was last drawn; only from its own room, as its slow drift can't be seen through a doorway
+    const s = f.shade; if (near.includes(f.w.zone.id) && Math.hypot(f.x - s[0], f.z - s[2]) + Math.abs(f.y - s[1]) + .5 * (Math.abs(f.ax - s[3]) + Math.abs(f.az - s[4])) > .04) { reshade(f.x, f.y, f.z, RO); f.shade = [f.x, f.y, f.z, f.ax, f.az]; } } // its pose when its shadow was last drawn; only from its own room or near its doorways, as its slow drift can't be seen from further through one
   const took = ms + performance.now() - t0; ms = 0; return took;
 }
 

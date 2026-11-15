@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { renderer, scene, camera, V, zones, inR } from './core.js';
 import { seaMat } from './mat.js';
-import { emitters } from './build.js';
+import { emitters, colliders, floorH, warps } from './build.js';
 import { setSky } from './sky.js';
 import { ponds, ripple } from './water.js';
 
@@ -13,8 +13,42 @@ const lights = Array.from({ length: 9 }, () => {
   l.castShadow = true; l.shadow.mapSize.setScalar(1024); l.shadow.bias = -.001; l.shadow.normalBias = .03; l.shadow.autoUpdate = false; l.k = 0;
   scene.add(l, l.target); return l;
 });
-function relight(pos, zone, fade) { // fade: how far to move brightness this call (1 = snap)
-  const want = emitters.map(e => [e.p.distanceTo(pos) + (e.zone.grp === zone.grp ? 0 : 8) - (e.light ? 2 : 0), e]).sort((a, b) => a[0] - b[0]).slice(0, lights.length).map(a => a[1]);
+// Openings: the stretches of a shared zone edge a body can walk straight through (free of solids from 0.8 m before the edge to
+// 0.8 m past it, no rise taller than a step), found once. Between places the mood is a function of where you stand near one.
+const BAND = 2.5, openings = []; // BAND: metres either side of an opening over which the neighbour's share goes from 0 to a half
+{ const zl = Object.values(zones), free = (x, z) => { const f = floorH(x, z); return !colliders.some(c => x > c[0] - .05 && x < c[2] + .05 && z > c[1] - .05 && z < c[3] + .05 && c[4] < f + 1.7 && c[5] > f + .35); };
+  const through = (ax, at, s) => { let f0; for (let u = -.8; u <= .8 + 1e-6; u += .1) { const [x, z] = ax ? [s, at + u] : [at + u, s], f = floorH(x, z);
+    if (!free(x, z) || Math.abs(f - (f0 ?? f)) > .35) return false; f0 = f; } return true; };
+  for (const p of zl) for (const q of zl) for (const ax of [0, 1]) { // ax 0: p's east side meets q's west at x = at; ax 1: p's north (high z) meets q's south
+    const e1 = p.box[ax ? 3 : 2], e2 = q.box[ax ? 1 : 0], lo = Math.max(p.box[ax ? 0 : 1], q.box[ax ? 0 : 1]), hi = Math.min(p.box[ax ? 2 : 3], q.box[ax ? 2 : 3]);
+    if (p === q || Math.abs(e1 - e2) > .7 || hi - lo < .4) continue;
+    let run = null; const at = (e1 + e2) / 2, done = () => { if (run && run[1] - run[0] >= .4) openings.push({ p, q, ax, at, lo: run[0], hi: run[1] }); run = null; };
+    for (let s = lo; s <= hi + 1e-6; s += .05) if (through(ax, at, s)) run ? run[1] = s : run = [s, s]; else done();
+    done();
+  }
+  for (const z of zl) z.openings = openings.filter(o => o.p === z || o.q === z);
+  // the band must end before any passage warp and where it lands: there both twins must show the passage's own mood, or the move would show
+  console.assert(openings.every(o => warps.every(w => [0, 1].every(c => { const [x1, x2, z1, z2] = o.ax ? [o.lo, o.hi, o.at, o.at] : [o.at, o.at, o.lo, o.hi];
+    return Math.max(w[0] + c * w[4] - x2, x1 - w[2] - c * w[4], w[1] + c * w[5] - z2, z1 - w[3] - c * w[5]) > BAND; }))), 'a passage warp or its landing lies within an opening band');
+}
+// The zones that set the mood at (x, z) with their shares, the zone you are in first: near an opening the neighbour's share rises
+// linearly to one half on the edge (and past it in the gap between two boxes), and falls the same way along the wall beside it.
+// Counted as odds against the zone you are in: an opening gives k / (1 - k), a zone behind a neighbour's opening the product of the
+// two. Across an opening k from one side is 1 - k from the other, so every zone's odds against every other agree whichever side you
+// count from, and the shares do not move when `zone` flips; a neighbour's doors count only near the door into it (nothing through a wall).
+function weights(x, z, zone) {
+  const r = new Map([[zone, 1]]), reach = (from, f) => { const got = [];
+    for (const o of from.openings) { const n = o.p === from ? o.q : o.p, t = (o.ax ? z : x) - o.at, s = o.ax ? x : z, a = Math.max(o.lo - s, s - o.hi, 0);
+      const k = Math.min(.99, Math.max(0, .5 + .5 * (o.p === from ? t : -t) / BAND)) * Math.max(0, 1 - a / BAND), w = f * k / (1 - k);
+      if (w > 0 && n !== zone) { got.push([n, w]); if (w > (r.get(n) || 0)) r.set(n, w); } } // reached two ways: the larger
+    return got; };
+  for (const [n, w] of reach(zone, 1)) reach(n, w);
+  let sum = 0; for (const v of r.values()) sum += v;
+  return [...r].map(([q, v]) => [q, v / sum]);
+}
+function relight(pos, zone, fade, wts) { // fade: how far to move brightness this call (1 = snap); wts: weights() there, else the zone alone (the bakes)
+  const gw = {}; for (const [z, v] of wts || [[zone, 1]]) gw[z.grp] = (gw[z.grp] || 0) + v; // a fixture's group gives up its 8 m handicap as you near it
+  const want = emitters.map(e => [e.p.distanceTo(pos) + 8 * (1 - Math.min(1, gw[e.zone.grp] || 0)) - (e.light ? 2 : 0), e]).sort((a, b) => a[0] - b[0]).slice(0, lights.length).map(a => a[1]);
   for (const l of lights) {
     const keep = want.includes(l.e);
     l.k = Math.min(1, Math.max(0, l.k + (keep ? fade : -fade)));
@@ -63,4 +97,4 @@ env0.dispose(); performance.mark('load: zones baked'); // every material has its
 const zone0 = Object.values(zones).find(z => inR(camera.position.x, camera.position.z, ...z.box)) || zones.bA;
 setSky(zone0.sky || 'day'); relight(camera.position, zone0, 1); relight(camera.position, zone0, 1); // the zone you start in
 
-export { lights, relight, bake, zone0 };
+export { lights, relight, bake, zone0, openings, weights };

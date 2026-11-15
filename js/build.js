@@ -64,7 +64,9 @@ function passage(x1, z1, x2, z2, lo, dx, dz, sky, t = 0) {
     B(voidMat, e1, -.2, b1, e2, 0, b2); B(voidMat, e1, 2.4, b1, e2, 2.6, b2); B(voidMat, e1, 0, b1 - .3, e2, 2.4, b1); B(voidMat, e1, 0, b2, e2, 2.4, b2 + .3);
     B(voidMat, high ? a2 : a1 - .3, 0, b1 - .3, high ? a2 + .3 : a1, 2.6, b2 + .3);
     for (let a = a1 + .5; a < e2; a++) if (a > e1) for (const b of [b1 + .08, b2 - .08]) B(aisle, a - .03, 0, b - .03, a + .03, .012, b + .03);
-    const [h1, h2] = high ? [mid, a2] : [a1, mid], s = c ? -1 : 1;
+    // the warps: two 0.32 m strips meeting at the middle (more than a body moves in one frame, 6 m/s for the 0.05 s frame cap), so both ends of each
+    // move stay more than lights.js's BAND from both mouths (it asserts so); each lands just outside the other, so turning round there does not jump back
+    const L = mid, [h1, h2] = high ? [L, L + .32] : [L - .32, L], s = c ? -1 : 1;
     warps.push(X ? [h1, b1, h2, b2, s * dx, s * dz] : [b1, h1, b2, h2, s * dx, s * dz]);
   }
 }

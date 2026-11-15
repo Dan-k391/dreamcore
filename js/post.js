@@ -37,18 +37,22 @@ const ahead = []; // programs compiling in parallel, awaited together once the p
   ahead.push((async () => renderer.compileAsync?.(scene, camera))()); // the materials are collected now, synchronously
   renderer.setRenderTarget(null); for (const [o, m] of was) o.material = m; // so put them back before awaiting: other modules run meanwhile and must not see the swap
 }
-const look = { exp: zone.exp, shaft: 0, sat: zone.sat, bloom: zone.bloom, fog: zone.fog.clone(), tint: zone.tint.clone() }; // eases toward the current zone's values
+const look = { exp: zone.exp, shaft: 0, sat: zone.sat, bloom: zone.bloom, tint: zone.tint.clone(), w: new Map([[zone, 1]]) }; // w: each zone's share of the mood where you stand (player.js mood)
 const atmos = new THREE.ShaderMaterial({ // distance fog per zone + sun shafts ray-marched through the sun's shadow map
   uniforms: { tDiffuse: { value: null }, tAO: { value: ao.pdRenderTarget.texture }, tDepth: { value: ao.depthTexture }, tShadow: { value: sun.shadow.map.texture }, uPI: { value: camera.projectionMatrixInverse }, uCW: { value: camera.matrixWorld },
-              uSM: { value: sun.shadow.matrix }, uCam: { value: camera.position }, uSun: { value: sunDir }, uFog: { value: look.fog }, uShaft: { value: 0 }, t: uTime },
+              uSM: { value: sun.shadow.matrix }, uCam: { value: camera.position }, uSun: { value: sunDir }, uFog: { value: [zone.fog.clone(), zone.fog.clone(), zone.fog.clone()] }, uFogW: { value: new THREE.Vector3(1, 0, 0) }, uShaft: { value: 0 }, t: uTime },
   vertexShader: quadVS,
   fragmentShader: `#include <packing>
-    uniform sampler2D tDiffuse, tAO, tDepth, tShadow; uniform mat4 uPI, uCW, uSM; uniform vec3 uCam, uSun; uniform vec4 uFog; uniform float uShaft, t; varying vec2 vUv;
+    uniform sampler2D tDiffuse, tAO, tDepth, tShadow; uniform mat4 uPI, uCW, uSM; uniform vec3 uCam, uSun, uFogW; uniform vec4 uFog[3]; uniform float uShaft, t; varying vec2 vUv;
     void main() {
       vec3 col = texture2D(tDiffuse, vUv).rgb * texture2D(tAO, vUv).rgb; // the ambient occlusion (blend intensity 1)
       vec4 v = uPI * vec4(vUv * 2. - 1., texture2D(tDepth, vUv).x * 2. - 1., 1.);
       vec3 ray = (uCW * vec4(v.xyz / v.w, 1.)).xyz - uCam; float len = min(length(ray), 60.); vec3 dir = normalize(ray);
-      col = mix(col, uFog.rgb, 1. - exp(-len * uFog.a));
+      // near a doorway: the picture under each zone's fog, mixed by its share, so a thick dark fog lifts as a veil, never as grey;
+      // mixed as square roots (about as the eye sees), or the first few percent of a bright place would light the whole dark mouth
+      vec3 c0 = col; col = vec3(0.);
+      for (int i = 0; i < 3; i++) col += uFogW[i] * pow(max(mix(c0, uFog[i].rgb, 1. - exp(-len * uFog[i].a)), 0.), vec3(.7));
+      col = pow(col, vec3(1. / .7));
       if (uShaft > .001) {
         float lit = 0., n = fract(sin(dot(gl_FragCoord.xy + fract(t) * 37., vec2(12.9898, 78.233))) * 43758.5453);
         for (int i = 0; i < 32; i++) { vec4 s = uSM * vec4(uCam + dir * len * (float(i) + n) / 32., 1.);
