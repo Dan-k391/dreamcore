@@ -7,9 +7,9 @@ import { pillar, skirting } from '../props/structure.js';
 import { door, vent, bin } from '../props/metalwork.js';
 import { pottedPlant } from '../props/garden.js';
 
-defZone('bA', { ...warm, box: [-9.4, 0, 9.4, 21.4], probe: [0, 1.5, 11] });
-defZone('bB', { ...warm, box: [-33.4, .6, -9.4, 21.4], probe: [-21.3, 1.7, 13] });
-defZone('bC', { ...warm, box: [9.4, .4, 36.8, 12.4], probe: [23.4, 1.5, 10.8], wet: .3 });
+defZone('bA', { ...warm, box: [-9.4, 0, 9.4, 21.4], probe: [0, 1.5, 11], env: [[-9.4, 0, 0], [9.4, 2.7, 21.4]] });
+defZone('bB', { ...warm, box: [-33.4, .6, -9.4, 21.4], probe: [-21.3, 1.7, 13], env: [[-33.4, 0, .6], [-9.4, 3.3, 21.4]] });
+defZone('bC', { ...warm, box: [9.4, .4, 36.8, 12.4], probe: [23.4, 1.5, 10.8], env: [[9.4, 0, 9.6], [36.8, 2.7, 12.4]], wet: .3 });
 for (const z of [zones.bA, zones.bB, zones.bC]) { // yellowed wallpaper with a seam every 53 cm, worn loop carpet, mineral-fibre tiles in a T-bar grid
   z.carpet = M(z, 'loopCarpet', { color: 0xe8cc8c });
   z.paper = M(z, 'wallpaper');

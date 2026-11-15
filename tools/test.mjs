@@ -136,6 +136,9 @@ for (const [name, hash, calls, tris] of [['gallery-pool', '23.2,14.2,3.14159,-0.
 // No two faces of different materials in one plane (they z-fight, the flicker on door frames and passages): tools/seams.mjs --scan, every sky's places.
 try { execFileSync(process.execPath, [fileURLToPath(new URL('./seams.mjs', import.meta.url)), '--port', base.split(':')[2].slice(0, -1), '--scan'], { encoding: 'utf8' }); check('no coplanar overlapping faces (tools/seams.mjs --scan)', true); }
 catch (e) { check('no coplanar overlapping faces (tools/seams.mjs --scan)', false, String(e.stdout || e.message).slice(0, 600)); }
+// Reflections where a mirror puts them: the mall's skylight in its marble floor, from two places (tools/reflect.mjs; 568 px off before box projection, 5 after).
+{ let r; try { r = JSON.parse(execFileSync(process.execPath, [fileURLToPath(new URL('./reflect.mjs', import.meta.url)), '--port', base.split(':')[2].slice(0, -1), '--only', 'mL', '--json'], { encoding: 'utf8' })); } catch (e) { r = String(e.stdout || e.message).slice(0, 600); }
+  check('the mall floor mirrors its skylight within 25 px of where a mirror puts it, from both places', Array.isArray(r) && r.length === 2 && r.every(m => m.err !== null && m.err < 25), JSON.stringify(r)); }
 // What can be seen from where: js/seen.js must still cover every zone the eye can see from each zone (a new doorway or window needs tools/pvs.mjs run again).
 try { execFileSync(process.execPath, [fileURLToPath(new URL('./pvs.mjs', import.meta.url)), '--port', base.split(':')[2].slice(0, -1), '--check'], { encoding: 'utf8' }); check('js/seen.js covers what each zone can see (tools/pvs.mjs --check)', true); }
 catch (e) { check('js/seen.js covers what each zone can see (tools/pvs.mjs --check)', false, String(e.stdout || e.message).slice(0, 600)); }

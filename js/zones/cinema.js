@@ -63,7 +63,7 @@ function drape(mat, x, y1, y2, z1, z2, pitch, deep, seed) {
   g.computeVertexNormals(); add(mat, g.rotateY(-Math.PI / 2).translate(x, (y1 + y2) / 2, (z1 + z2) / 2));
 }
 
-defZone('cN', { ...dry, step: 'carpet', grp: 'c', k: 1.1, exp: .36, fog: [.01, .008, .01, .01], bloom: .4, wet: .2, box: [5.2, 24, 17.8, 38], probe: [10, 1.5, 31] });
+defZone('cN', { ...dry, step: 'carpet', grp: 'c', k: 1.1, exp: .36, fog: [.01, .008, .01, .01], bloom: .4, wet: .2, box: [5.2, 24, 17.8, 38], probe: [10, 1.5, 31], env: [[5.2, -.5, 24], [17.8, 5, 38]] });
 { // cinema x[5.6,17.4] z[24.4,37.6]: the floor steps down in tiers toward a masked screen between drawn velvet curtains on a low stage
   const z = zones.cN, h = 5, R = wallMat(z, 0x4a1016), C = M(z, 'blackoutCarpet', { color: 0x6a5a62 }), K = P(z, { color: 0x0a0a0a, roughness: .9 });
   const mats = { shell: M(z, 'hardPlastic', { color: 0x1a1819, roughness: .5 }), vel: M(z, 'velvet', { color: 0x9c1a2a }), pipe: M(z, 'velvet', { color: 0x3c0a10 }),

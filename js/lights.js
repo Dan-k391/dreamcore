@@ -37,7 +37,8 @@ function bake(z, mats = z.mats, k = z.k) {
   if (z.id) { relight(z.probe, z, 1); relight(z.probe, z, 1); } // bring the lamps to this zone: first call assigns, second switches on
   cubeCam.position.copy(z.probe); cubeCam.update(renderer, scene);
   const env = pmrem.fromCubemap(cubeRT.texture).texture;
-  for (const m of mats) { m.envMap = env; m.envMapIntensity = k; m.needsUpdate = true; }
+  for (const m of mats) { m.envMap = env; m.envMapIntensity = k; m.needsUpdate = true;
+    const u = m.userData.envU; if (u && z.env) { u.uEMin.value.set(...z.env[0]); u.uEMax.value.set(...z.env[1]); u.uEP.value.copy(z.probe); } } // reflections box-projected onto the room (mat.js envBox)
 }
 // Every program the bakes and the first frames use, compiled up front and in parallel (KHR_parallel_shader_compile) instead of
 // one after another as each is first drawn. For the cube target, as the bakes and the scene pass draw (a half-float target:

@@ -72,8 +72,23 @@ const libMain = `
   lC = max(lC, vec3(.012)); // nothing so dark that it reads as a hole
   diffuseColor.rgb = lC * (gl_FrontFacing ? 1. : uL3.y);
 `;
+// Box-projected (parallax-corrected) reflections: the zone's probe is a picture of the room from one point, so a reflected ray is
+// followed from the shaded point to the zone's box (zone.env) and the probe looked up toward where it lands, not along the ray.
+// A light on the ceiling then shows in the floor where a mirror puts it, from anywhere in the room. No box (outdoors): the plain lookup.
+// lights.js's bake fills the uniforms from the zone. Every material a zone lights runs this (library ones inside libCompile).
+const envBoxU = () => ({ uEMin: { value: V(1, 1, 1) }, uEMax: { value: V(-1, -1, -1) }, uEP: { value: V(0, 0, 0) } }); // min > max: no box
+function envBox(s, u) {
+  Object.assign(s.uniforms, u);
+  s.vertexShader = 'varying vec3 vEW;\n' + s.vertexShader.replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvEW = worldPosition.xyz;');
+  s.fragmentShader = `varying vec3 vEW; uniform vec3 uEMin, uEMax, uEP;
+    vec3 eBox(vec3 d) { if (uEMax.x < uEMin.x) return d; vec3 m = max((uEMax - vEW) / d, (uEMin - vEW) / d); float t = min(min(m.x, m.y), m.z);
+      return t > 0. ? vEW + d * t - uEP : d; } // a point outside the box (a shop behind its glass): the plain lookup
+  ` + s.fragmentShader.replace('#include <envmap_physical_pars_fragment>', THREE.ShaderChunk.envmap_physical_pars_fragment.replace(
+    'reflectVec = inverseTransformDirection( reflectVec, viewMatrix );', 'reflectVec = eBox( inverseTransformDirection( reflectVec, viewMatrix ) );'));
+}
+function envCompile(s) { envBox(s, this.userData.envU); } // a plain standard material (P): one shared function, so one program per kind as before
 function libCompile(s) {
-  Object.assign(s.uniforms, this.userData.libU);
+  Object.assign(s.uniforms, this.userData.libU); envBox(s, this.userData.envU);
   s.vertexShader = 'varying vec3 vLW, vLN; varying vec2 vLUv;\n' + s.vertexShader.replace('#include <project_vertex>', `#include <project_vertex>
     { vec4 lw = vec4(transformed, 1.); vec3 ln = objectNormal;
     #ifdef USE_INSTANCING
@@ -116,7 +131,7 @@ function libMat(name, o = {}) {
     uL0: { value: new THREE.Vector4(1 / s.m, o.tri ? 1 : 0, 1 / o.dm, o.detail) }, uL1: { value: new THREE.Vector4(o.wear, o.dirt, o.vary, o.sheen) },
     uL2: { value: new THREE.Vector4(1, o.floor, o.uv[0], o.uv[1]) }, uL3: { value: new THREE.Vector4(o.emit ? 1 : 0, o.back, o.macro, o.swap ? 1 : 0) },
     uL4: { value: new THREE.Vector4(o.grime, o.fine, 0, 0) }, uLDirt: { value: col3(o.dirtCol) }, uLEdge: { value: col3(o.edgeCol) } };
-  m.onBeforeCompile = libCompile; m.userData.lib = name;
+  m.onBeforeCompile = libCompile; m.userData.lib = name; m.userData.envU = envBoxU();
   return m;
 }
 const libCache = new Map();
@@ -138,14 +153,14 @@ const causticsGLSL = `
 `; // the moving light pattern under water. Used by the tiles themselves and by the water, for floor it draws from the still plan
 const glow = S({ color: 0, emissive: 0xffedc0, emissiveIntensity: 14 }); // frosted windows and light wells
 const seaMat = S({ color: 0x0f4652, roughness: .05, normalMap: wn0, normalScale: new THREE.Vector2(.5, .5) });
+seaMat.onBeforeCompile = envCompile; seaMat.userData.envU = envBoxU(); // no box (the open sea): the plain lookup, but the same program as P()'s water
 const noCast = new Set([glow, seaMat]); // materials whose meshes cast no shadow (library emitters add themselves)
 const lampOn = M(null, 'troffer'), lampOff = libMat('trofferOff', { roughness: .35 }); // the ceiling panel lit, and dead (bA bakes its light)
 
 // Tile shader extras: caustics under water, rippling reflected light on walls above it, a coloured tile band below a
-// given height, and box-projected reflections so glossy tiles mirror the room's windows in the right place.
+// given height (box-projected reflections come with the library shader underneath).
 function tileFX(m, z) {
   const u = z.tileU = { uTime, uBand: { value: z.band }, uBandCol: { value: new THREE.Color(...z.bandCol) }, uShimmer: { value: z.shimmer },
-              uBoxMin: { value: V(...z.env[0]) }, uBoxMax: { value: V(...z.env[1]) }, uProbe: { value: z.probe },
               uSim: { value: null }, uPond: { value: new THREE.Vector4(0, 0, 1, 1) }, uPx: { value: new THREE.Vector2() }, // this zone's pool, filled in when the pool is made
               uLamp: { value: Array.from({ length: 24 }, () => new THREE.Vector4()) }, uLampCol: { value: new THREE.Color(0xffedc0) }, uCaus: { value: z.caus || .45 } }; // caustic strength: full only where the sun reaches // this zone's own fixtures (see fixture())
   z.nl = 0;
@@ -154,15 +169,12 @@ function tileFX(m, z) {
     lib.call(this, s, r);
     Object.assign(s.uniforms, u);
     s.vertexShader = 'varying vec3 vW;\n' + s.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\nvW = (modelMatrix * vec4(transformed, 1.)).xyz;');
-    s.fragmentShader = `varying vec3 vW; uniform float uTime, uBand, uShimmer, uCaus; uniform vec3 uBandCol, uBoxMin, uBoxMax, uProbe; uniform sampler2D uSim; uniform vec4 uPond; uniform vec2 uPx;
+    s.fragmentShader = `varying vec3 vW; uniform float uTime, uBand, uShimmer, uCaus; uniform vec3 uBandCol; uniform sampler2D uSim; uniform vec4 uPond; uniform vec2 uPx;
       #ifdef NL
         uniform vec4 uLamp[NL]; uniform vec3 uLampCol;
       #endif
       ${causticsGLSL}
-      vec3 boxProj(vec3 d) { vec3 m = max((uBoxMax - vW) / d, (uBoxMin - vW) / d); return vW + d * min(min(m.x, m.y), m.z) - uProbe; }
     ` + s.fragmentShader
-      .replace('#include <envmap_physical_pars_fragment>', THREE.ShaderChunk.envmap_physical_pars_fragment.replace(
-        'reflectVec = inverseTransformDirection( reflectVec, viewMatrix );', 'reflectVec = boxProj( inverseTransformDirection( reflectVec, viewMatrix ) );'))
       .replace('#include <color_fragment>', `#include <color_fragment>
         if (vW.y < uBand) diffuseColor.rgb *= uBandCol;
         float wet = 1. - smoothstep(0., .06, abs(vW.y + ${-WY})); diffuseColor.rgb *= 1. - .3 * wet; // the waterline leaves a wet band`)
@@ -189,7 +201,7 @@ const poolMats = z => { z.tile = tileFX(libMat('poolTile'), z); z.mats.push(z.ti
 const P = (z, o) => { // a material that takes the zone's ambient light. Given one of tex.js's old shared texture handles, the library material that replaced it
   const lib = o.lib || o.map?.lib;
   if (lib) { const { lib: _, map, normalMap, roughnessMap, aoMap, aoMapIntensity, ...rest } = o; return M(z, lib, rest); }
-  const m = S(o); z.mats.push(m); return m; };
+  const m = S(o); m.onBeforeCompile = envCompile; m.userData.envU = envBoxU(); z.mats.push(m); return m; };
 const neon = (c, k = 6) => { const m = S({ color: 0, emissive: c, emissiveIntensity: k }); noCast.add(m); return m; };
 const voidMat = S({ color: 0x040404, roughness: 1 }), aisle = neon(0xffa646, 12);
 const label = (text, w, h, color = '#fff', bg = '#000', k = 3) => { // glowing lettering on a plate

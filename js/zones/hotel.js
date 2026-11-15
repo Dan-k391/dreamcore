@@ -29,7 +29,7 @@ const moulding = (mat, prof, f, y, z1, z2, k) => {
 const DADO = [[0, -.035], [.011, -.035], [.016, -.028], [.016, -.018], [.012, -.012], [.02, -.004], [.024, .006], [.02, .016], [.012, .02], [.012, .026], [0, .03]];
 const PICTURE = [[0, -.022], [.006, -.022], [.016, -.012], [.02, -.002], [.017, .006], [.012, .008], [.012, .016], [0, .02]];
 
-defZone('hT', { ...dry, step: 'carpet', grp: 'm', k: 1, exp: .34, fog: [.3, .2, .12, .004], bloom: .3, wet: .1, hum: .3, box: [2.4, 21.4, 5.2, 51.6], probe: [3.8, 1.5, 36] });
+defZone('hT', { ...dry, step: 'carpet', grp: 'm', k: 1, exp: .34, fog: [.3, .2, .12, .004], bloom: .3, wet: .1, hum: .3, box: [2.4, 21.4, 5.2, 51.6], probe: [3.8, 1.5, 36], env: [[2.4, 0, 21.4], [5.2, 2.8, 51.6]] });
 { // hotel hallway x[2.6,5] z[21.4,51.6], through a door behind where you start: patterned carpet, damask above dark stained boarding to a
   // dado rail, a picture rail, numbered room doors in their frames, a sconce between each pair, opal panels down the ceiling
   const z = zones.hT, h = 2.8, C = P(z, { map: hotelTex.map, normalMap: hotelTex.normalMap, ...dirt });

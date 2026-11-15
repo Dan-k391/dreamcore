@@ -17,7 +17,7 @@ const sample = res => `(async () => {
   const rt = new THREE.WebGLCubeRenderTarget(${res}), cam = new THREE.CubeCamera(.05, 3000, rt), buf = new Uint8Array(${res} * ${res} * 4);
   for (const c of cam.children) c.layers.enableAll(); // every zone's layer: the answer must not depend on the seen.js in force
   const flat = new Map(), clear = m => m.transparent || m.alphaTest > 0 || m.transmission > 0 || m.opacity < 1 || m.depthWrite === false || m.colorWrite === false || m.visible === false;
-  const meshes = []; scene.traverse(o => { if (o.isMesh && !o.isInstancedMesh) meshes.push(o); });
+  const meshes = []; scene.traverse(o => { if (o.isMesh && !o.isInstancedMesh) meshes.push(o); else if (o.isInstancedMesh) o.layers.disableAll(); });
   const opaque = new Set(meshes.filter(o => !Array.isArray(o.material) && !clear(o.material) && !B.seeThrough.includes(o) && !o.material.uniforms?.tMirror && (o.material.isMeshStandardMaterial || o.material.isMeshBasicMaterial || o.material.isMeshLambertMaterial || o.material.isMeshPhongMaterial)));
   const colour = (id, side) => { const k = idx.get(id) || 0, key = k * 4 + side; if (!flat.has(key)) flat.set(key, new THREE.MeshBasicMaterial({ color: new THREE.Color().setRGB(k / 255, 0, 0, THREE.LinearSRGBColorSpace), fog: false, side })); return flat.get(key); };
   const keep = new Map(meshes.map(o => [o, o.material]));
@@ -26,7 +26,7 @@ const sample = res => `(async () => {
   for (const z of Object.values(zones)) {
     hid.forEach(o => o.visible = true); hid.clear(); S.setSky(z.sky || 'day'); scene.background = null;
     for (const o of meshes) { o.material = keep.get(o); const own = zones[o.userData.zone]; // another sky's place is never drawn here (sky.js), nor hides anything
-      if (o.visible && own && (own.sky || 'day') !== (z.sky || 'day')) { o.visible = false; hid.add(o); } else if (o.visible && opaque.has(o)) o.material = colour(o.userData.zone, o.material.side); else if (!opaque.has(o)) o.visible = false; }
+      if (o.visible && own && (own.sky || 'day') !== (z.sky || 'day')) { o.visible = false; hid.add(o); } else if (o.visible && opaque.has(o)) o.material = colour(o.userData.zone, o.material.side); else if (!opaque.has(o)) { o.visible = false; o.layers.disableAll(); } } // off its layers too: the loose balls' own code shows them again, and in their own shading their red reads as a zone number
     const got = new Set(), [x1, z1, x2, z2] = z.box, w = x2 - x1, d = z2 - z1, st = Math.max(${step}, Math.sqrt(w * d / 1500));
     for (let x = x1 + .2; x <= x2 - .2 + 1e-6; x += Math.max(.1, Math.min(st, (w - .4) / Math.max(1, Math.round((w - .4) / st)))))
       for (let q = z1 + .2; q <= z2 - .2 + 1e-6; q += Math.max(.1, Math.min(st, (d - .4) / Math.max(1, Math.round((d - .4) / st))))) {
