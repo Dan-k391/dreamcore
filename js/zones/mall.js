@@ -127,7 +127,7 @@ defZone('mL', { ...dry, grp: 'm', k: 1.15, exp: .3, fog: [.4, .38, .4, .0008], b
       p(Dk, at(tx, ty, q - .05, RB(.4, .1, .42, .008).translate(0, .05, 0))); p(Rb, at(tx, ty + .05, q - .05 - .21, RB(.3, .004, .006, .001)));
       p(Dk, at(tx, ty + .1, q - .02, RB(.3, .03, .2, .006).translate(0, .015, 0).rotateX(-.12)));
       p(Dk, at(tx, ty + .1, q + .05, cyl([0, 0, 0], [0, .16, 0], .014, 12))); p(Dk, at(tx, ty + .25, q + .05, RB(.3, .21, .035, .008).rotateX(.25)));
-      p(Sc, at(tx, ty + .25, q + .05, RB(.26, .17, .004, .002).rotateX(.25).translate(0, -.004, -.017)));
+      p(Sc, at(tx, ty + .25, q + .05, RB(.26, .17, .004, .002).translate(0, -.008, -.017).rotateX(.25)));
       p(Dk, at(tx - .32, ty, q - .02, RB(.14, .12, .2, .02).translate(0, .06, 0))); p(Rb, at(tx - .32, ty + .1, q - .12, RB(.08, .004, .01, .001)));
     };
     // wall shelving on the back wall: slotted uprights, oak shelves on brackets

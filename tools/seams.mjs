@@ -23,15 +23,17 @@ async function page(o) {
   const { scene, renderer: r, zones, camera } = dev, zl = Object.values(zones), out = {};
   dev.hold = true;
   const zoneAt = (x, z) => zl.find(q => x > q.box[0] && x < q.box[2] && z > q.box[1] && z < q.box[3])?.id || '-';
-  const meshes = [], other = []; scene.traverse(o => { if (o.isMesh && !o.isInstancedMesh && o.visible) meshes.push(o); else if ((o.isMesh || o.isLine || o.isPoints || o.isSprite) && o.visible) other.push(o); }); // other: hidden while painting
+  const meshes = [], other = []; scene.traverse(o => { if (o.isMesh && !o.isInstancedMesh) meshes.push(o); else if (o.isMesh || o.isLine || o.isPoints || o.isSprite) other.push(o); }); // other: hidden while painting; meshes: every sky's, setSky shows its own
   const see = m => !Array.isArray(m) && !(m.transparent || m.alphaTest > 0 || m.transmission > 0 || m.opacity < 1 || m.depthWrite === false || m.colorWrite === false || m.visible === false) && !m.uniforms?.tMirror && (m.isMeshStandardMaterial || m.isMeshBasicMaterial || m.isMeshLambertMaterial || m.isMeshPhongMaterial);
   const opaque = meshes.filter(o => see(o.material) && !B.seeThrough.includes(o));
   const mats = [...new Set(meshes.map(o => o.material).filter(m => !Array.isArray(m)))];
   const name = m => `${m.name || m.type.replace('Mesh', '').replace('Material', '')}#${m.color ? m.color.getHexString() : ''}${m.map ? '+map' : ''}`;
 
   if (o.scan) { // ---- coplanar overlapping faces from different materials ----
-    const t0 = performance.now(), TOL = .001, tris = [], buckets = new Map(), p = new THREE.Vector3(), a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
-    for (const mesh of meshes) {
+    const t0 = performance.now(), TOL = .001, p = new THREE.Vector3(), a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), patches = new Map(), sky0 = S.skyNow; let twins = 0, faces = 0;
+    for (const k of new Set(zl.map(q => q.sky || 'day'))) { S.setSky(k); // one pass per sky, with what it shows (all at once is past a Map's size); a patch found twice counts once
+    const tris = [], buckets = new Map(), before = new Set(patches.keys()), seenPair = new Set();
+    for (const mesh of meshes) { if (!mesh.visible) continue;
       if (Array.isArray(mesh.material) || mesh.material.colorWrite === false || mesh.material.visible === false) continue;
       mesh.updateMatrixWorld(); const g = mesh.geometry, pos = g.attributes.position, idx = g.index, n = idx ? idx.count : pos.count, M = mesh.matrixWorld;
       const two = mesh.material.side === THREE.DoubleSide, mi = mats.indexOf(mesh.material);
@@ -60,7 +62,6 @@ async function page(o) {
     const pressed = (n, d, w) => { for (const dd of [-1, 0, 1]) { const l = buckets.get(`${Math.round(-n[0] * 300)},${Math.round(-n[1] * 300)},${Math.round(-n[2] * 300)},${Math.round(-d / TOL) + dd}`);
       if (l) for (const t of l) { const T = tris[t]; if (Math.abs(T.d + d) < TOL && see(mats[T.m]) && inside(T, w)) return true; } } return false; };
     const twin = (a, b) => a.type === b.type && a.color?.equals(b.color) && a.map === b.map && a.normalMap === b.normalMap && a.roughness === b.roughness && a.metalness === b.metalness;
-    const patches = new Map(), seenPair = new Set(); let twins = 0;
     for (const [key, list] of buckets) {
       const [kx, ky, kz, kd] = key.split(',').map(Number), cand = [];
       for (const dd of [0, 1, 2]) { const l2 = buckets.get(`${kx},${ky},${kz},${kd + dd}`); if (l2) cand.push(...l2); } // its own bucket and the next one up: each pair once
@@ -81,12 +82,13 @@ async function page(o) {
         if (f.y < B.floorH(f.x, f.z) - .001 || B.colliders.some(c => f.x > c[0] && f.x < c[2] && f.z > c[1] && f.z < c[3] && f.y > c[4] && f.y < c[5] && c.length === 6)) continue;
         if (twin(mats[A.m], mats[Bt.m])) { twins++; continue; } // the same material made twice (two zones' copies): the same colour either way
         const pkey = `${m1.m}|${m2.m}|${A.n.map(v => v.toFixed(2))}|${(A.d * 100 | 0)}|${zoneAt(w.x, w.z)}`;
-        const q = patches.get(pkey) || { a: name(mats[m1.m]), b: name(mats[m2.m]), za: m1.mesh.userData.zone ?? '', zb: m2.mesh.userData.zone ?? '', zone: zoneAt(w.x, w.z), n: A.n.map(v => +v.toFixed(2)), area: 0, lo: [1e9, 1e9, 1e9], hi: [-1e9, -1e9, -1e9], dz: 0 };
+        if (before.has(pkey)) continue; const q = patches.get(pkey) || { a: name(mats[m1.m]), b: name(mats[m2.m]), za: m1.mesh.userData.zone ?? '', zb: m2.mesh.userData.zone ?? '', zone: zoneAt(w.x, w.z), n: A.n.map(v => +v.toFixed(2)), area: 0, lo: [1e9, 1e9, 1e9], hi: [-1e9, -1e9, -1e9], dz: 0 };
         q.area += ar; q.dz = Math.max(q.dz, gap); for (let k = 0; k < 3; k++) { q.lo[k] = Math.min(q.lo[k], w.getComponent(k)); q.hi[k] = Math.max(q.hi[k], w.getComponent(k)); } patches.set(pkey, q);
       }
     }
+    faces += tris.length; } S.setSky(sky0);
     const list = [...patches.values()].map(q => ({ ...q, area: +q.area.toFixed(4), lo: q.lo.map(v => +v.toFixed(3)), hi: q.hi.map(v => +v.toFixed(3)), dz: +(q.dz * 1000).toFixed(2) })).sort((p, q) => q.area - p.area);
-    out.scan = { twins, tris: tris.length, secs: +((performance.now() - t0) / 1000).toFixed(1), patches: list };
+    out.scan = { twins, tris: faces, secs: +((performance.now() - t0) / 1000).toFixed(1), patches: list };
   }
 
   if (o.pop || o.fight) { // ---- the walk list ----
@@ -116,17 +118,20 @@ async function page(o) {
     out.walks = walks.length; out.points = views.length;
     if (o.list) out.list = walks.map(w => w.kind === 'door' ? `${w.a}|${w.b} ${w.ax ? 'z' : 'x'}=${w.at.toFixed(2)} c ${w.c.toFixed(2)} w ${w.w}` : `${w.a} hall`);
     scene.onBeforeRender = () => {}; const fog = scene.fog; scene.fog = null; r.shadowMap.enabled = false; r.setClearColor(0, 0);
-    const keep = new Map(meshes.map(o => [o, o.material])), vis = new Map(meshes.map(o => [o, o.visible])), flat = new Map();
+    const opq = new Set(opaque), ovis = new Map(other.map(o => [o, o.visible])), keep = new Map(meshes.map(o => [o, o.material])), vis = new Map(meshes.map(o => [o, o.visible])), flat = new Map();
     const colour = (k, side) => { const key = k * 4 + side; if (!flat.has(key)) flat.set(key, new THREE.MeshBasicMaterial({ color: new THREE.Color().setRGB((k & 255) / 255, (k >> 8 & 255) / 255, (k >> 16 & 255) / 255, THREE.LinearSRGBColorSpace), fog: false, side })); return flat.get(key); };
-    other.forEach(o => o.visible = false); const paint = by => { for (const m of meshes) { m.material = keep.get(m); m.visible = vis.get(m) && opaque.includes(m); if (m.visible) m.material = colour(by(m), m.material.side); } };
+    other.forEach(o => o.visible = false); const paint = by => { for (const m of meshes) { m.material = keep.get(m); m.visible = vis.get(m) && opq.has(m); if (opq.has(m)) m.material = colour(by(m), m.material.side); } };
     const eyes = v => { const f = B.floorH(v.x, v.z); return [1.6, 2.5].map(e => f + e).filter(y => !blocked(v.x, v.z, y)); };
-    const where = v => v.w.kind === 'door' ? `${v.w.a}|${v.w.b}` : v.w.a;
+    const where = v => v.w.kind === 'door' ? `${v.w.a}|${v.w.b}` : v.w.a, skyOf = id => zones[id] && (zones[id].sky || 'day');
+    let skyIs = null; const sky = id => { const k = skyOf(id) || 'day'; if (k === skyIs) return; skyIs = k; S.setSky(k); scene.background = null; other.forEach(o => o.visible = false);
+      for (const m of meshes) if (m.visible && skyOf(m.userData.zone) && skyOf(m.userData.zone) !== k) m.visible = false; // a place is drawn only under its own sky (sky.js; build.js masks)
+      for (const m of meshes) if (!opq.has(m)) m.visible = false; };
     if (o.pop) {
       const t0 = performance.now(), idx = new Map(opaque.map((m, i) => [i + 1, m])), res = 64, rt = new THREE.WebGLCubeRenderTarget(res), cube = new THREE.CubeCamera(camera.near, camera.far, rt), buf = new Uint8Array(res * res * 4);
       for (const c of cube.children) c.layers.enableAll();
       paint(m => opaque.indexOf(m) + 1);
       const pops = new Map(); let n = 0;
-      for (const v of views) { S.setSky(zones[zoneAt(v.x, v.z)]?.sky || 'day'); scene.background = null;
+      for (const v of views) { sky(zoneAt(v.x, v.z));
         for (const y of eyes(v)) { n++;
           const mask = B.maskAt(v.x, v.z); if (mask === -1) continue;
           cube.position.set(v.x, y, v.z); cube.updateMatrixWorld(); cube.update(r, scene);
@@ -144,7 +149,7 @@ async function page(o) {
       const base = new THREE.Vector3(), right = new THREE.Vector3(), up = new THREE.Vector3();
       const id = (buf, i) => buf[i] | buf[i + 1] << 8 | buf[i + 2] << 16, flat4 = (buf, x, y) => { const i = (y * W + x) * 4, k = id(buf, i); return id(buf, i - 4) === k && id(buf, i + 4) === k && id(buf, i - 4 * W) === k && id(buf, i + 4 * W) === k; };
       const fights = new Map(); let n = 0;
-      for (const v of views) { S.setSky(zones[zoneAt(v.x, v.z)]?.sky || 'day'); scene.background = null;
+      for (const v of views) { sky(zoneAt(v.x, v.z));
         for (const y of eyes(v)) for (const dir of [0, Math.PI]) for (const turn of [0, Math.PI / 4, -Math.PI / 4]) { n++;
           base.set(v.x, y, v.z); cam.rotation.set(0, v.yaw + dir + turn, 0, 'YXZ'); cam.position.copy(base); cam.updateMatrixWorld(); right.setFromMatrixColumn(cam.matrixWorld, 0); up.setFromMatrixColumn(cam.matrixWorld, 1);
           shot(A, 0, 0); let worst = 0, pair = '';
@@ -156,7 +161,7 @@ async function page(o) {
       r.setRenderTarget(null); rt.dispose();
       out.fight = { views: n, secs: +((performance.now() - t0) / 1000).toFixed(1), found: [...fights.values()].map(p => ({ ...p, pairs: [...p.pairs] })) };
     }
-    for (const m of meshes) { m.material = keep.get(m); m.visible = vis.get(m); } other.forEach(o => o.visible = true); scene.fog = fog;
+    for (const m of meshes) { m.material = keep.get(m); m.visible = vis.get(m); } other.forEach(o => o.visible = ovis.get(o)); scene.fog = fog;
   }
   return out;
 }
