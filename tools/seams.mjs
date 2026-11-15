@@ -12,6 +12,7 @@
 // No flags: all three. Exit code 1 if anything is found.
 import { execFileSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
+import { walkList } from './walk.mjs';
 import { fileURLToPath } from 'node:url';
 
 const argv = process.argv.slice(2), arg = (k, d) => { const i = argv.indexOf('--' + k); return i < 0 ? d : argv[i + 1]; };
@@ -92,36 +93,13 @@ async function page(o) {
   }
 
   if (o.pop || o.fight) { // ---- the walk list ----
-    const blocked = (x, z, y) => B.colliders.some(c => x > c[0] && x < c[2] && z > c[1] && z < c[3] && y > c[4] && y < c[5]);
-    const body = (x, z) => { const f = B.floorH(x, z); return !B.colliders.some(c => x > c[0] - .05 && x < c[2] + .05 && z > c[1] - .05 && z < c[3] + .05 && c[4] < f + 1.7 && c[5] > f + .35); };
-    const walks = [], only = o.only ? o.only.split(',') : null, want = (...ids) => !only || ids.some(i => only.includes(i));
-    for (let i = 0; i < zl.length; i++) for (let j = i + 1; j < zl.length; j++) { // openings: shared edges of two zones' boxes a body fits through
-      const [a, b] = [zl[i], zl[j]]; if (!want(a.id, b.id)) continue;
-      for (const ax of [0, 1]) for (const [p, q] of [[a, b], [b, a]]) { // ax 0: the edge is at an x (p's east side meets q's west)
-        const e1 = p.box[ax ? 3 : 2], e2 = q.box[ax ? 1 : 0]; if (Math.abs(e1 - e2) > .7) continue;
-        const at = (e1 + e2) / 2, lo = Math.max(p.box[ax ? 0 : 1], q.box[ax ? 0 : 1]), hi = Math.min(p.box[ax ? 2 : 3], q.box[ax ? 2 : 3]); if (hi - lo < .4) continue;
-        let run = null; const done = r => { if (r && r[1] - r[0] >= .4) walks.push({ kind: 'door', a: p.id, b: q.id, ax, at, c: (r[0] + r[1]) / 2, w: +(r[1] - r[0]).toFixed(2) }); };
-        for (let s = lo; s <= hi + 1e-6; s += .05) { const ok = ax ? body(s, at) : body(at, s); if (ok) run ? run[1] = s : run = [s, s]; else { done(run); run = null; } }
-        done(run);
-      }
-    }
-    const views = [];
-    for (const w of walks) { // across each opening, both ways; ax 0: walk along x at z = c
-      const st = o.fast ? .2 : .1;
-      for (let s = -2; s <= 2 + 1e-6; s += st) { const [x, z] = w.ax ? [w.c, w.at + s] : [w.at + s, w.c]; views.push({ w, x, z, yaw: w.ax ? 0 : -Math.PI / 2, s }); }
-    }
-    if (!o.fast) for (const q of zl) { if (!want(q.id)) continue; // every zone's long centre line
-      const [x1, z1, x2, z2] = q.box, X = x2 - x1 >= z2 - z1, len = X ? x2 - x1 : z2 - z1, st = len > 40 ? .5 : .1, w = { kind: 'hall', a: q.id };
-      walks.push(w);
-      for (let s = .2; s <= len - .2 + 1e-6; s += st) { const [x, z] = X ? [x1 + s, (z1 + z2) / 2] : [(x1 + x2) / 2, z1 + s]; views.push({ w, x, z, yaw: X ? -Math.PI / 2 : 0, s }); }
-    }
+    const { walks, views } = walkList(B, zl, o);
     out.walks = walks.length; out.points = views.length;
     if (o.list) out.list = walks.map(w => w.kind === 'door' ? `${w.a}|${w.b} ${w.ax ? 'z' : 'x'}=${w.at.toFixed(2)} c ${w.c.toFixed(2)} w ${w.w}` : `${w.a} hall`);
     scene.onBeforeRender = () => {}; const fog = scene.fog; scene.fog = null; r.shadowMap.enabled = false; r.setClearColor(0, 0);
     const opq = new Set(opaque), ovis = new Map(other.map(o => [o, o.visible])), keep = new Map(meshes.map(o => [o, o.material])), vis = new Map(meshes.map(o => [o, o.visible])), flat = new Map();
     const colour = (k, side) => { const key = k * 4 + side; if (!flat.has(key)) flat.set(key, new THREE.MeshBasicMaterial({ color: new THREE.Color().setRGB((k & 255) / 255, (k >> 8 & 255) / 255, (k >> 16 & 255) / 255, THREE.LinearSRGBColorSpace), fog: false, side })); return flat.get(key); };
     other.forEach(o => o.visible = false); const paint = by => { for (const m of meshes) { m.material = keep.get(m); m.visible = vis.get(m) && opq.has(m); if (opq.has(m)) m.material = colour(by(m), m.material.side); } };
-    const eyes = v => { const f = B.floorH(v.x, v.z); return [1.6, 2.5].map(e => f + e).filter(y => !blocked(v.x, v.z, y)); };
     const where = v => v.w.kind === 'door' ? `${v.w.a}|${v.w.b}` : v.w.a, skyOf = id => zones[id] && (zones[id].sky || 'day');
     let skyIs = null; const sky = id => { const k = skyOf(id) || 'day'; if (k === skyIs) return; skyIs = k; S.setSky(k); scene.background = null; other.forEach(o => o.visible = false);
       for (const m of meshes) if (m.visible && skyOf(m.userData.zone) && skyOf(m.userData.zone) !== k) m.visible = false; // a place is drawn only under its own sky (sky.js; build.js masks)
@@ -132,7 +110,7 @@ async function page(o) {
       paint(m => opaque.indexOf(m) + 1);
       const pops = new Map(); let n = 0;
       for (const v of views) { sky(zoneAt(v.x, v.z));
-        for (const y of eyes(v)) { n++;
+        for (const y of v.ys) { n++;
           const mask = B.maskAt(v.x, v.z); if (mask === -1) continue;
           cube.position.set(v.x, y, v.z); cube.updateMatrixWorld(); cube.update(r, scene);
           const miss = new Set();
@@ -150,7 +128,7 @@ async function page(o) {
       const id = (buf, i) => buf[i] | buf[i + 1] << 8 | buf[i + 2] << 16, flat4 = (buf, x, y) => { const i = (y * W + x) * 4, k = id(buf, i); return id(buf, i - 4) === k && id(buf, i + 4) === k && id(buf, i - 4 * W) === k && id(buf, i + 4 * W) === k; };
       const fights = new Map(); let n = 0;
       for (const v of views) { sky(zoneAt(v.x, v.z));
-        for (const y of eyes(v)) for (const dir of [0, Math.PI]) for (const turn of [0, Math.PI / 4, -Math.PI / 4]) { n++;
+        for (const y of v.ys) for (const dir of [0, Math.PI]) for (const turn of [0, Math.PI / 4, -Math.PI / 4]) { n++;
           base.set(v.x, y, v.z); cam.rotation.set(0, v.yaw + dir + turn, 0, 'YXZ'); cam.position.copy(base); cam.updateMatrixWorld(); right.setFromMatrixColumn(cam.matrixWorld, 0); up.setFromMatrixColumn(cam.matrixWorld, 1);
           shot(A, 0, 0); let worst = 0, pair = '';
           for (const [dx, dy] of [[.001, 0], [0, .001]]) { shot(Bf, dx, dy); let k = 0, eg = null;
@@ -166,7 +144,7 @@ async function page(o) {
   return out;
 }
 
-const browse = fileURLToPath(new URL('./browse.mjs', import.meta.url)), src = `(${page})(${JSON.stringify(opts)})`;
+const browse = fileURLToPath(new URL('./browse.mjs', import.meta.url)), src = `((walkList) => (${page})(${JSON.stringify(opts)}))(${walkList})`;
 let res;
 try { res = JSON.parse(execFileSync(process.execPath, [browse, '--url', `http://127.0.0.1:${port}/?dev&bare#1.9,20,0,0`, '--size', '320x180', '--wait', '3600000', '--eval', src], { encoding: 'utf8', maxBuffer: 1 << 28 })); }
 catch (e) { try { res = JSON.parse(e.stdout); } catch { console.log(String(e.stderr || e.message).slice(0, 2000)); process.exit(2); } }

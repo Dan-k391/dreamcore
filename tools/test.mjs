@@ -142,6 +142,9 @@ catch (e) { check('no coplanar overlapping faces (tools/seams.mjs --scan)', fals
 // What can be seen from where: js/seen.js must still cover every zone the eye can see from each zone (a new doorway or window needs tools/pvs.mjs run again).
 try { execFileSync(process.execPath, [fileURLToPath(new URL('./pvs.mjs', import.meta.url)), '--port', base.split(':')[2].slice(0, -1), '--check'], { encoding: 'utf8' }); check('js/seen.js covers what each zone can see (tools/pvs.mjs --check)', true); }
 catch (e) { check('js/seen.js covers what each zone can see (tools/pvs.mjs --check)', false, String(e.stdout || e.message).slice(0, 600)); }
+// Nothing pops in at a doorway: crossing each opening (20 cm steps, standing and mid-jump eyes), every mesh in view is on the camera's layers.
+try { execFileSync(process.execPath, [fileURLToPath(new URL('./seams.mjs', import.meta.url)), '--port', base.split(':')[2].slice(0, -1), '--pop', '--fast'], { encoding: 'utf8' }); check('nothing pops in crossing an opening (tools/seams.mjs --pop --fast)', true); }
+catch (e) { check('nothing pops in crossing an opening (tools/seams.mjs --pop --fast)', false, String(e.stdout || e.message).slice(0, 600)); }
 // Every zone seen.js lists is culled: its meshes have a layer bit of their own group, not layer 0 (drawn from everywhere). Bits once ran
 // out at 31 zones and the 32nd on stayed on layer 0 unnoticed.
 { const f = run(base + '?dev&bare', `(async () => { const seen = (await import('/js/seen.js')).default, bad = new Set(), got = new Set();
