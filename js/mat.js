@@ -234,7 +234,8 @@ const neon = (c, k = 6) => { const m = S({ color: 0, emissive: c, emissiveIntens
 const voidMat = S({ color: 0x040404, roughness: 1 }), aisle = neon(0xffa646, 12);
 const label = (text, w, h, color = '#fff', bg = '#000', k = 3) => { // glowing lettering on a plate
   const c = document.createElement('canvas'), g = c.getContext('2d'); c.width = Math.round(256 * w / h); c.height = 256;
-  g.fillStyle = bg; g.fillRect(0, 0, c.width, 256); g.fillStyle = color; g.font = '600 150px Georgia, serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, c.width / 2, 136, c.width * .86);
+  g.fillStyle = bg; g.fillRect(0, 0, c.width, 256); g.fillStyle = color; g.font = '600 150px Georgia, serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; const t0 = performance.now(); g.fillText(text, c.width / 2, 136, c.width * .86);
+  label.first ||= performance.measure('load: first sign', { start: t0 }); // its font's start-up stalled the load for seconds before index.html drew it first (tools/test.mjs)
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = maxA;
   return new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: t, color: new THREE.Color(k, k, k) }));
 };

@@ -1,9 +1,8 @@
 // Kit: garden and seating (park and mall benches, planters with palms, potted plants, loungers, picnic tables, timber fences).
 // Materials: js/tex/wood.js. Convention, the yard and the inventory: docs/props.md.
 import * as THREE from 'three';
-import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { M } from '../mat.js';
-import { add, put, solidAt, round } from '../build.js';
+import { add, put, solidAt, round, RoundedBoxGeometry } from '../build.js';
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z), UP = V(0, 1, 0);
 const rng = s => () => { s = s + 0x6D2B79F5 | 0; let t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };

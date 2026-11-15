@@ -1,10 +1,9 @@
 // The mall atrium.
 import * as THREE from 'three';
-import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { dry, zones, defZone } from '../core.js';
 import { M as lib, P, neon, wallMat, noCast } from '../mat.js';
-import { box, block, lit, add, put, solid } from '../build.js';
+import { box, block, lit, add, put, solid, RoundedBoxGeometry } from '../build.js';
 import { mallBench, palmPlanter, pottedPlant } from '../props/garden.js';
 import { door, shopfront, railing, shutter, bin, signPost } from '../props/metalwork.js';
 import { beam, skirting } from '../props/structure.js';

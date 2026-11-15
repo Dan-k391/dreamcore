@@ -1,10 +1,9 @@
 // The soft play room off the mall.
 import * as THREE from 'three';
-import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { scene, dry, zones, defZone } from '../core.js';
 import { hash } from '../tex.js';
 import { M, wallMat } from '../mat.js';
-import { flats, loose, add, block, box, solid, slab } from '../build.js';
+import { flats, loose, add, block, box, solid, slab, RoundedBoxGeometry } from '../build.js';
 import { lamp } from '../props/lights.js';
 import { vent } from '../props/metalwork.js';
 import { mallBench } from '../props/garden.js';

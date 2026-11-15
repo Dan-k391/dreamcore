@@ -27,6 +27,8 @@ A new file in `js/zones/` and one import line in `js/level.js`, plus these share
 
 Shapes go into one list per material and are merged into one mesh each (`add(mat, geometry)`), so use few materials and get few draw calls. `add()` gives box-projected UVs in metres; `add(mat, geometry, true)` keeps the geometry's own UVs (for materials with a direction: brushed metal, wood, cloth).
 
+Rounded boxes: import `RoundedBoxGeometry` from `build.js`, not from three's addons. It is the same shape, built once per set of arguments and handed out as a copy (the places ask for about 3800 of some 550 kinds, and building each one was a fifth of the load).
+
 No two faces in one plane: one surface per plane (trim the hidden face, let one place own a shared face, a twin passage takes `passage()`'s wall depth so the doorway's reveal is the place's); trim, inlays and linings that sit proud stand at least 1.5 mm proud. The suite checks it (`node tools/seams.mjs --scan`).
 
 ## Making things solid

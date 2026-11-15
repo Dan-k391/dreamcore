@@ -51,5 +51,7 @@
 </div>
 <div id="f" hidden aria-hidden="true"><b>&nbsp;</b><canvas width="90" height="28" style="width:90px;height:28px"></canvas></div>
 <script type="module" src="js/main.js"></script>
+<!-- the signs' font, drawn once now while the modules load: drawn first in the middle of building (mat.js label()), it stalled the load 2.5-5 s on most loads -->
+<script>{ const g = document.createElement('canvas').getContext('2d'); g.font = '600 150px Georgia, serif'; g.fillText('EXIT', 0, 0); }</script>
 </body>
 </html>

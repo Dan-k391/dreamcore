@@ -1,10 +1,9 @@
 // The metro platform after the last train: one side platform beside one track in a trench, under a shallow vault, both tunnel
 // mouths going to black. Far from everything (x 692..748, z -605..-593); reached later through the entry doorway in the back wall.
 import * as THREE from 'three';
-import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { dry, zones, defZone } from '../core.js';
 import { M, P } from '../mat.js';
-import { add, block, box, solid, round, flats, slab, lit, put } from '../build.js';
+import { add, block, box, solid, round, flats, slab, lit, put, RoundedBoxGeometry } from '../build.js';
 import { door, railing, signPost, bin } from '../props/metalwork.js';
 import { mallBench } from '../props/garden.js';
 import { steps } from '../props/structure.js';

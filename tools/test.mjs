@@ -108,7 +108,8 @@ solids.forEach(([name, , ok], k) => { const got = loose.result?.[k]; let pass = 
 const cost = run(base + '?dev#702.5,649.4,1.5708,-0.2', `(() => { dev.hold = true; dev.step(2); const look = dev.info().calls, p0 = dev.renderer.info.programs.length;
   for (const z of Object.values(dev.zones)) for (const yaw of [0, 1.57, 3.14, 4.71]) dev.go(z.probe.x, z.probe.z, yaw);
   const P = Math.PI, R = ['KeyW', 'ShiftLeft']; dev.go(3.8, 50.5, P, R, 6); dev.go(3.8, 668, 0, R, 5); dev.go(65.5, 14, -P / 2, R, 6); dev.go(683, 14, P / 2, R, 5); dev.go(34, 49.4, -P / 2, R, 7); dev.go(652, 649.4, P / 2, R, 5);
-  return { look, p0, p1: dev.renderer.info.programs.length, load: dev.readyAt, bake: Math.round(dev.lib.ms) }; })()`);
+  const took = n => Math.round(performance.getEntriesByName(n)[0]?.duration ?? 1e9);
+  return { look, p0, p1: dev.renderer.info.programs.length, load: dev.readyAt, bake: Math.round(dev.lib.ms), sign: took('load: first sign'), openings: took('load: openings') }; })()`);
 check('cost page loads without console errors', !cost.errors.length, cost.errors.join(' | ').slice(0, 600));
 check('only the terrace is drawn at the terrace lookout (under 120 draw calls; 238 when other places leak in)', cost.result?.look < 120, JSON.stringify(cost.result));
 check('no shader compiles after load on a tour of every zone and passage', cost.result && cost.result.p1 === cost.result.p0, JSON.stringify(cost.result));
@@ -116,6 +117,9 @@ check('no shader compiles after load on a tour of every zone and passage', cost.
 // programs compiled again, one by one, on first draw; it takes about 0.5 s with them compiled ahead
 check('the material library bakes in under 6 s (0.5 s on a quiet GPU; other agents share it)', cost.result?.bake < 6000, JSON.stringify(cost.result));
 check('dev mode is ready in under 30 s', cost.result?.load < 30000, JSON.stringify(cost.result));
+// the first sign's lettering waited 2.5-5 s on its font's start-up on most loads until index.html drew that font first (about 5 ms now);
+// the search for the openings between zones took half a second when every sample scanned every solid (about 25 ms now)
+check('the first sign is drawn in under 0.5 s and the openings are found in under 0.2 s', cost.result?.sign < 500 && cost.result?.openings < 200, JSON.stringify(cost.result));
 
 // Frame-cost ceilings at the two heaviest views of the real game (every pass of one frame). Before places were culled by what can be
 // seen from where you stand (js/seen.js) the gallery drew 902 calls / 6.9 M triangles; now about 340 / 1.4 M, the corridor 680 / 3.2 M.

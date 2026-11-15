@@ -28,4 +28,7 @@ const q = new URLSearchParams(location.search); if (q.has('dev') && !q.has('bare
 
 performance.mark('load: places built'); // the load's phases, for a profile or performance.getEntriesByType('mark')
 merge();
-await bakeLibrary(); performance.mark('load: library baked'); // every library texture the places asked for, on the GPU, before anything is drawn
+// every library texture the places asked for, on the GPU before anything is drawn: started here and awaited by lights.js before
+// the ambient bakes, so its draws run while the GPU compiles the scene's programs (lights.js) instead of before
+const libBaked = bakeLibrary().then(() => performance.mark('load: library baked'));
+export { libBaked };
