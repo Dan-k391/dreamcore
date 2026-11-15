@@ -24,6 +24,8 @@
  { "name": "terrace-court", "hash": "666,649.4,-1.9,0.12" },
  { "name": "terrace-lookout", "hash": "702.5,649.4,1.5708,-0.2" },
  { "name": "hotel-open-doors", "hash": "3.2,40.3,-2.3,-0.05" },
+{ "name": "hotel-open-door-front", "hash": "3.5,42,-1.5708,-0.08" },
+{ "name": "hotel-open-door-from-passage", "hash": "7.6,42,1.5708,-0.05" },
  { "name": "laundromat-arrival", "hash": "597,-605,3.1416,-0.04" },
  { "name": "laundromat", "hash": "602.9,-603.3,2.78,-0.06" },
  { "name": "metro-arrival", "hash": "702,-596.5,-1.0,0" },

@@ -1,6 +1,6 @@
 // Which zones can be seen from which: written by tools/pvs.mjs, read by merge() in build.js. Run it again after changing what a place opens onto.
 export default {
-  bA: ["bB","bC","cN","hT","mL","pC","pH","pK","t0"],
+  bA: ["bB","bC","cN","hT","mL","pC","pH","pK","t0","t3"],
   bB: ["bA","pH"],
   bC: ["bA","bB","cN","mL","pC","pG","pH","pK","pN","pV","t1"],
   pH: ["bA","bB","bC","pC","pN"],
@@ -8,7 +8,7 @@ export default {
   pN: ["bC","pC","pH"],
   pG: ["bC","pV"],
   pV: ["bC","cN","hT","mL","pC","pG","pK","pN","t2","t3"],
-  t0: ["bA","cN","hT","mL","pH","pV","sP","t3","t4","t5"],
+  t0: ["bA","cN","hT","mL","pH","pV","sP","t5"],
   u0: ["fD"],
   t1: ["bA","bC","pG","pH","pK","pN","pV","t2"],
   u1: ["nL"],

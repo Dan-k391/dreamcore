@@ -45,10 +45,27 @@ defZone('hT', { ...dry, step: 'carpet', grp: 'm', k: 1, exp: .34, fog: [.3, .2, 
       box(W, x1, 0, z0, x2, h, c - .5); box(W, x1, 2.24, c - .5, x2, h, c + .5); z0 = c + .5;
       const open = isDoor && k < 0 && OPEN.includes(c), shut = isDoor && !open;
       if (shut) { solid(x1, 0, c - .5, x2, 2.24, c + .5); block(K, k > 0 ? x1 : x2 - .2, 0, c - .5, k > 0 ? x1 + .2 : x2, 2.24, c + .5); }
-      door(z, f - k * .05, 0, c, ry, isDoor ? { color: 0x4b2418, frame: 0xd8ccb4, open: open ? LEAF : 0 } : { leaf: false, frame: 0xd8ccb4 });
-      if (open) { // swung in against the passage wall (its solid); the wall's back lined dark (the warm light from beyond is the passage's: zones/passages.js)
-        const hx = f - k * .0795, hz = c - .5095, S = Math.sin(LEAF), C = Math.cos(LEAF); // its hinge axis (the kit's), then the leaf 1.026 x 45 mm about it
-        turned(hx + .5095 * S - .0295 * C, hz + .5095 * C + .0295 * S, .513, .023, LEAF - Math.PI / 2, 0, 2.24);
+      // an open door's frame is turned round so its hinge jamb is the north one: the leaf then stands where the hallway, walked from the
+      // south as you come in, looks through the opening (hinged on the south, it hid behind that jamb)
+      door(z, f - k * .05, 0, c, open ? -ry : ry, isDoor && !open ? { color: 0x4b2418, frame: 0xd8ccb4 } : { leaf: false, frame: 0xd8ccb4 });
+      if (open) { // the leaf on the frame's knuckles, swung into the passage along its north side; the wall's back lined dark (the warm light from beyond is the passage's: zones/passages.js)
+        const Lf = M(z, 'paintedSteel', { color: 0x4b2418, dirt: .35, dirtCol: [.5, .45, .38], wear: .3, roughness: .6 }), St = M(z, 'brushedSteel'); // the shut leaves' own materials (door() in props/metalwork.js)
+        const hx = f + .05 - .0295, hz = c + .5095, ph = Math.PI / 2 - LEAF, at = g => g.rotateY(ph).translate(hx, 0, hz); // the hinge axis; the leaf is built hinge at 0, along +x, its push face at -z
+        const lt = .045, mz = -.0295, cx = .9625, sd2 = [1, -1];
+        add(Lf, at(new RoundedBoxGeometry(1.026, 2.228, lt, 2, .004).translate(.5095, 1.12, mz)));
+        add(St, at(new THREE.BoxGeometry(.0025, .235, .024).translate(1.0232, 1.05, mz))); // lock face plate on the leaf edge
+        for (const sd of sd2) { const fz = mz + sd * lt / 2; // lever handles on roses both sides, a cylinder escutcheon below
+          add(St, at(new THREE.CylinderGeometry(.026, .0265, .009, 24).rotateX(Math.PI / 2).translate(cx, 1.05, fz + sd * .0045)));
+          add(St, at(new THREE.CylinderGeometry(.0095, .0095, .056, 16).rotateX(Math.PI / 2).translate(cx, 1.05, fz + sd * .034)));
+          add(St, at(new RoundedBoxGeometry(.13, .02, .022, 2, .007).translate(cx - .055, 1.05, fz + sd * .062)));
+          add(St, at(new RoundedBoxGeometry(.02, .02, .04, 2, .007).translate(cx - .11, 1.05, fz + sd * .047)));
+          add(St, at(new THREE.CylinderGeometry(.021, .023, .007, 20).rotateX(Math.PI / 2).translate(cx, .978, fz + sd * .0035)));
+          add(K, at(new THREE.BoxGeometry(.004, .016, .001).translate(cx, .978, fz + sd * .0075))); // its keyway
+        }
+        add(St, at(new THREE.BoxGeometry(.926, .25, .0012).translate(.5095, .14, mz - lt / 2 - .0006))); // kick plate on the push face
+        add(Br, at(new THREE.LatheGeometry([[0, .009], [.009, .009], [.011, .007], [.0115, .003], [.0115, 0]].map(([r, y]) => new THREE.Vector2(r, y)), 24).rotateX(-Math.PI / 2).translate(.5095, 1.52, mz - lt / 2))); // the door viewer
+        const S = Math.sin(ph), C = Math.cos(ph);
+        turned(hx + .5095 * C + mz * S, hz - .5095 * S + mz * C, .513, .023, ph, 0, 2.24); // the leaf is solid where it stands
         for (const [a1, a2, y1] of [[c - .7, c - .5, 0], [c + .5, c + .7, 0], [c - .5, c + .5, 2.24]]) block(voidMat, x2, y1, a1, x2 + .02, 2.4, a2);
       }
       if (shut) add(Br, put(new THREE.LatheGeometry([[0, .009], [.009, .009], [.011, .007], [.0115, .003], [.0115, 0]].map(([r, y]) => new THREE.Vector2(r, y)), 24).rotateX(Math.PI / 2).translate(0, 1.52, -.05 + .0225), f, 0, c, ry)); // the door viewer

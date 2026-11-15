@@ -10,7 +10,7 @@ const tunnels = [[2.8, 51.6, 4.8, 65.6, true, 0, 600, 'hill'], [67, 13, 81, 15, 
 const t = { ...dry, grp: 'v', k: 0, exp: .3, fog: [0, 0, 0, .5], bloom: .3, wet: .5 };
 const hotel = i => i > 2; // the hub halves behind the hotel's open doors: lit like the hallway's own lamps (grp), each with a warm lamp aimed back out
 tunnels.forEach(([x1, z1, x2, z2, , dx, dz, sky], i) => { defZone('t' + i, { ...t, ...(hotel(i) && { grp: 'm' }), box: [x1, z1, x2, z2] }); defZone('u' + i, { ...t, sky, box: [x1 + dx, z1 + dz, x2 + dx, z2 + dz] }); });
-tunnels.forEach(([x1, z1, , z2], i) => hotel(i) && lit(zones["t" + i], x1 + 1.3, 2.1, (z1 + z2) / 2 + .4, 130, [x1 - 2.2, 0, (z1 + z2) / 2], .9, 9, 0xffb878)); // through the doorway onto the carpet
+tunnels.forEach(([x1, z1, , z2], i) => hotel(i) && lit(zones["t" + i], x1 + 1.4, 2.3, (z1 + z2) / 2 - .25, 120, [x1 - 2, 0, (z1 + z2) / 2], .8, 10, 0xffa860)); // across the open leaf (north side) and through the doorway onto the carpet
 for (const p of tunnels) passage(...p);
 console.assert(warps.length === 2 * tunnels.length, 'level self-check failed: passages');
 // The laundromat's and the metro's doorways face along z, so their passages end in a dark square turning toward the recess:
@@ -18,5 +18,6 @@ console.assert(warps.length === 2 * tunnels.length, 'level self-check failed: pa
 for (const [id, x1, z1, x2, z2, toZ2, sky] of [['j3', 596.3, -609.25, 597.7, -607.85, true, 'night'], ['j4', 701.2, -593.7, 702.8, -592.3, false, 'night']]) {
   defZone(id, { ...t, sky, box: [x1, z1, x2, z2] });
   box(voidMat, x1, -.2, z1, x2, 0, z2); box(voidMat, x1, 2.4, z1, x2, 2.6, z2); box(voidMat, x2, 0, z1 - .3, x2 + .3, 2.6, z2 + .3); // floor, ceiling, far wall
-  if (toZ2) box(voidMat, x1, 0, z1 - .3, x2, 2.6, z1); else box(voidMat, x1, 0, z2, x2, 2.6, z2 + .3); // the wall across from the recess
+  // the wall across from the recess, .4 m in from the passage's side: walking straight out of the recess stops you on the passage's centre line
+  if (toZ2) box(voidMat, x1, 0, z1 - .3, x2, 2.6, z1 + .4); else box(voidMat, x1, 0, z2 - .4, x2, 2.6, z2 + .3);
 }
