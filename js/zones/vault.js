@@ -21,7 +21,7 @@ poolMats(zones.pV);
   sign('EXIT', 35.98, 2.85, 49.4, -Math.PI / 2, .7, .25, '#8fffc0', '#021a0c');
   box(T, 12, -.8, 40.6, 22, 5.2, 41); box(T, 24.4, -.8, 40.6, 36, 5.2, 41); box(T, 22, 2.3, 40.6, 24.4, 5.2, 41); // north wall, door
   for (const zc of [46.5, 52, 57.5]) { slab(T, 'x', zc - .3, .6, 12, 36, -.8, 5.2, arches, true);
-    for (const [x, w] of [[12.4, .8], [16.8, 1.6], [21.6, 1.6], [26.4, 1.6], [31.2, 1.6], [35.6, .8]]) pier(z, x, -.6, zc, 0, { w: w + .02, d: .62, h: 1.8, color: 0xe4e2dc }); // stone dressings: a plinth in the water, an impost the arches spring from at 1.2
+    for (const [x, w] of [[12.4, .8], [16.8, 1.6], [21.6, 1.6], [26.4, 1.6], [31.2, 1.6], [35.6, .8]]) pier(z, x, -.6, zc, 0, { w: w + .02, d: .62, h: 1.8, mat: "terrazzo", color: 0xf2efe8, course: .2 }); // stone dressings: a plinth in the water, an impost the arches spring from at 1.2
   }
   slab(T, 'x', 63, .4, 12, 36, -.8, 5.2, [14, 18, 22, 26, 30, 34].map(c => ['pill', c, 1.3, 2.5, 3.6])); box(glow, 12, -.8, 63.45, 36, 5.2, 63.7); // glowing windows at the far end
   for (const zc of [43.75, 49.25, 54.75, 60.25]) { // each bay: a shadow-casting light well in the middle, two soft ones to the sides

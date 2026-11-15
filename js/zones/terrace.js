@@ -25,9 +25,9 @@ defZone('sK', { ...dry, sky: 'dusk', air: .7, grp: 's', k: 1, exp: .3, fog: [.95
   const arches = c0 => [0, 1, 2, 3].map(i => ['arch', c0 + 1.9 + 3.4 * i, 2.6, 4.6]);
   for (const zc of [642.4, 655.9]) slab(Su, 'x', zc, .5, 667, 681, 0, 6, arches(667), true);
   for (const x of [667, 680.5]) slab(Su, 'z', x, .5, 642.4, 656.4, 0, 6, arches(642.4), true);
-  for (const zc of [642.65, 656.15]) for (const x of [670.6, 674, 677.4]) pier(z, x, 0, zc, 0, { w: .8, h: 3.3, color: 0xffffff }); // stone piers under the rendered arcade, imposts at the springing
-  for (const x of [667.25, 680.75]) for (const zc of [646, 649.4, 652.8]) pier(z, x, 0, zc, PI / 2, { w: .8, h: 3.3, color: 0xffffff });
-  for (const x of [667.25, 680.75]) for (const zc of [642.65, 656.15]) pier(z, x, 0, zc, 0, { w: .7, d: .7, h: 3.3, color: 0xffffff }); // the corners
+  for (const zc of [642.65, 656.15]) for (const x of [670.6, 674, 677.4]) pier(z, x, 0, zc, 0, { w: .8, h: 3.3, mat: "stucco", color: 0xfff4e6, course: .22 }); // stone piers under the rendered arcade, imposts at the springing
+  for (const x of [667.25, 680.75]) for (const zc of [646, 649.4, 652.8]) pier(z, x, 0, zc, PI / 2, { w: .8, h: 3.3, mat: "stucco", color: 0xfff4e6, course: .22 });
+  for (const x of [667.25, 680.75]) for (const zc of [642.65, 656.15]) pier(z, x, 0, zc, 0, { w: .7, d: .7, h: 3.3, mat: "stucco", color: 0xfff4e6, course: .22 }); // the corners
   doorway(blue, blue, 674, 0, 649.4, PI / 2, 2.2);
   block(Su, 684, -8, 645.4, 694, 0, 653.4); steps(z, 689, 0, 649.4, -PI / 2, { n: 20, r: .25, g: .5, w: 8, color: 0xffffff, insert: 0x8a8276 }); // the stair, between stepped walls
   for (let i = 0; i < 4; i++) for (const zc of [645, 653.4]) { box(Su, 684 + 2.5 * i, -8, zc, 686.5 + 2.5 * i, 1.25 * (i + 1) + .9, zc + .4); edge(684 + 2.5 * i, zc, 686.5 + 2.5 * i, zc + .4, 1.25 * (i + 1) + .9, zc < 649 ? 'n' : 's'); }

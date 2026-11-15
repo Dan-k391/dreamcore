@@ -43,7 +43,7 @@ defZone('nL', { ...dry, sky: 'night', air: .5, grp: 'n', k: 1, exp: .36, fog: [.
     for (let x = 695 - 3.5 * W; x < 741; x += W) for (const k of [-1, 1]) bayLine(z, [[x, 0, zc + k * .8], [x, 0, zc + k * 5.6]], { on: 'asphalt' });
     for (const x of [695, 713, 731]) { const e = W / 2 - .07, E = x + e, Wx = x - e, S = zc - .8, N = zc + .8;
       kerb(z, [[E, 0, S], [Wx, 0, S], [Wx, 0, N], [E, 0, N], [E, 0, S]], { color: 0x9c978e }); box(F, Wx + .12, 0, S + .12, E - .12, .1, N - .12);
-      mastLamp(z, x, .1, zc, 0, { heads: 2, power: 1000, reach: .7 }); }
+      mastLamp(z, x, .1, zc, 0, { heads: 2, power: 640, reach: .7, angle: .78, dist: 12 }); }
   }
   arrow(z, 716, 0, 3.5, -Math.PI / 2); arrow(z, 710, 0, 26.5, Math.PI / 2); speedBump(z, [[722, 0, -2.2], [722, 0, 9.2]]);
   for (const zc of [12.4, 15.6]) bollard(z, 681.5, 0, zc); // either side of the passage door

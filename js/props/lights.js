@@ -171,7 +171,7 @@ function mastLamp(z, x, y, zc, ry = 0, o = {}) {
     const gq = new THREE.PlaneGeometry(.24, .44).rotateX(PI / 2), u = gq.attributes.uv;
     for (let i = 0; i < u.count; i++) u.setXY(i, u.getX(i) * 1.2, u.getY(i) * 2.2);
     A(optic, tr(gq.translate(0, -.0565, 0)), true);
-    if (on) { const c = Math.cos(ry), sn = Math.sin(ry), px = x + hz * sn, pz = zc + hz * c; lit(z, px, y + hy - .1, pz, (o.power ?? 520) / n, [px, y, pz], 1.3, 26, 0xffcf96); }
+    if (on) { const c = Math.cos(ry), sn = Math.sin(ry), px = x + hz * sn, pz = zc + hz * c; lit(z, px, y + hy - .1, pz, (o.power ?? 520) / n, [px, y, pz], o.angle ?? 1.3, o.dist ?? 26, 0xffcf96); }
   }
   solidAt(x, y, zc, ry, 0, .15, 0, .47, .3, .47); round(x, zc, .09, y + .3, y + h);
 }

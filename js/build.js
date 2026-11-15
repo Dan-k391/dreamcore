@@ -2,7 +2,8 @@
 // The registries here are how places hand things to the rest of the game without knowing about each other.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { scene, V, H, inR } from './core.js';
+import { scene, camera, V, H, inR, zones } from './core.js';
+import seen from './seen.js';
 import { seaMat, noCast, voidMat, aisle } from './mat.js';
 
 // ---------- level builder: boxes and cut-out wall slabs with world-space UVs, merged into one mesh per material ----------
@@ -129,9 +130,36 @@ function clear(c, x, y, z, r) {
 }
 const near = (c, x, z, r) => x > c[0] - r && x < c[2] + r && z > c[1] - r && z < c[3] + r; // within r of a solid's rectangle
 let sea;
-function merge() { // once every place is built (level.js): one mesh per material
+// One mesh per material per zone, the zone being the one whose box holds a piece's centre: a mesh is then only as big as one place,
+// so frustum culling works. Each zone listed in seen.js (made by tools/pvs.mjs) also gets a layer bit, and a camera draws only the
+// zones seen.js says can be seen from where it stands: places behind walls further down a view cost nothing. A zone not in seen.js
+// (a new place, until tools/pvs.mjs is run again) stays on layer 0, always drawn; a camera outside every listed zone draws all.
+// Shadow cameras and cube cameras (the bakes) always draw everything, so shadows and bakes are as before.
+const bits = new Map(Object.keys(seen).slice(0, 31).map((id, i) => [id, i + 1])), masks = new Map(), _c = new THREE.Vector3();
+for (const [id, list] of Object.entries(seen)) if (bits.has(id)) masks.set(id, [id, ...list].reduce((m, q) => m | (bits.has(q) ? 1 << bits.get(q) : 0), 1));
+const zoneAt = (x, z) => Object.values(zones).find(q => inR(x, z, ...q.box));
+function maskAt(x, z) { // the layers a camera at (x, z) draws: -1 is all
+  let m = 0, any = false;
+  for (const q of Object.values(zones)) if (inR(x, z, ...q.box)) { any = true; const k = masks.get(q.id); if (k === undefined) return -1; m |= k; }
+  return any ? m : -1;
+}
+function merge() { // once every place is built (level.js)
   for (const c of colliders) if (c.length === 4) c.push(-1e4, 1e4); // a bare rectangle is a wall of any height
-  for (const [m, list] of geo) { const mesh = new THREE.Mesh(mergeGeometries(list), m); mesh.castShadow = !noCast.has(m); mesh.receiveShadow = m !== seaMat; scene.add(mesh); if (m === seaMat) sea = mesh; }
+  for (const [m, list] of geo) {
+    const parts = new Map();
+    for (const g of list) { g.computeBoundingBox(); g.boundingBox.getCenter(_c); const id = m === seaMat ? '' : zoneAt(_c.x, _c.z)?.id || ''; parts.has(id) ? parts.get(id).push(g) : parts.set(id, [g]); }
+    for (const [id, part] of parts) {
+      const mesh = new THREE.Mesh(mergeGeometries(part), m); mesh.castShadow = !noCast.has(m); mesh.receiveShadow = m !== seaMat; mesh.userData.zone = id;
+      if (bits.has(id)) mesh.layers.set(bits.get(id));
+      scene.add(mesh); if (m === seaMat) sea = mesh;
+    }
+  }
+  camera.layers.enableAll(); // until the first frame sets it: everything compiles and bakes as before
+  scene.onBeforeRender = (r, s, cam) => {
+    if (r.shadowMap.needsUpdate) for (const o of s.children) if (o.isLight && o.shadow) o.shadow.camera.layers.enableAll();
+    if (!cam.isPerspectiveCamera || cam.parent?.isCubeCamera) cam.layers.enableAll();
+    else cam.layers.mask = maskAt(cam.matrixWorld.elements[12], cam.matrixWorld.elements[14]);
+  };
 }
 
-export { colliders, emitters, flats, seeThrough, skyOnly, warps, pools, onSun, ladders, rings, loose, add, block, box, solid, round, turned, clear, out, near, flight, passage, slab, room, wall, fixture, tube, lit, put, spot, solidAt, floorH, sea, merge };
+export { colliders, emitters, flats, seeThrough, skyOnly, warps, pools, onSun, ladders, rings, loose, add, block, box, solid, round, turned, clear, out, near, flight, passage, slab, room, wall, fixture, tube, lit, put, spot, solidAt, floorH, sea, merge, maskAt };

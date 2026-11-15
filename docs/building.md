@@ -17,6 +17,7 @@ A new file in `js/zones/` and one import line in `js/level.js`, plus these share
 - A far-off place reached by a dark passage adds a row to `tunnels` in `js/zones/passages.js`.
 - A new sky adds an entry to `skies` in `js/sky.js` and a key to `skyOnly` in `js/build.js`.
 - A place that looks through a doorway at another place's pool adds its zone id to that pool's seen-from list in the other place's file; otherwise the water is hidden.
+- Then run `node tools/pvs.mjs --port <port>`: it rewrites `js/seen.js`, which zones can be seen from which. Each place's meshes are drawn only from zones that can see it; a new zone is drawn from everywhere until it is listed, and a new doorway or window into an old zone needs the run too (`tools/test.mjs` checks it).
 - A new `step` sound name needs an entry in `kinds` in `js/audio.js` to sound different; without one it plays as carpet.
 
 ## Geometry
