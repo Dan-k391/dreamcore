@@ -5,7 +5,10 @@
 // --pop    visibility: along the walk list, a 64 px cube view at each eye point, every opaque mesh coloured by its own index, drawn
 //          with every layer on; a mesh that shows but is not on the layers build.js gives a camera standing there is a pop.
 // --fight  rendered: along the walk list, three 320 x 180 views (as is, the camera moved 1 mm right, 1 mm up), every opaque mesh
-//          coloured by its material; a pixel that changes colour where all its neighbours agree in both views is z-fighting.
+//          coloured by its material; a pixel that changes colour where all its neighbours agree in both views is z-fighting, if a
+//          ray through it meets both materials within a few depth steps on faces in one plane (else it is fine detail moving under the
+//          pixel, moire, or two faces crossing at an edge).
+//          --scan counts the same material made twice only within one place: two places' copies light and reflect differently.
 // The walk list is made from the level: every opening between two zones (where a body fits through their shared edge) crossed
 // from 2 m on one side to 2 m on the other, 10 cm steps, and every zone's long centre line, 10 cm steps (50 cm in zones over 40 m);
 // eyes at 1.6 m and mid-jump 2.5 m; --fight looks along the walk, 45 degrees left and right, both ways. --fast: openings only, 20 cm.
@@ -81,7 +84,7 @@ async function page(o) {
         if (pressed(A.n, A.d, w)) continue; // a face lies against them, facing the other way: both are buried, nothing to see
         const f = w.clone().addScaledVector(new THREE.Vector3(...A.n), .003); // just in front: inside a solid or under the floor, nobody sees it
         if (f.y < B.floorH(f.x, f.z) - .001 || B.colliders.some(c => f.x > c[0] && f.x < c[2] && f.z > c[1] && f.z < c[3] && f.y > c[4] && f.y < c[5] && c.length === 6)) continue;
-        if (twin(mats[A.m], mats[Bt.m])) { twins++; continue; } // the same material made twice (two zones' copies): the same colour either way
+        if (A.mesh.userData.zone === Bt.mesh.userData.zone && twin(mats[A.m], mats[Bt.m])) { twins++; continue; } // the same material made twice in one place: the same colour either way (two places light and reflect theirs differently)
         const pkey = `${m1.m}|${m2.m}|${A.n.map(v => v.toFixed(2))}|${(A.d * 100 | 0)}|${zoneAt(w.x, w.z)}`;
         if (before.has(pkey)) continue; const q = patches.get(pkey) || { a: name(mats[m1.m]), b: name(mats[m2.m]), za: m1.mesh.userData.zone ?? '', zb: m2.mesh.userData.zone ?? '', zone: zoneAt(w.x, w.z), n: A.n.map(v => +v.toFixed(2)), area: 0, lo: [1e9, 1e9, 1e9], hi: [-1e9, -1e9, -1e9], dz: 0 };
         q.area += ar; q.dz = Math.max(q.dz, gap); for (let k = 0; k < 3; k++) { q.lo[k] = Math.min(q.lo[k], w.getComponent(k)); q.hi[k] = Math.max(q.hi[k], w.getComponent(k)); } patches.set(pkey, q);
@@ -126,14 +129,25 @@ async function page(o) {
       const shot = (buf, dx, dy) => { cam.position.copy(base).addScaledVector(right, dx).addScaledVector(up, dy); cam.updateMatrixWorld(); r.setRenderTarget(rt); r.render(scene, cam); r.readRenderTargetPixels(rt, 0, 0, W, Hh, buf); };
       const base = new THREE.Vector3(), right = new THREE.Vector3(), up = new THREE.Vector3();
       const id = (buf, i) => buf[i] | buf[i + 1] << 8 | buf[i + 2] << 16, flat4 = (buf, x, y) => { const i = (y * W + x) * 4, k = id(buf, i); return id(buf, i - 4) === k && id(buf, i + 4) === k && id(buf, i - 4 * W) === k && id(buf, i + 4 * W) === k; };
+      // A changed pixel is a fight only if the ray through its centre (unmoved camera) meets both materials within a few depth steps
+      // of each other; otherwise the 1 mm move just carried a fine edge across it (grating slots, thin rails at a distance: moire).
+      const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), byMat = new Map(); ray.layers.enableAll();
+      for (const m of opaque) { const j = mats.indexOf(keep.get(m)) + 1; byMat.has(j) ? byMat.get(j).push(m) : byMat.set(j, [m]); }
+      const fought = px => { cam.position.copy(base); cam.updateMatrixWorld();
+        for (let s = 0; s < 8 && s < px.length; s++) { const [xx, yy, a, b] = px[Math.floor(s * px.length / Math.min(8, px.length))]; if (!a || !b) return [a, b];
+          ndc.set((xx + .5) / W * 2 - 1, (yy + .5) / Hh * 2 - 1); ray.setFromCamera(ndc, cam);
+          const hit = j => ray.intersectObjects((byMat.get(j) || []).filter(m => m.visible), false)[0], ha = hit(a), hb = hit(b);
+          if (ha && hb && Math.abs(ha.distance - hb.distance) < .0005 + 16 * ha.distance ** 2 / (cam.near * 2 ** 24) // a fight is two faces at one depth
+            && Math.abs(ha.face.normal.clone().transformDirection(ha.object.matrixWorld).dot(hb.face.normal.clone().transformDirection(hb.object.matrixWorld))) > .9) return [a, b]; } // in one plane, not two crossing at an edge
+        return null; };
       const fights = new Map(); let n = 0;
       for (const v of views) { sky(zoneAt(v.x, v.z));
         for (const y of v.ys) for (const dir of [0, Math.PI]) for (const turn of [0, Math.PI / 4, -Math.PI / 4]) { n++;
           base.set(v.x, y, v.z); cam.rotation.set(0, v.yaw + dir + turn, 0, 'YXZ'); cam.position.copy(base); cam.updateMatrixWorld(); right.setFromMatrixColumn(cam.matrixWorld, 0); up.setFromMatrixColumn(cam.matrixWorld, 1);
           shot(A, 0, 0); let worst = 0, pair = '';
-          for (const [dx, dy] of [[.001, 0], [0, .001]]) { shot(Bf, dx, dy); let k = 0, eg = null;
-            for (let yy = 1; yy < Hh - 1; yy++) for (let xx = 1; xx < W - 1; xx++) { const i = (yy * W + xx) * 4; if (id(A, i) !== id(Bf, i) && flat4(A, xx, yy) && flat4(Bf, xx, yy)) { k++; eg = eg || [id(A, i), id(Bf, i)]; } }
-            if (k > worst) { worst = k; pair = eg.map(j => j ? (mats[j - 1] ? name(mats[j - 1]) : '?' + j) : 'sky').join(' / '); } }
+          for (const [dx, dy] of [[.001, 0], [0, .001]]) { shot(Bf, dx, dy); let k = 0, eg = null; const px = [];
+            for (let yy = 1; yy < Hh - 1; yy++) for (let xx = 1; xx < W - 1; xx++) { const i = (yy * W + xx) * 4; if (id(A, i) !== id(Bf, i) && flat4(A, xx, yy) && flat4(Bf, xx, yy)) { k++; px.push([xx, yy, id(A, i), id(Bf, i)]); } }
+            if (k > worst && k >= 3 && (eg = fought(px))) { worst = k; pair = eg.map(j => j ? (mats[j - 1] ? name(mats[j - 1]) : '?' + j) : 'sky').join(' / '); } }
           if (worst >= 3) { const key = where(v); const p = fights.get(key) || { at: key, n: 0, px: 0, eg: [], pairs: new Set() }; p.n++; p.px = Math.max(p.px, worst); p.pairs.add(pair); if (p.eg.length < 3) p.eg.push(`${v.x.toFixed(2)},${y.toFixed(2)},${v.z.toFixed(2)} yaw ${(v.yaw + dir + turn).toFixed(2)}: ${worst} px ${pair}`); fights.set(key, p); }
         } }
       r.setRenderTarget(null); rt.dispose();
