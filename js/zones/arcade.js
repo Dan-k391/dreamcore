@@ -6,7 +6,7 @@ import { troffer, stepLight } from '../props/lights.js';
 import { drain } from '../props/metalwork.js';
 import { swimRing } from '../props/play.js';
 
-defZone('pC', { ...dark, exp: .26, bloom: .3, wet: .6, box: [9.4, -14.8, 21, -9.2], probe: [15.2, 1.6, -12], env: [[9.4, -.3, -14.8], [21, 3.6, -9.2]], shimmer: .35 });
+defZone('pC', { music: 'arcade', ...dark, exp: .26, bloom: .3, wet: .6, box: [9.4, -14.8, 21, -9.2], probe: [15.2, 1.6, -12], env: [[9.4, -.3, -14.8], [21, 3.6, -9.2]], shimmer: .35 });
 flats.push([9.4, -14, 24, -10, (x, z) => -.3]); // flooded arcade and its channel
 pools.push([9.4, -14.4, 24, -9.6, -.3, 'pC', ['pH', 'pC', 'pN'], [.003, .01, .009]]);
 poolMats(zones.pC);

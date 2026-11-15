@@ -19,6 +19,7 @@ A new file in `js/zones/` and one import line in `js/level.js`, plus these share
 - A place that looks through a doorway at another place's pool adds its zone id to that pool's seen-from list in the other place's file; otherwise the water is hidden.
 - Then run `node tools/pvs.mjs --port <port>`: it rewrites `js/seen.js`, which zones can be seen from which. Each place's meshes are drawn only from zones that can see it; a new zone is drawn from everywhere until it is listed, and a new doorway or window into an old zone needs the run too (`tools/test.mjs` checks it). Besides its 1 m grid it samples the walk list of `tools/walk.mjs` (every opening crossed at 10 cm, every zone's centre line, standing and mid-jump eyes), so narrow sight lines through a doorway are not stepped over; `tools/seams.mjs --pop` checks the same points.
 - A new enclosed zone gives its reflection box in its zone definition, `env: [[minX, floorY, minZ], [maxX, ceilY, maxZ]]` (as `js/zones/mall.js` does), so reflections are box-projected to its walls; outdoor zones give none.
+- A new place names its music: `music: '<piece>'` in its zone definition, a piece from `pieces` in `js/music.js` (a new piece keeps to the D major notes and the 10 s bar, and is balanced with `node tools/music.mjs`), or `music: null` for none.
 - A new `step` sound name needs an entry in `kinds` in `js/audio.js` to sound different; without one it plays as carpet.
 
 ## Geometry

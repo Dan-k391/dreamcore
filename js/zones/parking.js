@@ -6,7 +6,7 @@ import { pillar, beam, wheelStop, bayLine, arrow, speedBump } from '../props/str
 import { batten } from '../props/lights.js';
 import { bollard, drain } from '../props/metalwork.js';
 
-defZone('pK', { ...dry, grp: 'k', k: .9, exp: .3, fog: [.12, .1, .06, .006], bloom: .32, wet: .8, hum: .5, box: [36.8, 2, 67, 26], probe: [52, 1.4, 14], env: [[37.2, 0, 2.4], [66.6, 2.6, 25.6]] });
+defZone('pK', { music: 'parking', ...dry, grp: 'k', k: .9, exp: .3, fog: [.12, .1, .06, .006], bloom: .32, wet: .8, hum: .5, box: [36.8, 2, 67, 26], probe: [52, 1.4, 14], env: [[37.2, 0, 2.4], [66.6, 2.6, 25.6]] });
 { // parking level x[37.2,66.6] z[2.4,25.6], low ceiling, off the corridor's far end: a 6 m column grid (x 43..61, z 8/14/20) under downstand
   // beams, a row of 3 m bays along each wall headed by wheel stops, a two-way aisle split by the middle columns and their drain line, battens
   const z = zones.pK, h = 2.6, F = M(z, 'concreteFloor', { color: 0xfffaf0 }), C = M(z, 'concreteWall', { color: 0xf4eee4, dirt: .4, dirtCol: [.5, .47, .42] }), Y = P(z, { color: 0xe0b020, roughness: .6 });

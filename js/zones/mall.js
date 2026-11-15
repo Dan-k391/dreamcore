@@ -71,7 +71,7 @@ const SIGNS = [
   [Array.from({ length: 11 }, (_, i) => { const r = i % 2 ? .1 : .25, a = Math.PI / 2 + i * Math.PI / 5; return [r * Math.cos(a), .03 + r * Math.sin(a)]; })], // a star
 ];
 
-defZone('mL', { ...dry, grp: 'm', k: 1.15, exp: .3, fog: [.4, .38, .4, .0008], bloom: .25, wet: .7, box: [-27, 21.45, 2.4, 52.6], probe: [-12.5, 3.4, 41], env: [[-26.6, 0, 24.4], [1.8, 7, 49.6]] }); // off the palms' line: from between them their leaves filled the floor's reflection with a green blob
+defZone('mL', { music: 'mall', ...dry, grp: 'm', k: 1.15, exp: .3, fog: [.4, .38, .4, .0008], bloom: .25, wet: .7, box: [-27, 21.45, 2.4, 52.6], probe: [-12.5, 3.4, 41], env: [[-26.6, 0, 24.4], [1.8, 7, 49.6]] }); // off the palms' line: from between them their leaves filled the floor's reflection with a green blob
 { // mall atrium x[-26.6,1.8] z[24.4,49.6], 7m tall: polished chequered floor, shop fronts between piers under fascias with neon signs, a gallery, a skylight, palms
   const z = zones.mL, h = 7, F = lib(z, 'marble'), W = wallMat(z, 0xe6dcd6), dark = P(z, { color: 0x050505, roughness: 1 }), Bk = lib(z, 'terrazzo'), skirt = pts => skirting(z, pts, { color: 0x5e564d }); // skirting darker than the wall, as the fascias
   box(F, -27, -.2, 24, 2.2, 0, 50); box(W, -27, h, 24, 2.2, h + .3, 50);

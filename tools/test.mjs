@@ -213,6 +213,18 @@ catch (e) { check('every shadow map has every caster (tools/leaks.mjs --fast)', 
   check('settings: the panel sets the master gain and the pixel ratio, and they survive a reload', r.set?.[0] === .25 && r.set[1] === .6 && r.back?.[0] === .25 && r.back[1] === .6, JSON.stringify(r));
   check('settings: fps readout hidden under ?dev, plausible when on, toggle saved', r.hid === true && r.fps > 5 && r.fps < 1000 && r.off === true && r.saved?.fps === false && !f.errors.length, JSON.stringify(f).slice(0, 600)); }
 
+// Music (js/music.js): every zone names a piece or deliberately none; a crossfade between neighbours (backrooms to pool hall) keeps the summed power of its
+// fade gains within 1.5 dB, adds no sample step much larger than the music's own notes make, and nothing reaches full scale before the master compressor.
+{ const f = run(base + '?dev&bare', `(async () => { const Z = dev.zones, P = dev.music.pieces, sr = 44100, r = {};
+    r.bad = Object.values(Z).filter(z => !('music' in z) || z.music !== null && !P[z.music]).map(z => z.id);
+    const seq = [[0, Z.bA], [8, Z.pH]], m = await dev.music.render(seq, 20), law = (await dev.music.render(seq, 20, { tap: true })).buf.getChannelData(0);
+    r.law = 0; for (let i = 8 * sr; i < 18 * sr; i++) r.law = Math.max(r.law, Math.abs(10 * Math.log10(law[i] + 1e-20)));
+    let jf = 0, je = 0, pk = 0; for (const c of [0, 1]) { const d = m.buf.getChannelData(c); for (let i = 1; i < d.length; i++) { const j = Math.abs(d[i] - d[i - 1]), t = i / sr;
+      if (t > 7.5 && t < 14) jf = Math.max(jf, j); else if (t > 3) je = Math.max(je, j); pk = Math.max(pk, Math.abs(d[i])); } }
+    Object.assign(r, { jf, je, pk }); return r; })()`, '--wait', '300000');
+  const r = f.result || {};
+  check('music: every zone names its piece, a neighbour crossfade holds its level with no click, nothing clips', r.bad?.length === 0 && r.law < 1.5 && r.jf <= Math.max(r.je * 1.5, .03) && r.pk < .9 && !f.errors.length, JSON.stringify(f).slice(0, 600)); }
+
 // Production address: no window.dev, the start overlay is up once the level is built.
 const prod = run(base, `await new Promise(ok => { const t = setInterval(() => /click to enter/.test(document.getElementById('s').textContent) && (clearInterval(t), ok()), 100); }),
   { dev: typeof window.dev, overlay: getComputedStyle(document.getElementById('o')).display !== 'none' }`, '--wait', '15000', '--settle', '0'); // browse.mjs waits out --wait for a dev.ready that never comes here

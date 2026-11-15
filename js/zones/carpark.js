@@ -187,7 +187,7 @@ function vending(z, Zc, kind, color, glow) {
   lit(z, 682.1, 1.3, Zc, 30, [685.5, 0, Zc], 1.3, 9, glow);
 }
 
-defZone('nL', { ...dry, sky: 'night', air: .5, grp: 'n', k: 1, exp: .36, fog: [.012, .016, .03, .004], bloom: .4, wet: .15, box: [681, -20, 745, 50], probe: [712, 2.5, 15] });
+defZone('nL', { music: 'lot', ...dry, sky: 'night', air: .5, grp: 'n', k: 1, exp: .36, fog: [.012, .016, .03, .004], bloom: .4, wet: .15, box: [681, -20, 745, 50], probe: [712, 2.5, 15] });
 { // car park at night x[681,745] z[-20,50], out of the parking level's far door: pools of lamplight on wet asphalt, a bus shelter, vending machines, the moon
   const z = zones.nL, A = M(z, 'asphalt', { macro: .35, roughness: .45, detail: .6 }), C = M(z, 'concreteWall', { color: 0xc8c2b8, dirt: .6, dirtCol: [.42, .4, .36] }), F = M(z, 'concreteFloor', { color: 0x8c8882 });
   box(A, 680.55, -.3, -40, 766, 0, 70); // from the back of the west wall: the passage behind it has its own floor

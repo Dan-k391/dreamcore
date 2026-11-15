@@ -10,7 +10,7 @@ import { vent } from '../props/metalwork.js';
 import { mallBench } from '../props/garden.js';
 import { slide, foamCube, foamWedge, foamCylinder, foamArch, pitBall } from '../props/play.js';
 
-defZone('sP', { ...dry, step: 'carpet', wade: 1, grp: 'm', k: 1.15, exp: .3, fog: [.6, .5, .55, .001], bloom: .25, wet: .25, box: [-41.4, 28, -27, 44], probe: [-34, 2, 36], env: [[-41.4, -.85, 28], [-27, 3.6, 44]] });
+defZone('sP', { music: 'softplay', ...dry, step: 'carpet', wade: 1, grp: 'm', k: 1.15, exp: .3, fog: [.6, .5, .55, .001], bloom: .25, wet: .25, box: [-41.4, 28, -27, 44], probe: [-34, 2, 36], env: [[-41.4, -.85, 28], [-27, 3.6, 44]] });
 { // soft play room x[-41,-27] z[28.4,43.6], off the mall: vinyl floor mats, a padded ball pit with a slide into it, wall pads, foam shapes
   const z = zones.sP, h = 3.6, W = wallMat(z, 0xf3e6d0);
   const cols = [0xf0849c, 0x62aeea, 0xf4cc5c, 0x78d09a], V = cols.map(c => M(z, 'vinylFoam', { color: c, uv: [1, 1] })); // the kit's foam covers in the room's softer colours

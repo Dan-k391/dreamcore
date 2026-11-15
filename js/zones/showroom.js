@@ -18,7 +18,7 @@ const tag = text => { // a small name plate (64 px tall: sign()'s 256 px plates 
 const names = Object.keys(LIB), per = 8, X0 = -675, h = 3.2, sphere = new THREE.SphereGeometry(.3, 96, 48), cube = new RoundedBoxGeometry(.6, .6, .6, 6, .05);
 for (let j = 0; j * per < names.length; j++) {
   const x1 = X0 + 3 * per * j, x2 = x1 + 3 * per, id = 'sR' + j;
-  defZone(id, { ...dry, grp: 's', k: 1.5, exp: .34, fog: [.2, .17, .13, .002], bloom: .3, wet: 0, box: [x1, -2.4, x2, 2.4], probe: [(x1 + x2) / 2, 1.6, 0] });
+  defZone(id, { ...dry, music: null, grp: 's', k: 1.5, exp: .34, fog: [.2, .17, .13, .002], bloom: .3, wet: 0, box: [x1, -2.4, x2, 2.4], probe: [(x1 + x2) / 2, 1.6, 0] });
   const z = zones[id], W = M(z, 'plaster', { color: 0xa29d94 }), F = M(z, 'concreteFloor', { color: 0x9a948a }), plinth = M(z, 'plaster', { color: 0x4a4640 });
   box(F, x1, -.2, -2.8, x2, 0, 2.8); box(W, x1, h, -2.8, x2, h + .2, 2.8); box(W, x1, 0, -2.8, x2, h, -2.4); box(W, x1, 0, 2.4, x2, h, 2.8);
   if (j === 0) box(W, x1 - .4, 0, -2.8, x1, h, 2.8);

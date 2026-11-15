@@ -6,7 +6,7 @@ import { pier } from '../props/structure.js';
 import { railing } from '../props/metalwork.js';
 import { poolLight, opalPanel } from '../props/lights.js';
 
-defZone('pV', { grp: 'g', k: .8, exp: .3, fog: [.02, .03, .035, .003], tint: [1, 1, .99], sat: 1, bloom: .3, shaft: 0, hum: 0, water: 1, wet: .9,
+defZone('pV', { music: 'vault', grp: 'g', k: .8, exp: .3, fog: [.02, .03, .035, .003], tint: [1, 1, .99], sat: 1, bloom: .3, shaft: 0, hum: 0, water: 1, wet: .9,
         box: [11.6, 39.4, 36.4, 63.4], probe: [24, 2, 49.25], env: [[12, -.8, 40.6], [36, 5.2, 63]], band: 1.15, bandCol: [.07, .17, .36], shimmer: .3, caus: .35 });
 flats.push([22, 40.2, 24.4, 41, (x, z) => (z < 40.7 ? -.3 : -.6)]); flats.push([12, 41, 36, 63, (x, z) => -.6]); // passage down into the vaulted hall
 pools.push([12, 40.2, 36, 63, -.6, 'pV', ['pG', 'pV'], [.006, .012, .016]]);

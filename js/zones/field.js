@@ -10,7 +10,7 @@ import { swingSet, slide, roundabout, springRider } from '../props/play.js';
 import { parkBench, picnicTable, fence } from '../props/garden.js';
 import { kerb, steps } from '../props/structure.js';
 
-defZone('fD', { ...dry, step: 'carpet', sky: 'hill', air: 1, grp: 'f', k: 1, exp: .3, fog: [.72, .82, .95, .002], sat: 1.15, bloom: .07, shaft: .04, wet: 0, box: [-50, 665.6, 58, 760], probe: [4, 6, 690] });
+defZone('fD', { music: 'field', ...dry, step: 'carpet', sky: 'hill', air: 1, grp: 'f', k: 1, exp: .3, fog: [.72, .82, .95, .002], sat: 1.15, bloom: .07, shaft: .04, wet: 0, box: [-50, 665.6, 58, 760], probe: [4, 6, 690] });
 // ---------- the field: reached through the dark passage at the end of the hotel hallway ----------
 // Rolling ground, written once for the walking floor and once for the shaders that plant grass on it. Flat at the door and at the playground, rising to a rim all round.
 const hill = (x, z) => { const h = (3 + 2.2 * Math.sin(x * .07 + 1) * Math.cos(z * .06) + 1.4 * Math.sin(x * .13 + z * .11) + .5 * Math.sin(x * .31) * Math.cos(z * .27) + 12 * ss(40, 62, Math.hypot(x - 4, z - 712)) ** 2) * ss(5, 22, Math.hypot(x - 3.8, z - 665.6));

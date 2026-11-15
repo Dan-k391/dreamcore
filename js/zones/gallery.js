@@ -7,7 +7,7 @@ import { beachBall, laneRope } from '../props/play.js';
 import { mallBench } from '../props/garden.js';
 import { sconce, opalPanel } from '../props/lights.js';
 
-defZone('pG', { grp: 'g', k: .85, exp: .34, fog: [.75, .82, .8, .0015], tint: [.99, 1, .99], sat: 1, bloom: .3, shaft: 0, hum: 0, water: 1, wet: .7,
+defZone('pG', { music: 'gallery', grp: 'g', k: .85, exp: .34, fog: [.75, .82, .8, .0015], tint: [.99, 1, .99], sat: 1, bloom: .3, shaft: 0, hum: 0, water: 1, wet: .7,
         box: [18.3, 12.4, 28.1, 39.4], probe: [23.2, 2.6, 25], env: [[18.7, -1.4, 12.8], [27.7, 6, 39]], band: -99, bandCol: [1, 1, 1], shimmer: .2, caus: .25 });
 flats.push([20.9, 16, 25.5, 35, (x, z) => -.3 * Math.min(4, Math.floor((35 - z) / .5) + 1)]); // gallery pool, steps at the far end
 pools.push([20.9, 16, 25.5, 35, -1.2, 'pG', ['bC', 'pG', 'pV'], [.08, .17, .15]]);

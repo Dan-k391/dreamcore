@@ -16,7 +16,7 @@ import * as structure from '../props/structure.js';
 const X0 = -700, Z0 = -700, W = 14, D = 8, A = 8, h = 7; // bay i spans x X0+16i .. +16; its plot x+1 .. x+15, z Z0 .. Z0+8; the aisle in front runs to Z0+16
 [lights, metalwork, garden, play, structure].forEach((kit, i) => {
   const x1 = X0 + 16 * i, x2 = x1 + 16, x = x1 + 1, cx = x + W / 2, zf = Z0 + D + A, id = 'yd' + i;
-  defZone(id, { ...dry, grp: 'y', k: 1.5, exp: .34, fog: [.2, .17, .13, .002], bloom: .3, wet: 0, box: [x1, Z0, x2, zf], probe: [cx, 2.2, Z0 + 7] });
+  defZone(id, { ...dry, music: null, grp: 'y', k: 1.5, exp: .34, fog: [.2, .17, .13, .002], bloom: .3, wet: 0, box: [x1, Z0, x2, zf], probe: [cx, 2.2, Z0 + 7] });
   const z = zones[id], F = M(z, 'concreteFloor', { color: 0xb4ada2 }), L = M(z, 'plaster', { color: 0xcdc6ba }), dk = M(z, 'plaster', { color: 0x2c2925 }), dkF = M(z, 'concreteFloor', { color: 0x2e2b27 });
   box(F, x1, -.2, Z0 - .3, x2, 0, zf + .3); box(L, x1, h, Z0 - .3, x2, h + .2, zf + .3); // floor, ceiling
   box(L, x1, 0, Z0 - .3, x2, h, Z0); box(L, x1, 0, zf, x2, h, zf + .3); // back and front walls

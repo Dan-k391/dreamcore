@@ -10,7 +10,7 @@ import { lounger, pottedPlant } from '../props/garden.js';
 import { swimRing } from '../props/play.js';
 import { column } from '../props/structure.js';
 
-defZone('pN', { ...dark, exp: .22, bloom: .34, wet: .8, box: [21, -24.4, 45.4, .4], probe: [33, 3, -12], env: [[21, -1.4, -24.4], [45, 7, .4]], shimmer: .25 });
+defZone('pN', { music: 'night', ...dark, exp: .22, bloom: .34, wet: .8, box: [21, -24.4, 45.4, .4], probe: [33, 3, -12], env: [[21, -1.4, -24.4], [45, 7, .4]], shimmer: .25 });
 flats.push([24, -21, 42, -3, (x, z) => (z > -14 && z < -10 && x < 25 ? (x < 24.5 ? -.6 : -.9) : -1.2)]); // night pool
 pools.push([24, -21, 42, -3, -1.2, 'pN', ['pC', 'pN', 'bC'], [.003, .01, .009]]);
 poolMats(zones.pN);

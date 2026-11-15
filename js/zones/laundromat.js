@@ -28,8 +28,8 @@ const panel = (w, h, r, hole, hy, d, bev) => { const s = rrect(w, h, r); s.holes
 const kit = () => { const L = []; return { L, p: (m, g, own = false) => L.push([m, g, own]), place: (x, y, zc, ry = 0) => { for (const [m, g, own] of L) add(m, put(g.clone(), x, y, zc, ry), own); } }; };
 const smooth = g => { g.deleteAttribute('normal'); g.deleteAttribute('uv'); g = mergeVertices(g, 1e-5); g.computeVertexNormals(); g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2)); return g; };
 
-defZone('lW', { ...dry, sky: 'night', air: .03, grp: 'w', k: .24, exp: .34, fog: [.012, .014, .022, .005], bloom: .36, wet: .05, hum: .55, box: [595.3, -607.9, 604.7, -594], probe: [600, 1.6, -600], env: [[595.5, 0, -606], [604.5, 3, -594]] });
-defZone('lX', { ...dry, sky: 'night', air: .5, grp: 'w', k: 1, exp: .34, fog: [.012, .016, .03, .004], bloom: .4, wet: .3, box: [570, -594, 630, -566], probe: [600, 1.6, -590] });
+defZone('lW', { music: 'radio', ...dry, sky: 'night', air: .03, grp: 'w', k: .24, exp: .34, fog: [.012, .014, .022, .005], bloom: .36, wet: .05, hum: .55, box: [595.3, -607.9, 604.7, -594], probe: [600, 1.6, -600], env: [[595.5, 0, -606], [604.5, 3, -594]] });
+defZone('lX', { music: 'lot', ...dry, sky: 'night', air: .5, grp: 'w', k: 1, exp: .34, fog: [.012, .016, .03, .004], bloom: .4, wet: .3, box: [570, -594, 630, -566], probe: [600, 1.6, -590] });
 
 const z = zones.lW, zx = zones.lX, X0 = 595.5, X1 = 604.5, ZB = -606, ZF = -594, HT = 3;
 const Fl = M(z, 'terrazzo', { color: 0x776c5b, roughness: .2, macro: .24, grime: .32, dirt: .6, dirtCol: [.36, .33, .28] }); // damp sheen, scuffed where the room is walked
