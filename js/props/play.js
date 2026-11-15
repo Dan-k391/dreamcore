@@ -1,11 +1,10 @@
 // Kit: play things (slides, swings, roundabout, spring rider, soft-play foam, swim rings, beach and ball-pit balls, lane floats, chairs).
 // Materials: js/tex/plastic.js. Convention, the yard and the inventory: docs/props.md.
 import * as THREE from 'three';
-import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { scene } from '../core.js';
 import { M } from '../mat.js';
-import { add, put, spot, solidAt, round } from '../build.js';
+import { add, put, spot, solidAt, round, RoundedBoxGeometry } from '../build.js';
 
 const V3 = THREE.Vector3, PI = Math.PI, cl = (v, a, b) => Math.max(a, Math.min(b, v));
 

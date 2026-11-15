@@ -2,8 +2,7 @@
 import * as THREE from 'three';
 import { dry, zones, defZone } from '../core.js';
 import { M, P, neon } from '../mat.js';
-import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { add, put, block, box, solid, round, lit } from '../build.js';
+import { add, put, block, box, solid, round, lit, RoundedBoxGeometry } from '../build.js';
 import { mastLamp, opalPanel } from '../props/lights.js';
 import { bin } from '../props/metalwork.js';
 

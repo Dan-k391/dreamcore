@@ -1,10 +1,9 @@
 // The hotel hallway behind where you start.
 import * as THREE from 'three';
-import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { dry, zones, defZone } from '../core.js';
 import { hotelTex } from '../tex.js';
 import { dirt, P, M, sign, voidMat } from '../mat.js';
-import { add, block, box, solid, turned, put } from '../build.js';
+import { add, block, box, solid, turned, put, RoundedBoxGeometry } from '../build.js';
 import { door } from '../props/metalwork.js';
 import { sconce, opalPanel } from '../props/lights.js';
 import { skirting } from '../props/structure.js';

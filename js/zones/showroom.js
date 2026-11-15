@@ -4,11 +4,10 @@
 // 10 degrees. Light neutral walls and a lit ceiling panel over each side give the zone's probe something to reflect.
 // Station i (LIB order) is centred at x = -673.5 + 3i; see docs/materials.md for the photo addresses.
 import * as THREE from 'three';
-import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { scene, dry, zones, defZone } from '../core.js';
 import { maxA } from '../tex.js';
 import { M, LIB, lampOn } from '../mat.js';
-import { add, box, block, lit } from '../build.js';
+import { add, box, block, lit, RoundedBoxGeometry } from '../build.js';
 
 const tag = text => { // a small name plate (64 px tall: sign()'s 256 px plates would cost 2.5 MB each, a hundred of them)
   const c = document.createElement('canvas'), g = c.getContext('2d'); c.width = 512; c.height = 64; g.fillStyle = '#17140f'; g.fillRect(0, 0, 512, 64);

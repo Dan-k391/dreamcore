@@ -1,11 +1,10 @@
 // The all-night laundromat, 3 a.m., nobody there: a warm room behind a full-width shopfront onto a wet, dark street.
 // Far from everything (x 595-605, z -608..-594; the street it looks onto to z -570). Reached by the entry doorway in the back wall.
 import * as THREE from 'three';
-import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { dry, zones, defZone, scene } from '../core.js';
 import { M, neon } from '../mat.js';
-import { add, block, box, solid, round, turned, put, spot, solidAt, onSun } from '../build.js';
+import { add, block, box, solid, round, turned, put, spot, solidAt, onSun, RoundedBoxGeometry } from '../build.js';
 import { troffer, streetLamp } from '../props/lights.js';
 import { door, shopfront, drain, bin } from '../props/metalwork.js';
 import { kerb } from '../props/structure.js';

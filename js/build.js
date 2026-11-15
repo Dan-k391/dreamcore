@@ -2,6 +2,7 @@
 // The registries here are how places hand things to the rest of the game without knowing about each other.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { RoundedBoxGeometry as RoundedBox } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { renderer, scene, camera, V, H, inR, zones } from './core.js';
 import seen from './seen.js';
 import { seaMat, noCast, voidMat, aisle } from './mat.js';
@@ -39,6 +40,10 @@ function add(mat, g, ownUV = false) { // ownUV: keep the geometry's own UVs (a l
   }
   geo.has(mat) ? geo.get(mat).push(g) : geo.set(mat, [g]);
 }
+// three's rounded box: the places ask for about 3800 of only about 550 kinds, so each kind is built once (its corner maths is a
+// sizeable share of the load) and handed out as a copy; works with `new`, as the places call it.
+const rounded = new Map();
+function RoundedBoxGeometry(...a) { const k = a.join(); if (!rounded.has(k)) rounded.set(k, new RoundedBox(...a)); return new THREE.BufferGeometry().copy(rounded.get(k)); }
 const block = (mat, x1, y1, z1, x2, y2, z2) => add(mat, new THREE.BoxGeometry(x2 - x1, y2 - y1, z2 - z1).translate((x1 + x2) / 2, (y1 + y2) / 2, (z1 + z2) / 2)); // a box that never blocks
 function box(mat, x1, y1, z1, x2, y2, z2) { // a box that is solid, all of it: walls, floors, ceilings, seats
   block(mat, x1, y1, z1, x2, y2, z2);
@@ -106,7 +111,7 @@ const lit = (z, x, y, zc, power, to = [x, 0, zc], angle = 1.35, dist = 12, color
 const put = (g, x, y, z, ry = 0) => g.rotateY(ry).translate(x, y, z);
 const spot = (x, z, ry, px, pz) => [x + px * Math.cos(ry) + pz * Math.sin(ry), z - px * Math.sin(ry) + pz * Math.cos(ry)];
 const solidAt = (x, y, z, ry, cx, cy, cz, w, h, d) => { const [a, b] = spot(x, z, ry, cx, cz); turned(a, b, w / 2, d / 2, ry, y + cy - h / 2, y + cy + h / 2); };
-const floorH = (x, z) => { let y = 0; for (const f of flats) if (inR(x, z, f[0], f[1], f[2], f[3])) y = f[4](x, z); return y; };
+const floorH = (x, z, list = flats) => { let y = 0; for (const f of list) if (inR(x, z, f[0], f[1], f[2], f[3])) y = f[4](x, z); return y; };
 // The shortest move that takes a ball of radius r at (x, y, z) out of solid c, into `out`; false if they don't touch.
 // y = null: a circle on the plan, height ignored (the caller tests heights).
 const out = { x: 0, y: 0, z: 0 };
@@ -160,6 +165,7 @@ function maskAt(x, z) { // the layers a camera at (x, z) draws: -1 is all
 }
 function merge() { // once every place is built (level.js)
   for (const c of colliders) if (c.length === 4) c.push(-1e4, 1e4); // a bare rectangle is a wall of any height
+  rounded.clear();
   zl = Object.values(zones);
   for (const [m, list] of geo) {
     const parts = new Map();
@@ -181,4 +187,4 @@ function merge() { // once every place is built (level.js)
   };
 }
 
-export { colliders, emitters, flats, seeThrough, skyOnly, warps, pools, onSun, ladders, rings, loose, add, block, box, solid, round, turned, clear, out, near, flight, passage, slab, room, wall, fixture, tube, lit, put, spot, solidAt, floorH, sea, merge, maskAt };
+export { colliders, emitters, flats, seeThrough, skyOnly, warps, pools, onSun, ladders, rings, loose, add, block, box, solid, round, turned, clear, out, near, flight, passage, slab, room, wall, fixture, tube, lit, put, spot, solidAt, floorH, sea, merge, maskAt, RoundedBoxGeometry };

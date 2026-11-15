@@ -1,9 +1,8 @@
 // The night hall: a dark pool under glowing windows, with a water slide.
 import * as THREE from 'three';
-import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { V, WY, dark, zones, defZone, uTime } from '../core.js';
 import { S, M, glow, poolMats, noCast } from '../mat.js';
-import { emitters, flats, pools, rings, box, round, slab, add, solid, turned } from '../build.js';
+import { emitters, flats, pools, rings, box, round, slab, add, solid, turned, RoundedBoxGeometry } from '../build.js';
 import { poolLadder, railing, drain, door } from '../props/metalwork.js';
 import { poolLight, stepLight } from '../props/lights.js';
 import { lounger, pottedPlant } from '../props/garden.js';

@@ -1,11 +1,10 @@
 // Kit: metalwork (doors and frames, pool ladders, railings, shutters, bollards, grates, grilles, pipes, sign posts, bins).
 // Materials: js/tex/metal.js. Convention, the yard and the inventory: docs/props.md.
 import * as THREE from 'three';
-import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { toCreasedNormals } from 'three/addons/utils/BufferGeometryUtils.js';
 import { zones } from '../core.js';
 import { M } from '../mat.js';
-import { ladders, add, put, solidAt, round, spot, turned, box } from '../build.js';
+import { ladders, add, put, solidAt, round, spot, turned, box, RoundedBoxGeometry } from '../build.js';
 
 const V3 = (x, y, z) => new THREE.Vector3(x, y, z), V2 = (x, y) => new THREE.Vector2(x, y);
 const cost = {}; // triangles per object, filled as they are built (read by the yard check)

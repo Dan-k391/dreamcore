@@ -14,7 +14,6 @@ const noise = (x, y, p) => { // tileable value noise, integer period p
 const fbm = (u, v, p, o) => { let a = 0, k = .5; for (let i = 0; i < o; i++, p *= 2, k *= .5) a += k * noise(u * p, v * p, p); return a; };
 const ss = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 const maxA = renderer.capabilities.getMaxAnisotropy();
-if (new URLSearchParams(location.search).has('dev')) import('three/addons/geometries/RoundedBoxGeometry.js'); // the showroom's, fetched now: its import starts only once every place is built
 
 // fn(u, v, px, py) -> [r, g, b, height, roughness]; texture covers `meters` of world space
 function makeTex(n, meters, fn, bump = 1) {

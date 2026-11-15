@@ -1,9 +1,8 @@
 // The cinema.
 import * as THREE from 'three';
-import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { dry, zones, defZone } from '../core.js';
 import { M, P, neon, wallMat } from '../mat.js';
-import { flats, add, block, box, solid, solidAt, lit, put } from '../build.js';
+import { flats, add, block, box, solid, solidAt, lit, put, RoundedBoxGeometry } from '../build.js';
 import { door } from '../props/metalwork.js';
 import { sconce, stepLight } from '../props/lights.js';
 import { lettering } from './hotel.js';
