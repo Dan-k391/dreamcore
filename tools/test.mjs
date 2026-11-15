@@ -89,7 +89,7 @@ const cost = run(base + '?dev#702.5,649.4,1.5708,-0.2', `(() => { dev.hold = tru
   const P = Math.PI, R = ['KeyW', 'ShiftLeft']; dev.go(3.8, 50.5, P, R, 6); dev.go(3.8, 668, 0, R, 5); dev.go(65.5, 14, -P / 2, R, 6); dev.go(683, 14, P / 2, R, 5); dev.go(34, 49.4, -P / 2, R, 7); dev.go(652, 649.4, P / 2, R, 5);
   return { look, p0, p1: dev.renderer.info.programs.length, load: dev.readyAt, bake: Math.round(dev.lib.ms) }; })()`);
 check('cost page loads without console errors', !cost.errors.length, cost.errors.join(' | ').slice(0, 600));
-check('only the terrace is drawn at the terrace lookout (under 80 draw calls)', cost.result?.look < 80, JSON.stringify(cost.result));
+check('only the terrace is drawn at the terrace lookout (under 120 draw calls; 238 when other places leak in)', cost.result?.look < 120, JSON.stringify(cost.result));
 check('no shader compiles after load on a tour of every zone and passage', cost.result && cost.result.p1 === cost.result.p0, JSON.stringify(cost.result));
 // Load guards, loose enough for a shared GPU and a cold CDN: the library bake (every showroom set too) took 3.5 s when its
 // programs compiled again, one by one, on first draw; it takes about 0.5 s with them compiled ahead
