@@ -5,7 +5,7 @@ A browser dreamcore walking game: three.js, no build step, static files, live at
 ## The bar
 
 - **Insanely detailed quality.** It should look like it can keep up with AAA: impressive, photorealistic graphics. Every object counts, not only the rooms: a bench, a lamp post, a pillar, a palm, a slide each need believable shape, material and texture up close.
-- **Small in scope.** Several tiny levels, not a big game. Each place is small; spend the effort on how it looks, not on how much there is.
+- **Looks before size.** This is no longer a small game, and bigger rooms may come later. However large a place is, spend the effort on how it looks, not on how much there is.
 
 When the two pull against each other, quality wins: one place finished properly beats three that are plain.
 
