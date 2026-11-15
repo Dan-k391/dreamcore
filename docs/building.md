@@ -50,11 +50,13 @@ Used by `js/player.js` and `js/physics.js`. A solid blocks the body where it ove
 
 - A place pushes `{ mesh, r, pos, region, bounce, grip, ... }` onto `loose` in `js/build.js` (the fields are listed there): balls that fall, roll, float (`float`), stop the body (`solid`) and sleep when still. An `InstancedMesh` holds many.
 - A swim ring is a torus mesh pushed onto `rings`; it floats on the pool's waves.
+- Their shadows are redrawn on their own, over a cached copy of each map's static casters (see Light), so a moving ring or ball costs only itself.
 - Budget, checked in `tools/test.mjs`: under 0.3 ms a frame at rest; in a splash under 1 ms median and under 3 ms at the 95th percentile.
 
 ## Light
 
 - Nine shadow-casting lamps are shared by every fixture in the level and follow the player; a place registers fixtures with `lamp()` or `lit()` and they cost nothing more.
+- Shadow maps are drawn only when asked. `shadow.needsUpdate` (a lamp moved to a new fixture, the sky changed, anything static changed) redraws a map in full and keeps a copy of it without the loose things. A loose thing that moves asks with `shadow.loose` instead (`reshade` in `js/physics.js`): the copy is put back over the box where loose things were and are, and only they are drawn, the same map to the bit (checked in `tools/test.mjs`). The copies double the shadow maps' memory (136 MB more). Something new that moves and casts a shadow goes on physics.js's loose list or asks with `needsUpdate`.
 - Each zone's ambient light is baked from a probe at load; a material gets it by being registered with the zone (`M(zone, ...)` or `P(zone, ...)`).
 - A lit material has 6 texture units to spend: 16 minus the 9 lamp shadow maps and the sun's.
 

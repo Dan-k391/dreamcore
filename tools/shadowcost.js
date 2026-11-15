@@ -3,7 +3,7 @@
 (async () => {
   const r = dev.renderer, SM = r.shadowMap, draw = SM.render, c = { passes: 0, lampMaps: 0, sunMaps: 0, tris: 0, frames: 0 };
   SM.render = function (lights, ...a) {
-    if (SM.needsUpdate) { c.passes++; for (const l of lights) if (l.shadow.needsUpdate || l.shadow.autoUpdate) l.isDirectionalLight ? c.sunMaps++ : c.lampMaps++; }
+    if (SM.needsUpdate) { c.passes++; for (const l of lights) if (l.shadow.needsUpdate || l.shadow.loose || l.shadow.autoUpdate) l.isDirectionalLight ? c.sunMaps++ : c.lampMaps++; }
     const t = r.info.render.triangles; draw.call(this, lights, ...a); c.tris += r.info.render.triangles - t;
   };
   const run = (yaw, secs) => { dev.key('KeyW', true); dev.key('ShiftLeft', true); const p = dev.state();
