@@ -27,7 +27,7 @@ const seeThrough = [], skyOnly = { hill: [], dusk: [], night: [] }; // things th
 const warps = []; // [x1, z1, x2, z2, dx, dz]: standing in the rectangle moves you by the offset
 const pools = []; // each pool, registered by its place, made into water by water.js: x1, z1, x2, z2, floor height, zone, zones it is drawn from, scattered light
 const onSun = []; // f(sun): run once the sun exists, for things built before it that use its shadow map
-const ladders = []; // [x1, z1, x2, z2] zones in the water where facing the ladder and pressing forward climbs it
+const ladders = []; // [x1, z1, x2, z2, dx, dz, top]: a ladder's zone, the way up it (unit, toward the deck) and the deck's height; moving that way climbs, the other way descends
 const rings = []; // floating rings: bob on the water (see frame)
 function add(mat, g, ownUV = false) { // ownUV: keep the geometry's own UVs (a library material's `uv` option says how many metres one unit is)
   g = g.index ? g.toNonIndexed() : g;

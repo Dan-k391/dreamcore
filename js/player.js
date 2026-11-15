@@ -85,18 +85,28 @@ const frame = dt => { // one game frame of dt seconds: the loop below passes the
   const yaw = eu.setFromQuaternion(camera.quaternion).y, sn = Math.sin(yaw), cs = Math.cos(yaw);
   const warp = warps.find(w => inR(p.x, p.z, w[0], w[1], w[2], w[3]));
   if (warp) { p.x += warp[4]; p.z += warp[5]; }
-  const ox = p.x, oz = p.z, mx = (vel.x * cs - vel.y * sn) * dt, mz = (-vel.x * sn - vel.y * cs) * dt, n = Math.max(1, Math.ceil(Math.hypot(mx, mz) / .1));
-  let roomy = collide(p, feet); // false: squeezed somewhere a teleport put you, so any move is allowed until you are out
-  for (let i = 0; i < n; i++) { const sx = p.x, sz = p.z; p.x += mx / n; p.z += mz / n; if (!collide(p, feet) && roomy) { p.x = sx; p.z = sz; break; } } // in steps of 10 cm at most, so nothing thin is run through
-  // A rise taller than a step is a wall. Pool sides can't be walked up: the ways out are the steps, or a jump onto something low enough.
-  const lead = (to, from) => to + Math.sign(to - from) * .3, tall = (x, z) => { const here = floorH(x, z); return here - feet > .35 || floorH(lead(x, ox), lead(z, oz)) - Math.max(feet, here) > .35; }; // tested a body-width ahead, so the eye never reaches the wall face; measured from the step being stepped onto, or a fast climber would see two steps ahead as one wall
+  // Ladders: at one, moving toward its deck (whichever way you face) or jumping climbs, moving toward the water descends; once holding on, gravity lets go of you.
+  const lad = ladders.find(l => inR(p.x, p.z, l[0], l[1], l[2], l[3])), top = lad ? lad[6] : 0, ix = k('KeyD') - k('KeyA'), iy = (k('KeyW') | k('ArrowUp')) - (k('KeyS') | k('ArrowDown'));
+  const toward = lad && (ix || iy) ? ((ix * cs - iy * sn) * lad[4] + (-ix * sn - iy * cs) * lad[5]) / Math.hypot(ix, iy) : 0, below = lad && Math.min(feet, floorH(p.x, p.z)) < top - .01; // below: not standing on the deck
+  const climb = toward < -.3 ? -1 : toward > .3 || (below && k('Space')) ? 1 : 0, at = !!lad && (below || toward < -.3);
+  const hang = grip && at && feet < top - .05; // on the rungs below the deck: the body stays on the ladder
+  let mx = (vel.x * cs - vel.y * sn) * dt, mz = (-vel.x * sn - vel.y * cs) * dt;
+  if (lad && k('Space') && !iy && !ix && Math.abs(feet - top) < .03 && (p.x - (lad[0] + lad[2]) / 2) * lad[4] + (p.z - (lad[1] + lad[3]) / 2) * lad[5] < .5) { mx += lad[4] * 1.5 * dt; mz += lad[5] * 1.5 * dt; } // jump held at the top: step off onto the deck
+  const ox = p.x, oz = p.z, n = Math.max(1, Math.ceil(Math.hypot(mx, mz) / .1));
+  const fb = grip ? feet - .3 : feet; // on a ladder a solid deck is stepped onto only once the feet are level with it, as below
+  let roomy = collide(p, fb); // false: squeezed somewhere a teleport put you, so any move is allowed until you are out
+  for (let i = 0; i < n; i++) { const sx = p.x, sz = p.z; p.x += mx / n; p.z += mz / n; if (!collide(p, fb) && roomy) { p.x = sx; p.z = sz; break; } } // in steps of 10 cm at most, so nothing thin is run through
+  if (hang) { // held between the rails: within 10 cm of the ladder's middle, and inside its zone
+    const cx = (lad[0] + lad[2]) / 2, cz = (lad[1] + lad[3]) / 2, [dx, dz] = [lad[4], lad[5]], a0 = (p.x - cx) * -dz + (p.z - cz) * dx, a = a0 - (a0 - Math.max(-.1, Math.min(.1, a0))) * Math.min(1, dt * 8), b = Math.max(-.6, Math.min(.6, (p.x - cx) * dx + (p.z - cz) * dz));
+    p.x = cx - dz * a + dx * b; p.z = cz + dx * a + dz * b; }
+  // A rise taller than a step is a wall. Pool sides can't be walked up: the ways out are the steps, the ladders, or a jump onto something low enough.
+  const rise = grip ? .05 : .35; // on a ladder the deck is stepped onto only once the climb has brought the feet level with it
+  const lead = (to, from) => to + Math.sign(to - from) * .3, tall = (x, z) => { const here = floorH(x, z); return here - feet > rise || floorH(lead(x, ox), lead(z, oz)) - Math.max(feet, here) > rise; }; // tested a body-width ahead, so the eye never reaches the wall face; measured from the step being stepped onto, or a fast climber would see two steps ahead as one wall
   if (tall(p.x, p.z)) { if (!tall(p.x, oz)) p.z = oz; else if (!tall(ox, p.z)) p.x = ox; else { p.x = ox; p.z = oz; } }
   const ground = groundAt(p.x, p.z, feet), was = feet;
   let landed = false, hit = 0;
-  // Ladders: in the water at one, facing it, forward (or jump) climbs and back descends; once holding on, gravity lets go of you.
-  const at = feet < 0 && -sn > .3 && ladders.some(l => inR(p.x, p.z, ...l)), climb = at ? (k('KeyW') | k('ArrowUp') | k('Space')) - (k('KeyS') | k('ArrowDown')) : 0;
   grip = at && (grip || climb !== 0);
-  if (grip) { feet = Math.max(ground, Math.min(0, feet + climb * 1.3 * dt)); vy = 0; }
+  if (grip) { feet = Math.max(Math.min(ground, feet + 4 * dt), Math.min(top, feet + climb * 1.3 * dt)); vy = 0; }
   else if (vy > 0 || feet > ground + (air ? .001 : .12)) { // off the ground: gravity, and drag once the legs are under water. Walking off a ledge is a fall; walking down a slope is not
     vy -= 11 * dt; if (pool && feet < WY) vy -= vy * Math.min(1, 4 * dt);
     feet += vy * dt;

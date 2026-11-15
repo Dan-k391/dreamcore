@@ -270,9 +270,9 @@ function poolLadder(z, x, y, zc, ry = 0, o = {}) {
       K.p(C, hex(.008, .005).rotateZ(-Math.sign(sx) * Math.PI / 2).translate(sx + Math.sign(sx) * (r + .0055), ty - .012, .1)); } // a hex set screw in each collar
   }
   K.place(x, y, zc, ry);
-  // climbing zone in the water in front of it (as before); the rails are left passable: you climb out between them
+  // its zone, from the water in front onto the deck behind, with the way up (unit, toward the deck) and the deck's height; the rails are left passable: you climb out between them
   const pts = [[-.45, -.5], [.45, -.5], [-.45, .8], [.45, .8]].map(([a, b]) => spot(x, zc, ry, a, b));
-  ladders.push([Math.min(...pts.map(p => p[0])), Math.min(...pts.map(p => p[1])), Math.max(...pts.map(p => p[0])), Math.max(...pts.map(p => p[1]))]);
+  ladders.push([Math.min(...pts.map(p => p[0])), Math.min(...pts.map(p => p[1])), Math.max(...pts.map(p => p[0])), Math.max(...pts.map(p => p[1])), -Math.sin(ry), -Math.cos(ry), y]);
 }
 // The older call: on a pool's east edge at x (deck at y 0 to the east, water to the west); `mat` names the room.
 const ladder = (x, zc, mat) => poolLadder(zoneOf(mat), x, 0, zc, -Math.PI / 2);

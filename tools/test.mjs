@@ -143,6 +143,22 @@ catch (e) { check('js/seen.js covers what each zone can see (tools/pvs.mjs --che
     return { bad: [...bad], none: Object.keys(seen).filter(id => !got.has(id)) }; })()`);
   check('every zone in js/seen.js is culled (its meshes on a layer bit, not drawn from everywhere)', f.result && !f.result.bad.length && !f.result.none.length, JSON.stringify(f.result)); }
 
+// Every registered ladder (plain ?dev, so the yard's dry one too), from the water: forward facing it, forward at 0.9 rad off it, jump alone,
+// run; from the deck: walk off toward the water, and back down facing it. Each must arrive (on the deck, or standing in the water) with the
+// eye never moving more than 3 cm in a frame. Ladders once only worked from one side of a pool.
+{ const f = run(base + '?dev', `(async () => { const { ladders } = await import('/js/build.js'), P = Math.PI, out = [];
+  for (const [x1, z1, x2, z2, dx, dz, top] of ladders) { const cx = (x1 + x2) / 2, cz = (z1 + z2) / 2, yaw = Math.atan2(-dx, -dz), b = () => { const s = dev.state(); return .15 - ((s.x - cx) * dx + (s.z - cz) * dz); };
+    const up = () => { const s = dev.state(); return Math.abs(s.y - top) < .02 && !s.air && b() < .1; }, dn = () => { const s = dev.state(); return s.y < top - .5 && !s.air && b() > .25; };
+    const hold = (keys, face, until, n) => { dev.camera.rotation.set(0, face, 0, 'YXZ'); for (const c of keys) dev.key(c, true); let y0 = dev.camera.position.y, jump = 0, i = 0;
+      for (; i < n && !until(); i++) { dev.step(1); const y = dev.camera.position.y; jump = Math.max(jump, Math.abs(y - y0)); y0 = y; } for (const c of keys) dev.key(c, false); dev.step(5); return i < n ? +jump.toFixed(3) : -1; };
+    const water = () => { dev.reset(cx - dx * .5, cz - dz * .5, yaw); dev.step(20); }, onto = () => hold(['KeyW'], yaw, () => b() < -.5, 60), r = { at: [+cx.toFixed(1), +cz.toFixed(1)] };
+    water(); r.upW = hold(['KeyW'], yaw, up, 300); water(); r.upSide = hold(['KeyW'], yaw + .9, up, 300);
+    water(); r.upJump = hold(['Space'], yaw, up, 300); onto(); r.downW = hold(['KeyW'], yaw + P, dn, 200);
+    r.upRun = hold(['KeyW', 'ShiftLeft'], yaw, up, 300); onto(); r.downBack = hold(['KeyS'], yaw, dn, 200); out.push(r); }
+  return out; })()`, '--wait', '200000');
+  const bad = (f.result || []).filter(r => Object.entries(r).some(([k, v]) => k !== 'at' && !(v >= 0 && v <= .03)));
+  check('every ladder climbs up from the water and down from the deck, either way round, smoothly', f.result?.length >= 7 && !bad.length && !f.errors.length, JSON.stringify(bad.length ? bad : f).slice(0, 600)); }
+
 // Production address: no window.dev, the start overlay is up once the level is built.
 const prod = run(base, `await new Promise(ok => { const t = setInterval(() => /click to enter/.test(document.getElementById('s').textContent) && (clearInterval(t), ok()), 100); }),
   { dev: typeof window.dev, overlay: getComputedStyle(document.getElementById('o')).display !== 'none' }`, '--wait', '15000', '--settle', '0'); // browse.mjs waits out --wait for a dev.ready that never comes here
