@@ -182,6 +182,11 @@ catch (e) { check('js/seen.js covers what each zone can see (tools/pvs.mjs --che
 // Nothing pops in at a doorway: crossing each opening (20 cm steps, standing and mid-jump eyes), every mesh in view is on the camera's layers.
 try { execFileSync(process.execPath, [fileURLToPath(new URL('./seams.mjs', import.meta.url)), '--port', base.split(':')[2].slice(0, -1), '--pop', '--fast'], { encoding: 'utf8' }); check('nothing pops in crossing an opening (tools/seams.mjs --pop --fast)', true); }
 catch (e) { check('nothing pops in crossing an opening (tools/seams.mjs --pop --fast)', false, String(e.stdout || e.message).slice(0, 600)); }
+// Pool pictures skipped while a pool is hidden, or cut to what the screen samples (water.js), never show: the night hall's openings
+// run through, jumped, spun at and flicked round, each frame against the same frame drawn with the culling off.
+{ let out; try { out = execFileSync(process.execPath, [fileURLToPath(new URL('./pool-skip.mjs', import.meta.url)), '--port', base.split(':')[2].slice(0, -1), '--only', 'pN'], { encoding: 'utf8' }); } catch (e) { out = String(e.stdout || e.message); }
+  const m = /(\d+) frames \((\d+) with a picture skipped\).*: (\d+) differ/.exec(out);
+  check('skipped and cut pool pictures never show (tools/pool-skip.mjs --only pN)', m && +m[2] > 20 && +m[3] === 0, out.slice(0, 600)); }
 // No light through walls: from each zone, every shadow map holds every caster (three culls casters by the eye's layers; build.js turns them all on).
 try { execFileSync(process.execPath, [fileURLToPath(new URL('./leaks.mjs', import.meta.url)), '--port', base.split(':')[2].slice(0, -1), '--fast'], { encoding: 'utf8' }); check('every shadow map has every caster (tools/leaks.mjs --fast)', true); }
 catch (e) { check('every shadow map has every caster (tools/leaks.mjs --fast)', false, String(e.stdout || e.message).slice(0, 600)); }
