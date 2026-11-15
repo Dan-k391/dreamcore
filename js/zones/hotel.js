@@ -72,7 +72,7 @@ defZone('hT', { ...dry, step: 'carpet', grp: 'm', k: 1, exp: .34, fog: [.3, .2, 
       if (shut) add(K, put(new THREE.CircleGeometry(.005, 16).translate(0, 1.52, -.05 + .0225 + .0092), f, 0, c, ry));
       if (isDoor) { // the room number on a brass plate on the wall by the latch
         add(Br, put(new RoundedBoxGeometry(.17, .095, .008, 2, .003).translate(.74, 1.5, .004), f, 0, c, ry));
-        const [m, q] = txt(nums.length, .15, .075); nums.push(c); add(m, put(q.translate(.74, 1.5, .0085), f, 0, c, ry), true);
+        const [m, q] = txt(nums.length, .15, .075); nums.push(c); add(m, put(q.translate(.74, 1.5, .0095), f, 0, c, ry), true);
         for (const sx of [-.072, .072]) add(Br, put(new THREE.SphereGeometry(.004, 10, 4, 0, 2 * Math.PI, 0, Math.PI / 2).scale(1, 1, .5).rotateX(Math.PI / 2).translate(.74 + sx, 1.5, .008), f, 0, c, ry));
       }
     }
@@ -88,7 +88,6 @@ defZone('hT', { ...dry, step: 'carpet', grp: 'm', k: 1, exp: .34, fog: [.3, .2, 
     // a sconce between each pair of openings, 1.75 m up
     for (let i = 0; i + 1 < ops.length; i++) sconce(z, f, 1.75, (ops[i][0] + ops[i + 1][0]) / 2, ry);
   }
-  block(Pl, 1.9, 0, 44, 2.2, 2.3, 44.5); block(Pl, 1.9, 0, 45.5, 2.2, 2.3, 46); block(Pl, 1.9, 2.24, 44.5, 2.2, 2.3, 45.5); // line the mall's wider opening down to this one
   for (const zc of [24.6, 30.6, 36.6, 42.6, 48.6]) opalPanel(z, 3.8, h, zc, 0, { w: .6, l: .6, power: 50 });
   sign('EXIT', 3.8, 2.6, 51.54, Math.PI, .6, .22, '#8fffc0', '#021a0c');
 }

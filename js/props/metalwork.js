@@ -113,8 +113,11 @@ function door(z, x, y, zc, ry = 0, o = {}) {
   const F = M(z, 'paintedSteel', { color: o.frame ?? 0xe9e5dc, dirt: .35, dirtCol: [.5, .45, .38], wear: .3 });
   const Lf = M(z, 'paintedSteel', { color: o.color ?? 0x3a6d98, dirt: .35, dirtCol: [.5, .45, .38], wear: .3 });
   const St = M(z, 'brushedSteel'), Al = M(z, 'anodised', { color: 0xc8c8c4, roughness: .42 }), Rb = M(z, 'rubber', { color: 0x2a2826 });
-  // frame profile (u outward from the clear opening, v through the wall): the stop stands proud on +z, the leaf closes into the rebate
-  const prof = rshape([[0, .025], [0, FD], [FU, FD], [FU, -FD], [.016, -FD], [.016, .025]], [.0015, .003, .003, .003, .003, .0015]);
+  // frame profile (u outward from the opening, v through the wall): the stop stands proud on +z, the leaf closes into the rebate.
+  // The opening cut for it is o.w x 2.24; the frame stands SH proud of that cut all round, so its faces never lie in the wall's
+  // reveal and soffit (they would z-fight). RB: the rebate's soffit, which the leaf closes into and the strike sits on.
+  const SH = .002, RB = .016 - SH;
+  const prof = rshape([[-SH, .025], [-SH, FD], [FU, FD], [FU, -FD], [RB, -FD], [RB, .025]], [.0015, .003, .003, .003, .003, .0015]);
   const member = (len, map, mitre) => { // one frame member: the profile run `len`, mitred at 45 degrees where it meets the next
     const g = prism(prof, len), p = g.attributes.position, nm = g.attributes.normal;
     for (let i = 0; i < p.count; i++) { const u = p.getX(i), v = p.getY(i); let a = p.getZ(i); if (mitre[1] && a > len - 1e-5) a += u; if (mitre[0] && a < 1e-5) a -= u;
@@ -125,17 +128,17 @@ function door(z, x, y, zc, ry = 0, o = {}) {
   member(Hc, (u, v, a, n) => n ? [u, a, -v] : [Wc / 2 + u, a, -v], [0, 1]);
   member(Wc, (u, v, a, n) => n ? [a, u, v] : [a - Wc / 2, Hc + u, v], [1, 1]);
   for (const sx of [-1, 1]) { K.p(F, rbox(.04, .004, .1, .0015).translate(sx * (Wc / 2 + .05), .002, 0)); K.p(St, screw(.004).translate(sx * (Wc / 2 + .05), .004, 0)); } // floor anchor tabs, screwed down
-  if (!dbl) for (const yy of [.4, 1.25, 2.0]) K.p(Rb, lathe([[.0045, 0], [.0042, .0012], [.003, .0022], [0, .0026]], 8).rotateX(-Math.PI / 2).translate(Wc / 2 + .008, yy, .025)); // silencers on the stop
+  if (!dbl) for (const yy of [.4, 1.25, 2.0]) K.p(Rb, lathe([[.0045, 0], [.0042, .0012], [.003, .0022], [0, .0026]], 8).rotateX(-Math.PI / 2).translate(Wc / 2 + RB / 2 - SH / 2, yy, .025)); // silencers on the stop
   // threshold: a brushed saddle with chamfered nosings, grain along its length
   K.p(St, planar(prism(rshape([[-.085, 0], [.085, 0], [.085, .002], [.05, .011], [-.05, .011], [-.085, .002]], .002), Wc + .03).translate(0, 0, -(Wc + .03) / 2).rotateY(Math.PI / 2), 'x', 'z'), true);
   // strike plate on the lock jamb, two countersunk screws; hinge leaves let into the hinge jamb
-  if (!dbl) { K.p(St, rbox(.002, .115, .025, .0008).translate(Wc / 2 + .016, 1.05, -.0085));
-  K.p(Rb, rbox(.0022, .022, .009, .0006).translate(Wc / 2 + .0162, 1.05, -.0055)); // the latch hole, dark behind
-  { const c = [Wc / 2 + .015 - .012, -.021], arc = [], N = 6; // the lip: the plate rolled out of the soffit so the latch rides up it
+  if (!dbl) { K.p(St, rbox(.002, .115, .025, .0008).translate(Wc / 2 + RB - .0005, 1.05, -.0085)); // its face 1.5 mm proud of the soffit
+  K.p(Rb, rbox(.0022, .022, .009, .0006).translate(Wc / 2 + RB - .0019, 1.05, -.0055)); // the latch hole, a dark slot 1.5 mm proud of the plate
+  { const c = [Wc / 2 + RB - .0015 - .012, -.021], arc = [], N = 6; // the lip: the plate rolled out of the soffit so the latch rides up it
     for (let k = 0; k <= N; k++) { const a = -k / N * 1.25; arc.push([c[0] + .012 * Math.cos(a), -(c[1] + .012 * Math.sin(a))]); }
     for (let k = N; k >= 0; k--) { const a = -k / N * 1.25; arc.push([c[0] + .0105 * Math.cos(a), -(c[1] + .0105 * Math.sin(a))]); }
     K.p(St, prism(rshape(arc, .0004), .07).rotateX(-Math.PI / 2).translate(0, 1.015, 0)); }
-  for (const yy of [1.0, 1.1]) K.p(St, screw(.003, false).rotateZ(Math.PI / 2).translate(Wc / 2 + .015, yy, -.0085)); }
+  for (const yy of [1.0, 1.1]) K.p(St, screw(.003, false).rotateZ(Math.PI / 2).translate(Wc / 2 + RB - .0015, yy, -.0085)); }
   const hy = [.25, 1.15, 1.98];
   // the leaf, about its own hinge axis at the origin; set in the frame afterwards
   const hinge = (ax, az) => { // a butt hinge's knuckle: five knuckles with hairline joints, a pin and two finials
@@ -144,7 +147,7 @@ function door(z, x, y, zc, ry = 0, o = {}) {
       return merge(g); }).translate(ax, 0, az);
   };
   const AX = -Wc / 2 - .0095, AZ = -.0295; // the hinge axis: in the corner of soffit and pull face, the knuckles proud of both
-  for (const yy of hy) for (const sx of dbl ? [1, -1] : [1]) { K.p(St, hinge(sx * AX, AZ).translate(0, yy, 0)); if (o.leaf === false) K.p(St, rbox(.0025, .1, .03, .001).translate(sx * (-Wc / 2 - .0172), yy, AZ + .016)); } // a frame alone keeps its hinge leaves
+  for (const yy of hy) for (const sx of dbl ? [1, -1] : [1]) { K.p(St, hinge(sx * AX, AZ).translate(0, yy, 0)); if (o.leaf === false) K.p(St, rbox(.0025, .1, .03, .001).translate(sx * (-Wc / 2 - RB + .00025), yy, AZ + .016)); } // a frame alone keeps its hinge leaves, 1.5 mm proud
   // one leaf hung at the -x jamb; mirrored onto the +x jamb for the second of a pair (the winding turned back so its faces stay out)
   const flip = g => { g = (g.index ? g.toNonIndexed() : g).applyMatrix4(new THREE.Matrix4().makeScale(-1, 1, 1));
     for (const a of Object.values(g.attributes)) { const w = a.itemSize, A = a.array; for (let i = 0; i < a.count; i += 3) for (let c = 0; c < w; c++) { const t = A[(i + 1) * w + c]; A[(i + 1) * w + c] = A[(i + 2) * w + c]; A[(i + 2) * w + c] = t; } }

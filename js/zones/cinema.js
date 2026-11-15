@@ -48,7 +48,7 @@ function seat(z, x, y, zc, ry, mats, o = {}) {
   }
   if (o.letter) { const [m, q] = o.letter, s = o.letterSide, sx = s * .3 + s * .0255;
     A(steel, rb(.004, .05, .1, 1, .0015).translate(sx, .5, .1));
-    A(m, q.rotateY(s * Math.PI / 2).translate(sx + s * .0025, .5, .1), true); }
+    A(m, q.rotateY(s * Math.PI / 2).translate(sx + s * .0035, .5, .1), true); } // 1.5 mm proud of its plate
   if (o.down) solidAt(x, y, zc, ry, 0, .24, .09, .5, .48, .46);
 }
 

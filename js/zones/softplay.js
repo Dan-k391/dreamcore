@@ -24,7 +24,7 @@ defZone('sP', { ...dry, step: 'carpet', wade: 1, grp: 'm', k: 1.15, exp: .3, fog
     const z1 = Math.max(28 + j, 28.4), z2 = Math.min(29 + j, 43.6), dy = .003 * (hash(i, j + 7) - .5); // each sits a little proud or low of its neighbours
     pad((i + j * 3) % 4, -41 + i + .003, -.04, z1 + .003, -40 + i - .003, dy, z2 - .003, .012, 1);
   }
-  const R = M(z, 'rubber'); block(R, -41, -.06, 28.4, -27, -.04, 30); block(R, -41, -.06, 37, -27, -.04, 43.6); block(R, -41, -.06, 30, -40, -.04, 37); block(R, -33, -.06, 30, -27, -.04, 37);
+  const R = M(z, 'rubber'); block(R, -41, -.06, 28.4, -27, -.04, 29.95); block(R, -41, -.06, 37.05, -27, -.04, 43.6); block(R, -41, -.06, 29.95, -40.05, -.04, 37.05); block(R, -32.95, -.06, 29.95, -27, -.04, 37.05); // stopping behind the pit's pads, not in their faces
   solid(-41, -1, 28, -27, 0, 30); solid(-41, -1, 37, -27, 0, 44); solid(-41, -1, 30, -40, 0, 37); solid(-33, -1, 30, -27, 0, 37); // the floor round the pit, whose sides keep the balls in
   // the pit, 85 cm deep, lined with blue pads, and two foam steps under the balls to climb out by
   box(V[1], -40, -1, 30, -33, -.85, 37); flats.push([-40, 30, -33, 37, () => -.85], [-34.4, 33, -33.7, 35, () => -.57], [-33.7, 33, -33, 35, () => -.29]);

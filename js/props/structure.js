@@ -244,7 +244,7 @@ function pillar(z, x, y, zc, ry = 0, o = {}) {
   }
   const [shaft, broken] = chop(up(bar(oct(0, .005), h, { plan: .6, v: h / 2 + .3, caps: [false, true] }), h / 2), chips);
   put3(C, set(shaft)); put3(F, set(broken));
-  put3(Yp, set(chop(up(bar(oct(.0015, .005), bh, { plan: .81, ku: .72, v: bh / 2, caps: [false, false] }), bh / 2), chips, false)[0]));
+  put3(Yp, set(chop(up(bar(oct(.0015, .0065), bh, { plan: .81, ku: .72, v: bh / 2, caps: [false, false] }), bh / 2), chips, false)[0]));
   const fk = hw - c - .004, face = (a, d, vs) => (s, t) => { // face a (normal at a * 90 degrees in plan), d metres out; vs(t) its v
     const ca = Math.cos(a * PI / 2), sa = Math.sin(a * PI / 2), px = (hw + d) * ca - s * sa, py = (hw + d) * sa + s * ca; return [px, t, -py, .81 + .72 * s, vs(t)];
   };
