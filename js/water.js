@@ -98,7 +98,7 @@ const ponds = pools.map(([x1, z1, x2, z2, floor, zid, seen, scatter]) => {
   const U = { uCaus: zones[zid].tileU.uCaus, tMirror: { value: mirror.getRenderTarget().texture }, tPlan: { value: planRT.texture }, tGround: { value: ground }, tUnder: { value: under.texture }, tUnderZ: { value: under.depthTexture }, uLens: { value: lens.camera.projectionMatrix }, tNormalMap0: { value: wn0 }, tNormalMap1: { value: wn1 },
               tSim: { value: sim[0].texture }, uPond: { value: rect }, uPx: { value: px }, uFloor: { value: floor }, uScatter: { value: V(...scatter) }, uMain: { value: 0 }, uTime };
   const w = new THREE.Mesh(g, new THREE.ShaderMaterial({ uniforms: U, vertexShader: waterVS, fragmentShader: waterFS, transparent: true }));
-  Object.assign(w, { seen, rect, px, sim, tileU: zones[zid].tileU, zone: zones[zid], twin: twin(x1, z1, x2, z2) });
+  Object.assign(w, { lens, seen, rect, px, sim, tileU: zones[zid].tileU, zone: zones[zid], twin: twin(x1, z1, x2, z2) });
   w.drawPlan = () => { // once, while the zone's lamps are lit for its bake; caustics off, since the plan is a still and they move
     const caus = w.tileU.uCaus.value, target = renderer.getRenderTarget();
     w.tileU.uCaus.value = 0; sky.visible = false; renderer.setRenderTarget(planRT); renderer.render(scene, planCam);
@@ -115,6 +115,8 @@ const ponds = pools.map(([x1, z1, x2, z2, floor, zid, seen, scatter]) => {
     const on = ponds.map(q => q.visible); // every pool is at the same level, so none belongs in another's mirror or underwater picture
     for (const q of ponds) q.visible = false;
     mirror.matrixWorld.copy(w.matrixWorld); mirror.onBeforeRender(r, s, wideCam);
+    // three's Refractor sets only its camera's matrixWorld; a scene hook calling getWorldPosition() rebuilds that from .matrix (identity), so keep .matrix the same
+    lens.camera.matrix.copy(wideCam.matrixWorld);
     sky.visible = false; lens.matrixWorld.copy(w.matrixWorld); lens.onBeforeRender(r, s, wideCam); sky.visible = true; // the sky ignores the clip and would fill the gaps
     ponds.forEach((q, i) => q.visible = on[i]);
   };

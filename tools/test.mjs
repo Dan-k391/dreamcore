@@ -114,6 +114,11 @@ for (const [name, hash, calls, tris] of [['gallery-pool', '23.2,14.2,3.14159,-0.
   const f = run(base + '?dev&bare#' + hash, `(() => { dev.hold = true; dev.step(60); const n = dev.info(); return { calls: n.calls, tris: n.triangles }; })()`);
   check(`${name} draws under ${calls} calls and ${tris / 1e6} M triangles a frame`, f.result?.calls < calls && f.result?.tris < tris, JSON.stringify(f.result));
 }
+// The pool's underwater picture is taken from the eye: a scene hook calling getWorldPosition() once reset three's Refractor camera
+// to the origin, and the arcade's water showed the sea under it instead of its basin.
+{ const f = run(base + '?dev&bare#10.5,-12,-1.5708,-0.05', `(() => { dev.hold = true; dev.step(3); const P = new dev.THREE.Vector3(), e = dev.camera.getWorldPosition(new dev.THREE.Vector3()); let d = -1;
+    dev.scene.traverse(o => { if (o.lens && o.rect.x < e.x && e.x < o.rect.z && o.rect.y < e.z && e.z < o.rect.w) d = P.setFromMatrixPosition(o.lens.camera.matrixWorld).distanceTo(e); }); return { d: +d.toFixed(3) }; })()`);
+  check('the arcade water\'s underwater picture is taken from the eye', f.result?.d >= 0 && f.result.d < .01, JSON.stringify(f.result)); }
 // What can be seen from where: js/seen.js must still cover every zone the eye can see from each zone (a new doorway or window needs tools/pvs.mjs run again).
 try { execFileSync(process.execPath, [fileURLToPath(new URL('./pvs.mjs', import.meta.url)), '--port', base.split(':')[2].slice(0, -1), '--check'], { encoding: 'utf8' }); check('js/seen.js covers what each zone can see (tools/pvs.mjs --check)', true); }
 catch (e) { check('js/seen.js covers what each zone can see (tools/pvs.mjs --check)', false, String(e.stdout || e.message).slice(0, 600)); }
