@@ -185,6 +185,18 @@ catch (e) { check('nothing pops in crossing an opening (tools/seams.mjs --pop --
 // No light through walls: from each zone, every shadow map holds every caster (three culls casters by the eye's layers; build.js turns them all on).
 try { execFileSync(process.execPath, [fileURLToPath(new URL('./leaks.mjs', import.meta.url)), '--port', base.split(':')[2].slice(0, -1), '--fast'], { encoding: 'utf8' }); check('every shadow map has every caster (tools/leaks.mjs --fast)', true); }
 catch (e) { check('every shadow map has every caster (tools/leaks.mjs --fast)', false, String(e.stdout || e.message).slice(0, 600)); }
+// A redraw asked for only by loose things copies the map's cached static casters back and draws just the loose things (physics.js):
+// after rings drift, a ball pit is jumped into and the field's ball is kicked, every map so redrawn equals the same map drawn in full.
+{ const f = run(base + '?dev&bare', `(async () => { const { renderer: r, scene, camera } = dev, ls = [...(await import('/js/lights.js')).lights, (await import('/js/sky.js')).sun], SM = r.shadowMap, out = [];
+    const read = () => ls.map(l => { const m = l.shadow.map, a = new Uint8Array(m.width * m.height * 4); r.readRenderTargetPixels(m, 0, 0, m.width, m.height, a); return a; });
+    for (const [x, z, yaw, keys] of [[26.5, -12, -1.75, ['KeyW']], [-28, 36, 1.5708, ['KeyW', 'Space']], [-8.2, 700, Math.PI, ['KeyW', 'ShiftLeft']]]) {
+      dev.hold = true; dev.reset(x, z, yaw, 0); dev.step(2); let n = 0; const inner = SM.render; SM.render = function (lights, ...a) { if (SM.needsUpdate) for (const l of lights) if (l.shadow.loose && !l.shadow.needsUpdate) n++; return inner.call(this, lights, ...a); };
+      dev.go(x, z, yaw, keys, 3); dev.step(300); SM.render = inner;
+      ls.forEach(l => l.shadow.loose = true); SM.needsUpdate = true; r.render(scene, camera); const A = read();
+      ls.forEach(l => l.shadow.needsUpdate = true); SM.needsUpdate = true; r.render(scene, camera); const B = read();
+      out.push({ n, diff: A.reduce((t, a, i) => { for (let k = 0; k < a.length; k++) if (a[k] !== B[i][k]) t++; return t; }, 0) }); }
+    return out; })()`);
+  check('shadow maps redrawn for loose things alone match the full redraw (night hall rings, ball pit, field ball)', f.result?.length === 3 && f.result.every(o => o.n > 0 && o.diff === 0) && !f.errors.length, JSON.stringify(f.result || f.errors)); }
 // Every zone seen.js lists is culled: its meshes have a layer bit of their own group, not layer 0 (drawn from everywhere). Bits once ran
 // out at 31 zones and the 32nd on stayed on layer 0 unnoticed.
 { const f = run(base + '?dev&bare', `(async () => { const seen = (await import('/js/seen.js')).default, bad = new Set(), got = new Set();

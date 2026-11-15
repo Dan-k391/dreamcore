@@ -19,12 +19,56 @@ const wakes = []; // [pond, x, z, size]: ripples the loose things leave this ste
 let ms = 0; // milliseconds the last frame's steps took
 
 // ---------- shadows: the shadow maps are drawn only when asked; a body that has moved a centimetre asks the lights that reach it ----------
+// It asks with shadow.loose, not needsUpdate: such a map is redrawn from its cache, a copy (colour and depth) of the map with the
+// loose things left out, taken whenever the map is drawn in full. Where a loose thing was when the map was last drawn and where it is
+// now, the cache is copied back; then the loose things are drawn over it. The depth test keeps the nearest caster whatever the order,
+// and a loose thing that did not move draws what is already there, so this is the full redraw to the bit, at the loose things' cost.
 const _p = new THREE.Vector3();
 function reshade(x, y, z, r) {
-  for (const l of lights) if (l.intensity > 0 && l.position.distanceTo(_p.set(x, y, z)) < l.distance + r) { l.shadow.needsUpdate = true; renderer.shadowMap.needsUpdate = true; }
+  for (const l of lights) if (l.intensity > 0 && l.position.distanceTo(_p.set(x, y, z)) < l.distance + r) { l.shadow.loose = true; renderer.shadowMap.needsUpdate = true; }
   if (sun.intensity > 0) { const c = sun.shadow.camera; _p.set(x, y, z).applyMatrix4(c.matrixWorldInverse);
-    if (_p.x > c.left - r && _p.x < c.right + r && _p.y > c.bottom - r && _p.y < c.top + r) { sun.shadow.needsUpdate = true; renderer.shadowMap.needsUpdate = true; } }
+    if (_p.x > c.left - r && _p.x < c.right + r && _p.y > c.bottom - r && _p.y < c.top + r) { sun.shadow.loose = true; renderer.shadowMap.needsUpdate = true; } }
 }
+const SM = renderer.shadowMap, drawShadows = SM.render, gl = renderer.getContext(), looseRoot = new THREE.Object3D(), cache = new Map(), noClear = () => {};
+const _s = new THREE.Sphere(), _m = new THREE.Matrix4(), _v = new THREE.Vector4();
+function blit(a, b, [x0, y0, x1, y1]) { // texels [x0, x1) x [y0, y1) of render target a into b, colour and depth; three's record of the bindings left as its own copies leave it
+  const st = renderer.state, P = renderer.properties;
+  st.bindFramebuffer(gl.READ_FRAMEBUFFER, P.get(a).__webglFramebuffer); st.bindFramebuffer(gl.DRAW_FRAMEBUFFER, P.get(b).__webglFramebuffer);
+  for (const bit of [gl.COLOR_BUFFER_BIT, gl.DEPTH_BUFFER_BIT]) gl.blitFramebuffer(x0, y0, x1, y1, x0, y0, x1, y1, bit, gl.NEAREST); // apart: one blit of both is ten times slower (ANGLE)
+  st.bindFramebuffer(gl.READ_FRAMEBUFFER, null); st.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+}
+function cover(o, s) { // the texels o can be drawn to in shadow s's map (its camera as last drawn): its bounding sphere's box, projected, rounded out
+  const W = s.map.width, H = s.map.height, c = s.camera;
+  if (!o.visible || o.count === 0) return null;
+  if (o.isInstancedMesh) { if (!o.boundingSphere) o.computeBoundingSphere(); _s.copy(o.boundingSphere); } else { if (!o.geometry.boundingSphere) o.geometry.computeBoundingSphere(); _s.copy(o.geometry.boundingSphere); }
+  _s.applyMatrix4(o.matrixWorld); _m.multiplyMatrices(c.projectionMatrix, c.matrixWorldInverse);
+  let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+  for (let k = 0; k < 8; k++) { _v.set(_s.center.x + (k & 1 ? _s.radius : -_s.radius), _s.center.y + (k & 2 ? _s.radius : -_s.radius), _s.center.z + (k & 4 ? _s.radius : -_s.radius), 1).applyMatrix4(_m);
+    if (_v.w < 1e-6) return [0, 0, W, H]; // reaches behind the lamp: anywhere
+    x0 = Math.min(x0, _v.x / _v.w); x1 = Math.max(x1, _v.x / _v.w); y0 = Math.min(y0, _v.y / _v.w); y1 = Math.max(y1, _v.y / _v.w); }
+  x0 = Math.max(0, Math.floor((x0 + 1) / 2 * W) - 1); y0 = Math.max(0, Math.floor((y0 + 1) / 2 * H) - 1); x1 = Math.min(W, Math.ceil((x1 + 1) / 2 * W) + 1); y1 = Math.min(H, Math.ceil((y1 + 1) / 2 * H) + 1);
+  return x0 < x1 && y0 < y1 ? [x0, y0, x1, y1] : null;
+}
+const pose = o => [o.visible, o.count, o.instanceMatrix?.version, ...o.matrixWorld.elements]; // what decides what o draws
+SM.render = function (ls, scene, cam) {
+  if (!SM.enabled || !SM.needsUpdate) return;
+  const target = renderer.getRenderTarget(), face = renderer.getActiveCubeFace(), level = renderer.getActiveMipmapLevel(); // the blits rebind: put back what three was drawing to
+  const all = ls.filter(l => l.shadow.needsUpdate || l.shadow.loose), full = all.filter(l => l.shadow.needsUpdate || !cache.has(l.shadow)), kids = looseRoot.children;
+  if (full.length) { // in full: everything but the loose things, kept
+    const shown = kids.map(m => m.visible); kids.forEach(m => m.visible = false);
+    for (const l of full) l.shadow.needsUpdate = true;
+    drawShadows.call(SM, ls, scene, cam); SM.needsUpdate = true;
+    kids.forEach((m, i) => m.visible = shown[i]);
+    for (const { shadow: s } of full) { let c = cache.get(s); if (!c) { cache.set(s, c = new THREE.WebGLRenderTarget(s.map.width, s.map.height, { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter })); renderer.initRenderTarget(c); } blit(s.map, c, [0, 0, s.map.width, s.map.height]); }
+  }
+  for (const l of all) { const s = l.shadow, was = s.drawn; s.drawn = new Map(kids.map(o => [o, [pose(o), cover(o, s)]]));
+    if (!full.includes(l)) { const u = [1e9, 1e9, -1e9, -1e9]; // one box round where what moved was and is: a blit costs more than its texels (ANGLE)
+      for (const [o, [p, r]] of s.drawn) { const [p0, r0] = was.get(o); if (p.some((v, i) => v !== p0[i])) for (const q of [r0, r]) if (q) { u[0] = Math.min(u[0], q[0]); u[1] = Math.min(u[1], q[1]); u[2] = Math.max(u[2], q[2]); u[3] = Math.max(u[3], q[3]); } }
+      if (u[0] < u[2]) blit(cache.get(s), s.map, u); }
+    s.needsUpdate = true; s.loose = false; }
+  const clear = renderer.clear; renderer.clear = noClear; // the loose things over the static depth just put back; outside the box they draw what is there
+  try { drawShadows.call(SM, ls, looseRoot, cam); } finally { renderer.clear = clear; renderer.setRenderTarget(target, face, level); }
+};
 
 // ---------- balls ----------
 const groups = loose.map(s => {
@@ -195,6 +239,7 @@ function fine(g) {
 }
 // Settle a freshly poured group before anyone sees it (the pit, at load): step it with no one near until it sleeps, at most `max` steps.
 function settle(g, max) { const nobody = { x: 1e9, z: 1e9 }; const cap = g.cap; g.cap = .8; for (let i = 0; i < max && g.awake; i++) stepGroup(g, nobody); g.cap = cap; while (g.bq >= 0) bury(g); draw(g, 1); g.moved = 0; } // gently: no ball is thrown out
+looseRoot.children = [...groups.flatMap(g => g.fine ? [g.mesh, g.fine] : [g.mesh]), ...rings]; // not their parent: only the list the loose pass walks
 for (const g of groups) { g.awake = g.n; if (g.pour) settle(g, g.pour); else g.awake = 0, g.still.fill(30); draw(g, 1); }
 
 // ---------- rings: float on the waves, pushed by the body, the water's flow and each other; bounce softly off the pool's sides ----------
