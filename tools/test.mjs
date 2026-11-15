@@ -133,6 +133,35 @@ for (const [name, hash, calls, tris] of [['gallery-pool', '23.2,14.2,3.14159,-0.
 { const f = run(base + '?dev&bare', `({ steps: dev.waterCheck(0.5, -5.3, 0, -0.95), column: dev.waterCheck(28, -4.5, 0, -0.7) })`);
   const s = f.result?.steps, c = f.result?.column;
   check('the pools\' lens and mirror pictures match direct renders (no seam, nothing piercing the water lost)', s && c && s.lens.seam < 4 && c.lens.mean < 5.3 && s.mirror.mean < 6 && c.mirror.mean < 6, JSON.stringify({ s, c })); }
+// Coplanar pools share only the mirror/lens pair of the current scene render. Compare the actual final pixels with
+// the original per-pool captures, at all quality levels and changing views without advancing the shader clock.
+{ const f = run(base + '?dev&bare', `(async () => {
+    const { waterViews } = await import('/js/water.js');
+    const r = dev.renderer, gl = r.getContext(), draw = r.render, cases = [
+      [10.5, 1.62, 10.8, -1.5708, 0], [23.2, 1.62, 14.2, Math.PI, -.08],
+      [43.6, 1.62, -13, 2.63, .22], [41.8, 5.22, -1.2, .6, -.3],
+      [8.3, .5, -12, -1.5708, -.4], [10.5, 2.46, .4, Math.PI, 1.1],
+      [16, -.122, -12, -1.5708, -.1], [16, -.12, -12, -1.5708, -.1], [16, -.118, -12, -1.5708, -.1]
+    ];
+    let captures = 0, maxCaptures = 0, maxMean = 0, maxDelta = 0, count = 0;
+    r.render = function (s, c) { if (s === dev.scene && c !== dev.camera) captures++; return draw.call(this, s, c); };
+    dev.reset(10.5, 10.8, -1.5708); dev.step(90);
+    try { for (let q = 0; q < 3; q++) {
+      dev.settings.s.q = q; dev.settings.load();
+      const size = r.getDrawingBufferSize(new dev.THREE.Vector2()), a = new Uint8Array(size.x * size.y * 4), b = new Uint8Array(a.length);
+      for (const v of cases) {
+        waterViews.reuse = false; dev.view(...v); gl.readPixels(0, 0, size.x, size.y, gl.RGBA, gl.UNSIGNED_BYTE, a);
+        captures = 0; waterViews.reuse = true; dev.view(...v); gl.readPixels(0, 0, size.x, size.y, gl.RGBA, gl.UNSIGNED_BYTE, b);
+        maxCaptures = Math.max(maxCaptures, captures); let sum = 0;
+        for (let i = 0; i < a.length; i++) { const d = Math.abs(a[i] - b[i]); sum += d; maxDelta = Math.max(maxDelta, d); }
+        maxMean = Math.max(maxMean, sum / a.length); count++;
+      }
+    } } finally { r.render = draw; waterViews.reuse = true; dev.settings.s.q = 2; dev.settings.load(); }
+    return { count, maxCaptures, maxMean, maxDelta };
+  })()`);
+  check('shared pool pictures match per-pool captures across qualities and same-clock camera changes', f.result?.count === 27 && f.result.maxMean < .05 && f.result.maxDelta <= 8 && !f.errors.length, JSON.stringify(f));
+  check('at most one mirror/lens pair is rendered per main scene render', f.result?.maxCaptures === 2 && !f.errors.length, JSON.stringify(f.result)); }
+
 // No two faces of different materials in one plane (they z-fight, the flicker on door frames and passages): tools/seams.mjs --scan, every sky's places.
 try { execFileSync(process.execPath, [fileURLToPath(new URL('./seams.mjs', import.meta.url)), '--port', base.split(':')[2].slice(0, -1), '--scan'], { encoding: 'utf8' }); check('no coplanar overlapping faces (tools/seams.mjs --scan)', true); }
 catch (e) { check('no coplanar overlapping faces (tools/seams.mjs --scan)', false, String(e.stdout || e.message).slice(0, 600)); }

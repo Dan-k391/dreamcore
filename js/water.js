@@ -26,6 +26,17 @@ import './level.js';
 // shows columns and steps only from above, is not used for them.
 // Where the water is thin against a step or wall it fades out, so the shoreline is soft instead of a hard cut.
 const OVER = 1.45;
+// All pools are on WY. With every pool hidden, their wide mirror/lens cameras see the same pictures.
+// Reuse the first pair only within this scene render; a second render at the same time may have moved the
+// camera, changed the lights, or changed the scene (dev.waterCheck does all three). Keep the original path
+// available for diagnostic A/B captures and timings, without changing any quality or simulation settings.
+const waterViews = { reuse: true };
+let sharedView;
+const beforeScene = scene.onBeforeRender;
+scene.onBeforeRender = function (r, s, c, ...args) {
+  if (c === camera && !s.overrideMaterial) sharedView = null;
+  beforeScene.call(this, r, s, c, ...args);
+};
 const uTest = { value: 0 }; // ?dev measurement (dev.waterCheck): 1 the lens picture alone, 2 the mirror alone, both with the surface flat; 3 a mask
 const DROPS = 8; // disturbances one step takes: the player's and the loose things'
 const simMat = new THREE.ShaderMaterial({ uniforms: { tSim: { value: null }, uPx: { value: null }, uDrop: { value: Array.from({ length: DROPS }, () => V(0, 0, 0)) } }, vertexShader: quadVS,
@@ -121,9 +132,17 @@ const ponds = pools.map(([x1, z1, x2, z2, floor, zid, seen, scatter]) => {
   w.rotation.x = -Math.PI / 2; w.position.set((x1 + x2) / 2, WY, (z1 + z2) / 2); scene.add(w);
   mirror.matrixAutoUpdate = lens.matrixAutoUpdate = false;
   const wideCam = new THREE.PerspectiveCamera();
+  const view = { mirror: mirror.getRenderTarget().texture, under: under.texture, depth: under.depthTexture, projection: lens.camera.projectionMatrix, lens };
   w.onBeforeRender = (r, s, c) => {
     U.uMain.value = +(c === camera);
     if (c !== camera || s.overrideMaterial) return; // only the main view makes the two pictures (not the AO pass's normals, drawn from the same camera)
+    // Three skips a plane's captures from its back side. Keep each pool's original targets there rather
+    // than share a picture that was not redrawn (also covers noclip and near-coplanar diagnostic views).
+    const reuse = waterViews.reuse && c.matrixWorld.elements[13] > WY + .001;
+    const use = reuse && sharedView ? sharedView : view;
+    U.tMirror.value = use.mirror; U.tUnder.value = use.under; U.tUnderZ.value = use.depth; U.uLens.value = use.projection;
+    w.lens = use.lens; // the diagnostic camera belongs to the picture actually sampled, including a reused one
+    if (reuse && sharedView) return;
     wideCam.copy(c); wideCam.projectionMatrix.elements[0] /= OVER; wideCam.projectionMatrix.elements[5] /= OVER; wideCam.projectionMatrixInverse.copy(wideCam.projectionMatrix).invert();
     const on = ponds.map(q => q.visible); // every pool is at the same level, so none belongs in another's mirror or underwater picture
     for (const q of ponds) q.visible = false;
@@ -132,6 +151,7 @@ const ponds = pools.map(([x1, z1, x2, z2, floor, zid, seen, scatter]) => {
     lens.camera.matrix.copy(wideCam.matrixWorld);
     sky.visible = false; lens.matrixWorld.copy(w.matrixWorld); lens.onBeforeRender(r, s, wideCam); sky.visible = true; // the sky ignores the clip and would fill the gaps
     ponds.forEach((q, i) => q.visible = on[i]);
+    sharedView = view;
   };
   return w;
 });
@@ -176,4 +196,4 @@ function resetWater() { // ?dev only (dev.reset): every pool flat and still, as 
   renderer.setRenderTarget(t); renderer.setClearColor(c, a);
 }
 
-export { ponds, ripple, resetWater, uTest };
+export { ponds, ripple, resetWater, uTest, waterViews };

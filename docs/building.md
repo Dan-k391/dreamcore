@@ -54,3 +54,9 @@ Used by `js/player.js` and `js/physics.js`. A solid blocks the body where it ove
 - Nine shadow-casting lamps are shared by every fixture in the level and follow the player; a place registers fixtures with `lamp()` or `lit()` and they cost nothing more.
 - Each zone's ambient light is baked from a probe at load; a material gets it by being registered with the zone (`M(zone, ...)` or `P(zone, ...)`).
 - A lit material has 6 texture units to spend: 16 minus the 9 lamp shadow maps and the sun's.
+
+## Pool pictures
+
+Every pool in `water.js` lies on the same horizontal plane, `WY`. Its wide reflection and underwater cameras depend on that plane and the viewing camera, not the basin's position or floor. All pools are hidden during either capture. The first pool drawn therefore supplies both pictures (and the underwater depth/projection) to the others in that scene render. Waves, floor tracing, plans and shoreline shading remain per pool.
+
+The cache resets on every non-override render from the main camera, including renders at an unchanged shader time; it never carries pictures across frames or camera changes. At or below the plane (within 1 mm), sharing is bypassed: Three may skip a back-facing capture, so its old per-pool pictures must be retained. A pool at another height or orientation must use a separate capture group. `waterViews.reuse = false` (exported by `water.js`) restores the original per-pool captures for diagnostic A/B pictures and timings.
