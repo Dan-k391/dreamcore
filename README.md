@@ -30,4 +30,7 @@ A calm first-person walk through empty, dreamlike places: tiled pools, a hotel c
 node tools/serve.mjs 8200
 ```
 
-Then open http://127.0.0.1:8200/. How the project is built and tested: [AGENTS.md](AGENTS.md) and [docs/](docs/).
+Then open http://127.0.0.1:8200/.
+
+Or open `dreamcore.html` straight from disk: the whole game in one file, no server or network needed. Rebuild it after changing code with `node tools/bundle.mjs`.
+ How the project is built and tested: [AGENTS.md](AGENTS.md) and [docs/](docs/).

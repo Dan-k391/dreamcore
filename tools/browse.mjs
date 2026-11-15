@@ -7,7 +7,7 @@
 //
 // --eval / --eval-file: an expression (may be async, may use await) evaluated after the page is ready; its value is printed as JSON.
 // The page counts as ready when window.dev.ready is true (the game sets it in ?dev mode once the level is built), else after --settle ms.
-// Output: one JSON object {result, errors, ms}. Exit code 1 if the page threw, logged an error, or the expression failed.
+// Output: one JSON object {result, errors, ready, ms, requests} (requests: every URL the page asked for, data: and blob: left out). Exit code 1 if the page threw, logged an error, or the expression failed.
 import { spawn, execSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -33,12 +33,13 @@ let port; // the browser writes the port it picked into its profile folder
 for (let i = 0; i < 100 && !port; i++) { await sleep(100); try { port = +readFileSync(join(profile, 'DevToolsActivePort'), 'utf8').split('\n')[0]; } catch {} }
 if (!port) throw new Error('browser did not start');
 const page = (await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()).find(t => t.type === 'page');
-const ws = new WebSocket(page.webSocketDebuggerUrl), pending = new Map(), errors = [];
+const ws = new WebSocket(page.webSocketDebuggerUrl), pending = new Map(), errors = [], requests = [];
 let id = 0;
 await new Promise((ok, bad) => { ws.onopen = ok; ws.onerror = bad; });
 const send = (method, params = {}) => new Promise((ok, bad) => { pending.set(++id, [ok, bad]); ws.send(JSON.stringify({ id, method, params })); });
 ws.onmessage = m => { const d = JSON.parse(m.data);
   if (d.id) { const [ok, bad] = pending.get(d.id); pending.delete(d.id); d.error ? bad(new Error(d.error.message)) : ok(d.result); }
+  else if (d.method === 'Network.requestWillBeSent' && !/^(data|blob):/.test(d.params.request.url)) requests.push(d.params.request.url);
   else if (d.method === 'Runtime.exceptionThrown') errors.push(d.params.exceptionDetails.exception?.description || d.params.exceptionDetails.text);
   else if (d.method === 'Runtime.consoleAPICalled' && ['error', 'assert'].includes(d.params.type)) errors.push(d.params.args.map(a => a.value ?? a.description).join(' '));
   else if (d.method === 'Log.entryAdded' && d.params.entry.level === 'error' && !/favicon/.test(d.params.entry.url || '')) errors.push(d.params.entry.text + ' ' + (d.params.entry.url || '')); };
@@ -47,7 +48,7 @@ const run = async (expression, timeout = wait) => { // evaluate in the page; awa
   if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description || r.exceptionDetails.text);
   return r.result.value; };
 
-await send('Runtime.enable'); await send('Log.enable'); await send('Page.enable');
+await send('Runtime.enable'); await send('Log.enable'); await send('Page.enable'); await send('Network.enable');
 await send('Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: 1, mobile: false });
 await send('Page.navigate', { url });
 let ready = false, result, failed = false;
@@ -55,5 +56,5 @@ for (const end = Date.now() + wait; Date.now() < end && !ready && !errors.length
 if (!ready) await sleep(settle); // not the game's dev mode: just give the page time
 try { if (expr) result = await run(expr); } catch (e) { errors.push(String(e.message || e)); failed = true; }
 if (shot) writeFileSync(shot, Buffer.from((await send('Page.captureScreenshot', { format: 'png' })).data, 'base64'));
-console.log(JSON.stringify({ result, errors, ready, ms: Date.now() - t0 }, null, 1));
+console.log(JSON.stringify({ result, errors, ready, ms: Date.now() - t0, requests }, null, 1));
 quit(errors.length || failed ? 1 : 0);

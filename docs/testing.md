@@ -28,7 +28,11 @@ All tools are dependency-free (Node 22; the two image tools use Python 3 with Pi
 
 `node tools/browse.mjs --url "http://127.0.0.1:<port>/?dev#x,z,yaw,pitch" [--eval "<js>" | --eval-file f.js] [--shot out.png] [--size 1280x720] [--wait ms] [--settle ms]`
 
-Loads the page in a private headless browser on the real GPU, waits for `dev.ready`, evaluates the expression (it may use `await`), saves a screenshot and prints `{result, errors, ready, ms}`. Exits non-zero on any page error, console error or failed assert. Each run starts and closes its own browser, so runs can overlap.
+Loads the page in a private headless browser on the real GPU, waits for `dev.ready`, evaluates the expression (it may use `await`), saves a screenshot and prints `{result, errors, ready, ms, requests}` (requests: every URL the page asked for, `data:` and `blob:` left out). Exits non-zero on any page error, console error or failed assert. Each run starts and closes its own browser, so runs can overlap.
+
+## `tools/bundle.mjs`
+
+`node tools/bundle.mjs [out]` writes `dreamcore.html` (or `out`): `index.html` and every module reachable from `js/main.js` (the vendored three.js and the dev-only showroom and yard included), each embedded as a string and loaded through a Blob URL behind a generated import map, with every import specifier rewritten to `dreamcore/<path>`. It opens from `file://` with no request but itself; `?dev`, `?dev&bare` and `#x,z,yaw,pitch` work there as served. `test.mjs` checks it is current, has no URL outside comments (bar the XHTML namespace three passes to `createElementNS`) and none to a CDN, and loads from `file://` with no errors or other requests. `browse.mjs` lists the page's requests (`requests`) for this.
 
 ## `tools/test.mjs`
 

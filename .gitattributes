@@ -1,0 +1,3 @@
+# kept byte for byte: the vendored three.js as downloaded, the generated single file as tools/bundle.mjs writes it
+vendor/** -text
+dreamcore.html -text

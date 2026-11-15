@@ -2,7 +2,7 @@
 // and checks where you end up. One line per check; exit code 1 if any fails.
 //   node tools/test.mjs [--port 8200] [--all]   (default prints only failed checks and a final count; --all prints every line)
 import { execFileSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const argv = process.argv.slice(2), i = argv.indexOf('--port'), base = `http://127.0.0.1:${i < 0 ? 8200 : argv[i + 1]}/`;
 const browse = fileURLToPath(new URL('./browse.mjs', import.meta.url));
@@ -253,6 +253,24 @@ catch (e) { check('every shadow map has every caster (tools/leaks.mjs --fast)', 
     Object.assign(r, { jf, je, pk }); return r; })()`, '--wait', '300000');
   const r = f.result || {};
   check('music: every zone names its piece, a neighbour crossfade holds its level with no click, nothing clips', r.bad?.length === 0 && r.law < 1.5 && r.jf <= Math.max(r.je * 1.5, .03) && r.pk < .9 && !f.errors.length, JSON.stringify(f).slice(0, 600)); }
+
+// The single file (tools/bundle.mjs -> dreamcore.html): current with the code, no URL outside a comment or the licence but
+// createElementNS's XHTML namespace (a name, never fetched), no CDN at all, and from file:// it reaches dev.ready with no console
+// error and no request but itself. The served game asks nothing of any host but its own.
+{ const { bundle } = await import('./bundle.mjs'), { readFileSync, existsSync } = await import('node:fs'), file = fileURLToPath(new URL('../dreamcore.html', import.meta.url));
+  const have = existsSync(file) ? readFileSync(file, 'utf8').replace(/\r\n/g, '\n') : '';
+  check('dreamcore.html is current (rebuild: node tools/bundle.mjs)', have === bundle());
+  const a = have.indexOf('const src = ') + 12, b = have.indexOf(', imports = {};'), bad = [];
+  let parts = []; try { parts = [have.slice(0, a) + have.slice(b), ...Object.values(JSON.parse(have.slice(a, b)))]; } catch { bad.push('module sources unreadable'); }
+  for (const p of parts) for (const m of p.matchAll(/https?:\/\/[^\s'"`)]*/g)) { const pre = p.slice(p.lastIndexOf('\n', m.index) + 1, m.index), before = p.slice(0, m.index);
+    const comment = /\/\/|^\s*\*/.test(pre) || before.lastIndexOf('/*') > before.lastIndexOf('*/') || before.lastIndexOf('<!--') > before.lastIndexOf('-->');
+    if (!comment && m[0] !== 'http://www.w3.org/1999/xhtml') bad.push(m[0]); }
+  if (/jsdelivr|unpkg|cdnjs|esm\.sh|skypack|jspm|googleapis/i.test(have)) bad.push('a CDN host');
+  check('dreamcore.html has no URL outside comments and none to a CDN', !bad.length, bad.join(' ').slice(0, 600));
+  const f = run(pathToFileURL(file).href + '?dev&bare', '({ ready: dev.ready, zone: dev.state().zone })');
+  check('dreamcore.html from file:// reaches dev.ready with no console errors and no requests', f.result?.ready === true && !f.errors.length && f.requests?.length === 1 && f.requests[0].startsWith(pathToFileURL(file).href), JSON.stringify(f).slice(0, 600));
+  const other = (dev.requests || []).filter(u => !u.startsWith(base));
+  check('the served game requests nothing from any other host', dev.requests?.length > 0 && !other.length, other.join(' ').slice(0, 600)); }
 
 // Production address: no window.dev, the start overlay is up once the level is built.
 const prod = run(base, `await new Promise(ok => { const t = setInterval(() => /click to enter/.test(document.getElementById('s').textContent) && (clearInterval(t), ok()), 100); }),

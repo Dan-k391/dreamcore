@@ -9,6 +9,7 @@
 - `js/zones/<place>.js`: everything about one place: its zones, materials, geometry, floors, lights, props. `js/level.js` imports them in order.
 - `js/sky.js`, `water.js`, `lights.js`, `post.js`, `audio.js`, `player.js`, `physics.js`, `dev.js`, `main.js`.
 - Imports only point back to earlier files, and places never import each other.
+- `vendor/three/`: the three.js r170 files the game imports (the import map in `index.html` points there; no CDN). After changing any code, run `node tools/bundle.mjs` to rebuild `dreamcore.html`, the single-file copy; `tools/test.mjs` fails while it is stale. Imports must stay plain strings (`import('./x.js')`, not a computed path) and modules must not use `import.meta`; the bundler refuses both.
 
 ## Adding a place
 
