@@ -155,6 +155,24 @@ catch (e) { check('every shadow map has every caster (tools/leaks.mjs --fast)', 
     return { bad: [...bad], none: Object.keys(seen).filter(id => !got.has(id)) }; })()`);
   check('every zone in js/seen.js is culled (its meshes on a layer bit, not drawn from everywhere)', f.result && !f.result.bad.length && !f.result.none.length, JSON.stringify(f.result)); }
 
+// Noclip (V): through the soft play's east wall (walking stops at x -19.37, softWall above), up with nothing under you and staying there,
+// about 12 m/s (30 running); turned off inside a solid it puts you back where it was turned on, on the floor; off in the air over a floor
+// you land; above a ceiling it puts you back too. Then walking is as before: the same walk as softWall, from the same start, ends at the same wall.
+{ const f = run(base + '?dev', `(async () => { const P = Math.PI, v = () => { dev.key('KeyV', true); dev.step(1); dev.key('KeyV', false); dev.step(1); }, s = () => dev.state(), r = {};
+  const fly = (keys, n) => { for (const c of keys) dev.key(c, true); dev.step(n); const a = s(); dev.step(30); const b = s(); for (const c of keys) dev.key(c, false); dev.step(30); return [a, b]; };
+  const speed = ([a, b]) => +(Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z) * 2).toFixed(1);
+  dev.reset(-30, 37, -P / 2); dev.step(10); v(); r.walk = speed(fly(['KeyW'], 60)); r.through = s().x; r.run = speed(fly(['KeyW', 'ShiftLeft'], 60));
+  dev.reset(-30, 37, -P / 2); dev.step(10); v(); fly(['Space'], 30); const hi = s(); dev.step(120); r.rise = +hi.y.toFixed(1); r.hover = +(s().y - hi.y).toFixed(3); v(); dev.step(30); const g = s();
+  r.roofOff = Math.hypot(g.x + 30, g.z - 37) < .05 && Math.abs(g.y) < .02 && !g.air; // above the soft play's ceiling: back to the start, not onto its roof
+  const { colliders } = await import('/js/build.js'), c = colliders.find(c => !c[6] && c[4] <= 0 && c[5] > 2 && c[2] - c[0] > 1 && c[3] - c[1] > 1 && c[0] > -30 && c[2] < 30 && c[1] > -30 && c[3] < 40);
+  dev.reset(-30, 37, -P / 2); dev.step(10); const s0 = s(); v(); dev.camera.position.x = (c[0] + c[2]) / 2; dev.camera.position.z = (c[1] + c[3]) / 2; dev.step(5); v(); dev.step(30); const e = s();
+  r.wallOff = [e.x - s0.x, e.y - s0.y, e.z - s0.z].every(d => Math.abs(d) < .05) && !e.air;
+  dev.reset(-30, 37, -P / 2); dev.step(10); v(); dev.key('Space', true); dev.step(12); dev.key('Space', false); dev.step(20); const up = s(); v(); dev.step(150); const l = s(); r.airOff = up.y > 1.5 && Math.abs(l.y - s0.y) < .02 && !l.air && Math.hypot(l.x - up.x, l.z - up.z) < .05;
+  dev.reset(-30, 37, -P / 2); dev.step(10); v(); v(); r.after = dev.go(-30, 37, -P / 2, ['KeyW', 'ShiftLeft'], 3).x;
+  return r; })()`);
+  const r = f.result || {}, ok = r.through > -18.5 && Math.abs(r.walk - 12) < 1 && Math.abs(r.run - 30) < 2 && r.rise > 3 && Math.abs(r.hover) < .01 && r.roofOff && r.wallOff && r.airOff && Math.abs(r.after + 19.37) < .35;
+  check('noclip flies through walls and up at 12 / 30 m/s, and turning it off leaves you standing somewhere sane', ok && !f.errors.length, JSON.stringify(f)); }
+
 // Every registered ladder (plain ?dev, so the yard's dry one too), from the water: forward facing it, forward at 0.9 rad off it, jump alone,
 // run; from the deck: walk off toward the water, and back down facing it. Each must arrive (on the deck, or standing in the water) with the
 // eye never moving more than 4 cm in a frame (the climb itself is 3). Then, at the bottom, off it turned away, left and right, and back up.
