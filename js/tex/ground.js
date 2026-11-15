@@ -102,3 +102,11 @@ mat('sand', 'sand', { detail: .35, macro: .1 }); // no vary: a turned copy would
 mat('mulch', 'mulch', { detail: .2, macro: .1, vary: 1 });
 mat('rubberCrumb', 'rubberCrumb', { color: 0xa8402f, detail: .2, macro: .06, vary: 1 });
 mat('grassGround', 'grassGround', { detail: .2, macro: .3 }); // no vary: blending two copies halves the grain's contrast
+
+set('fieldTurf', 4, 512, 512, .94, .18, `
+  float bed = fbm(uv * 8., vec2(8), 3, 113), roots = vn(uv * 150., vec2(150), 127), fine = vn(uv * 380., vec2(380), 139);
+  c = mix(vec3(.04, .10, .015), vec3(.067, .17, .024), ss(.18, .85, bed)) * (.86 + .24 * roots + .06 * fine);
+  float thatch = ss(.75, .94, vn(uv * 110., vec2(110), 149)) * ss(.62, .8, bed);
+  c = mix(c, vec3(.065, .077, .021), thatch * .18);
+  h = 1.6 * bed + .7 * roots + .2 * fine; r = .94; t = 1.;`);
+mat('fieldTurf', 'fieldTurf', { detail: .12, macro: .18, grime: .12 });

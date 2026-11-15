@@ -74,6 +74,12 @@ Lengths in mm are true sizes on the surface. No block makes an edge sharper than
 - `floor`: the height its dirt gathers at (default 0). `tri: 1`: triplanar in world space. `uv: [u, v]`: metres per unit of the geometry's own UVs, with `add(mat, geo, true)`. `swap: 1`: turn the grain 90 degrees.
 - Any `MeshStandardMaterial` property, except maps: a `*Map` option throws (a library material packs its own maps into the 6 free texture units).
 
+## Pool optics
+
+Pool optics share a seven-component, gently phase-bent wave field in `causticsGLSL`. Its analytic slopes drive the surface normal; its curvature supplies signed weak-focusing light redistribution on submerged tiles and the still-plan fallback. Sunlight uses the refracted sun direction; indoor diffuse fixtures use an overhead approximation. The simulation's curvature is sampled at the same projected surface position, without changing its physics. Pixel-footprint filtering and depth-dependent spreading suppress unresolved ripples; bounded focusing never creates negative light. Above-water reflected shimmer uses the same low-contrast field, not a separate bright cellular pattern.
+
+The water keeps absorption `(.42, .085, .06)`, scatter extinction `.3`, every basin's scatter colour, the air/water refraction ratio `.75`, and Fresnel `.02 + .98 * (1 - cosine)^5`. Reflection retains its four-tap capture lookup with a narrower `.0007` UV radius. No extra render pass, texture or material sampler is required. See `tools/water-optics.js` for GPU field, colour-domain and sampler checks; the regression suite runs it alongside capture equivalence.
+
 ## Limits
 
 - 16 texture units per material, 10 of them taken by shadow maps: a library material uses 4 (its two maps, the shared detail, env), pool tiles 5.

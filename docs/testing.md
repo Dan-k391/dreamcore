@@ -38,7 +38,7 @@ Loads the page in a private headless browser on the real GPU, waits for `dev.rea
 
 `node tools/test.mjs [--port 8200] [--all]`
 
-The regression suite: the page loads with and without `?dev` with no console errors or failed asserts; walks between places land where they should; solids, the ball pit, rings and loose balls behave; physics stays within its cost. Prints only failed checks and a final `N passed, M failed`; `--all` prints every line. Run it before reporting; it must be green. A new behaviour worth keeping gets a small check here.
+The regression suite: the page loads with and without `?dev` with no console errors or failed asserts; walks between places land where they should; solids, the ball pit, rings and loose balls behave; physics stays within its cost. Prints only failed checks and a final `N passed, M failed`; `--all` prints every line. Run it before reporting; it must be green. A new behaviour worth keeping gets a small check here. The stationary grass viewport check (`tools/grass-viewport.js`) widens the window without moving or advancing time and compares its rendered pixels with a freshly rebuilt view; it catches projection changes missing from the patch cache.
 
 ## `tools/shots.mjs`
 
@@ -70,6 +70,7 @@ A contact sheet: the images in a grid, each labelled with its file name.
 
 - `node tools/perf.mjs [--port 8200]`: for every view in `tools/views.json` at the default size, median frame time (ms), draw calls, triangles, programs, textures, load time to `dev.ready` (ms) and zone/sky; ends with the median load over all pages.
 - `node tools/corners.mjs <outDir> [--port 8200] [--size 400x250] [--flag-only]`: every inside corner of every room (found from the solids), photographed twice (wall-floor and wall-ceiling joins), and the photos with a thin bright line at the joint listed (`tools/corners.py`, `--show` marks them in red). Light leaking through a joint shows here. Known, real lines: the glasshouse's window bars, the laundromat's ceiling grid, the mall's clothes rail.
+- The seam tools classify `InstancedBufferGeometry` with `InstancedMesh`, outside their CPU-face scan and opaque-material override. Shader-positioned instance templates are not world-space faces: scanning the three grass templates at the origin produces six fictitious overlaps. This does not change the 1 mm coplanarity tolerance or ordinary mesh coverage; instance placement/coverage still needs its own rendered checks.
 - `node tools/leaks.mjs [--port 8200] [--every n] [--only id,id] [--fast]`: light through walls. Walks the walk list (tools/walk.mjs) and at each point compares four views with the same views after every shadow map is drawn afresh with every layer on; a view brighter as is leaks, and the light to blame is named. `--fast` (in test.mjs) checks the cause instead: from each zone, every shadow map read back against the same map with every layer on.
 - `node tools/browse.mjs --url "http://127.0.0.1:<port>/?dev&bare#3.8,50,0,0" --eval-file tools/shadowcost.js`: shadow-map redraws and their triangles over a run through the hotel and the backrooms.
 - Screenshots go under `screenshots/` (ignored by git). The lead's stage photos and the audit photos live there too.

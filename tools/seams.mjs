@@ -27,7 +27,7 @@ async function page(o) {
   const { scene, renderer: r, zones, camera } = dev, zl = Object.values(zones), out = {};
   dev.hold = true;
   const zoneAt = (x, z) => zl.find(q => x > q.box[0] && x < q.box[2] && z > q.box[1] && z < q.box[3])?.id || '-';
-  const meshes = [], other = []; scene.traverse(o => { if (o.isMesh && !o.isInstancedMesh) meshes.push(o); else if (o.isMesh || o.isLine || o.isPoints || o.isSprite) other.push(o); }); // other: hidden while painting; meshes: every sky's, setSky shows its own
+  const meshes = [], other = []; scene.traverse(o => { if (o.isMesh && !o.isInstancedMesh && !o.geometry?.isInstancedBufferGeometry) meshes.push(o); else if (o.isMesh || o.isLine || o.isPoints || o.isSprite) other.push(o); }); // other: hidden while painting; meshes: every sky's, setSky shows its own
   const see = m => !Array.isArray(m) && !(m.transparent || m.alphaTest > 0 || m.transmission > 0 || m.opacity < 1 || m.depthWrite === false || m.colorWrite === false || m.visible === false) && !m.uniforms?.tMirror && (m.isMeshStandardMaterial || m.isMeshBasicMaterial || m.isMeshLambertMaterial || m.isMeshPhongMaterial);
   const opaque = meshes.filter(o => see(o.material) && !B.seeThrough.includes(o));
   const mats = [...new Set(meshes.map(o => o.material).filter(m => !Array.isArray(m)))];

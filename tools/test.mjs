@@ -162,6 +162,14 @@ for (const [name, hash, calls, tris] of [['gallery-pool', '23.2,14.2,3.14159,-0.
   check('shared pool pictures match per-pool captures across qualities and same-clock camera changes', f.result?.count === 27 && f.result.maxMean < .05 && f.result.maxDelta <= 8 && !f.errors.length, JSON.stringify(f));
   check('at most one mirror/lens pair is rendered per main scene render', f.result?.maxCaptures === 2 && !f.errors.length, JSON.stringify(f.result)); }
 
+{ const f = run(base + '?dev&bare', `(async () => (await import('/tools/water-optics.js')).waterOptics(dev))()`);
+  check('pool focusing is bounded, balanced, animated, depth-filtered and responds to disturbances', f.result && Object.values(f.result.field).every(Boolean) && !f.errors.length, JSON.stringify(f.result || f));
+  check('all four pool palettes retain finite nonnegative water and visible caustic modulation', f.result?.rows.length === 4 && f.result.rows.every(row => row.waterPixels > 10000 && row.nonfinite === 0 && row.negative === 0 && row.meanLinearModulation > 1e-5) && !f.errors.length, JSON.stringify(f.result?.rows || f));
+  check('water optics stays within sixteen active samplers without GL errors', f.result?.maxSamplers <= 16 && f.result.glError === 0 && !f.errors.length, JSON.stringify(f.result && { samplers: f.result.maxSamplers, glError: f.result.glError })); }
+
+{ const f = run(base + '?dev&bare', `(async () => (await import('/tools/grass-viewport.js')).grassViewport(dev))()`);
+  check('stationary narrow-to-wide resize shows the same grass as a freshly rebuilt view', f.result?.samePose && f.result.width === 1280 && f.result.height === 720 && f.result.maxDelta <= 1 && f.result.meanDelta <= .01 && f.result.glError === 0 && !f.errors.length, JSON.stringify(f.result || f)); }
+
 // No two faces of different materials in one plane (they z-fight, the flicker on door frames and passages): tools/seams.mjs --scan, every sky's places.
 try { execFileSync(process.execPath, [fileURLToPath(new URL('./seams.mjs', import.meta.url)), '--port', base.split(':')[2].slice(0, -1), '--scan'], { encoding: 'utf8' }); check('no coplanar overlapping faces (tools/seams.mjs --scan)', true); }
 catch (e) { check('no coplanar overlapping faces (tools/seams.mjs --scan)', false, String(e.stdout || e.message).slice(0, 600)); }

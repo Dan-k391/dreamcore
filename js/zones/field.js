@@ -1,6 +1,6 @@
 // The field on the hills, at the end of the hotel hallway's dark passage.
 import * as THREE from 'three';
-import { scene, camera, uTime, sunDir, dry, zones, defZone } from '../core.js';
+import { scene, uTime, sunDir, dry, zones, defZone } from '../core.js';
 import { hash, noise, fbm, ss, makeTex, concrete } from '../tex.js';
 import { M, P, wallMat, paintedBall } from '../mat.js';
 import { colliders, flats, seeThrough, skyOnly, onSun, loose, add, block, box } from '../build.js';
@@ -15,12 +15,16 @@ defZone('fD', { music: 'field', ...dry, step: 'carpet', sky: 'hill', air: 1, grp
 // Rolling ground, written once for the walking floor and once for the shaders that plant grass on it. Flat at the door and at the playground, rising to a rim all round.
 const hill = (x, z) => { const h = (3 + 2.2 * Math.sin(x * .07 + 1) * Math.cos(z * .06) + 1.4 * Math.sin(x * .13 + z * .11) + .5 * Math.sin(x * .31) * Math.cos(z * .27) + 12 * ss(40, 62, Math.hypot(x - 4, z - 712)) ** 2) * ss(5, 22, Math.hypot(x - 3.8, z - 665.6));
   return 3.2 + (h - 3.2) * ss(10, 18, Math.hypot(x + 18, z - 705)); };
-const hillGLSL = `float hillH(vec2 p) { float r = smoothstep(40., 62., distance(p, vec2(4., 712.)));
-  float h = (3. + 2.2 * sin(p.x * .07 + 1.) * cos(p.y * .06) + 1.4 * sin(p.x * .13 + p.y * .11) + .5 * sin(p.x * .31) * cos(p.y * .27) + 12. * r * r) * smoothstep(5., 22., distance(p, vec2(3.8, 665.6)));
-  return 3.2 + (h - 3.2) * smoothstep(10., 18., distance(p, vec2(-18., 705.))); }`;
-let grass;
-{ const z = zones.fD, W = wallMat(z, 0xf4f1ea), G = M(z, 'grassGround'), stone = P(z, { ...concrete, color: 0xd8d2c4 }),
+const grass = [];
+let updateGrass;
+{ const z = zones.fD, W = wallMat(z, 0xf4f1ea), G = M(z, 'fieldTurf'), stone = P(z, { ...concrete, color: 0xd8d2c4 }),
     red = P(z, { color: 0xc8322c, roughness: .35 }), blue = P(z, { color: 0x2f6fc0, roughness: .35 }), y0 = 3.2;
+  const groundCompile = G.onBeforeCompile, groundProgram = G.customProgramCacheKey();
+  G.onBeforeCompile = function (shader, renderer) {
+    groundCompile.call(this, shader, renderer);
+    shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>', 'outgoingLight = reflectedLight.directDiffuse + reflectedLight.indirectDiffuse + totalEmissiveRadiance;\n#include <opaque_fragment>');
+  };
+  G.customProgramCacheKey = () => groundProgram + '|field-turf-diffuse';
   const g = new THREE.PlaneGeometry(180, 180, 240, 240).rotateX(-Math.PI / 2).translate(4, 0, 712), q = g.attributes.position;
   for (let i = 0; i < q.count; i++) { const x = q.getX(i), zz = q.getZ(i); q.setY(i, zz < 665.2 && Math.abs(x - 3.8) < 3 ? -5 : hill(x, zz)); g.attributes.uv.setXY(i, x, zz); } // sunk under the passage behind the end wall: it has its own floor
   g.computeVertexNormals(); const land = new THREE.Mesh(g, G); land.castShadow = land.receiveShadow = true; scene.add(land);
@@ -51,32 +55,133 @@ let grass;
   doorway(W, red, 14, hill(14, 716), 716, .5); doorway(W, blue, -30, hill(-30, 728), 728, -.9, 1.2);
   { const x = -8.2, zc = 702.5, r = .17; // a rubber ball left on the grass by the playground: red, with a darker seam round it each way
     loose.push({ mesh: paintedBall(z, r, (a, b, c) => Math.abs(b) < .045 || Math.abs(a) < .045 ? 0x7a1a14 : 0xc8322c, { roughness: .55 }), r, pos: [x, hill(x, zc) + r, zc], region: [-44, 665.7, 52, 757], bounce: .45, grip: 1.3, spin: 1, solid: 1, slope: 1 }); }
-  // Grass: blades planted in a square that follows the camera (each blade draws its nearest copy), so it is dense underfoot without covering the whole field.
-  const N = 430, seeds = new Float32Array(N * N * 3), blade = new THREE.InstancedBufferGeometry();
-  for (let i = 0; i < N * N; i++) seeds.set([(i % N + hash(i, 1)) / N, (Math.floor(i / N) + hash(i, 2)) / N, hash(i, 3)], i * 3);
-  blade.setAttribute('position', new THREE.Float32BufferAttribute([-1, 0, 0, 1, 0, 0, -.8, .35, 0, .8, .35, 0, -.5, .7, 0, .5, .7, 0, 0, 1, 0], 3)); blade.setIndex([0, 1, 2, 2, 1, 3, 2, 3, 4, 4, 3, 5, 4, 5, 6]);
-  blade.setAttribute('aSeed', new THREE.InstancedBufferAttribute(seeds, 3)); blade.instanceCount = N * N;
-  grass = new THREE.Mesh(blade, new THREE.ShaderMaterial({ side: THREE.DoubleSide, uniforms: { uTime, uCam: { value: camera.position }, uSun: { value: sunDir }, uSM: { value: null }, tShadow: { value: null } },
-    vertexShader: `#include <packing>
-      attribute vec3 aSeed; uniform vec3 uCam, uSun; uniform float uTime; uniform mat4 uSM; uniform sampler2D tShadow; varying vec3 vCol;
-      ${hillGLSL}
-      float segD(vec2 p, vec2 a, vec2 b) { vec2 d = b - a; return distance(p, a + d * clamp(dot(p - a, d) / dot(d, d), 0., 1.)); }
-      void main() { const float L = 40.;
-        vec2 b = aSeed.xy * L; b += L * floor((uCam.xz - b) / L + .5);
-        float r = aSeed.z, a = r * 44., t = position.y, far = distance(b, uCam.xz);
-        float keep = smoothstep(L * .5, L * .5 - 9., far) * step(665.8, b.y) * (abs(b.x - 3.8) < 1.9 && b.y < 668.7 || abs(b.x + 18.) < 5.66 && abs(b.y - 705.) < 4.16 || abs(b.x - 22.) < 1.05 && b.y > 693.95 && b.y < 700.45 || b.x > -11.15 && b.x < -9.9 && b.y > 704.15 && b.y < 706.65 ? 0. : 1.)
-          * smoothstep(.6, .78, min(min(segD(b, vec2(3.8, 668.3), vec2(2.6, 672.2)), segD(b, vec2(2.6, 672.2), vec2(-11.9, 697.6))), segD(b, vec2(-11.9, 697.6), vec2(-11.9, 706.6)))); // off the playground, stair, path and hardstanding
-        float tall = (.16 + .2 * fract(r * 13.) + .12 * sin(b.x * .9) * sin(b.y * .7)) * keep; // taller in clumps
-        vec2 d = vec2(cos(a), sin(a)); float wind = .16 + .13 * sin(uTime * 1.3 + b.x * .33 + b.y * .27) + .05 * sin(uTime * 3.3 + r * 50.);
-        vec3 root = vec3(b.x, hillH(b), b.y), p = root + vec3(d.x, 0., d.y) * position.x * .017 * keep + vec3(0., t * tall, 0.) + (vec3(.8, 0., .6) * wind + vec3(d.y, 0., -d.x) * .3) * t * t * tall;
-        vec4 s = uSM * vec4(root + vec3(0., .15, 0.), 1.);
-        float lit = s.x > 0. && s.x < 1. && s.y > 0. && s.y < 1. && s.z < 1. ? step(s.z - .0015, unpackRGBAToDepth(texture2D(tShadow, s.xy))) : 0.; // one shadow lookup per blade
-        vec3 tip = mix(vec3(.3, .52, .1), vec3(.48, .6, .16), fract(r * 7.)); if (fract(r * 91.) < .012 && t > .9) tip = vec3(1.6, 1.5, 1.1); // the odd flower
-        vec3 view = normalize(p - uCam);
-        vCol = mix(vec3(.04, .12, .02), tip, t) * (vec3(.42, .55, .7) * (.35 + .65 * t) + vec3(4.4, 4.1, 3.6) * lit * (.3 + .2 * t + .7 * t * pow(max(dot(view, uSun), 0.), 3.))); // sky light, sun, and sun through the blade when you look toward it
-        gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.); }`,
-    fragmentShader: 'varying vec3 vCol; void main() { gl_FragColor = vec4(vCol, 1.); }' }));
-  grass.frustumCulled = false; scene.add(grass); seeThrough.push(grass); skyOnly.hill.push(grass);
+  const tileSize = 4, tileCache = new Map(), grassCamera = new THREE.Vector3(), lastPosition = new THREE.Vector3(Infinity, Infinity, Infinity), lastDirection = new THREE.Vector3(), direction = new THREE.Vector3(), frustum = new THREE.Frustum(), projection = new THREE.Matrix4(), lastProjection = new THREE.Matrix4();
+  const pathSegments = [[3.8, 668.3, 2.6, 672.2], [2.6, 672.2, -11.9, 697.6], [-11.9, 697.6, -11.9, 706.6]];
+  const grassCoverage = (rootX, rootZ) => {
+    if (rootZ < 665.8 || rootX < -86 || rootX > 94 || rootZ > 802 || Math.abs(rootX - 3.8) < 1.9 && rootZ < 668.7 || Math.abs(rootX + 18) < 5.66 && Math.abs(rootZ - 705) < 4.16 || Math.abs(rootX - 22) < 1.05 && rootZ > 693.95 && rootZ < 700.45 || rootX > -11.15 && rootX < -9.9 && rootZ > 704.15 && rootZ < 706.65) return 0;
+    let distance = Infinity;
+    for (const [startX, startZ, endX, endZ] of pathSegments) {
+      const deltaX = endX - startX, deltaZ = endZ - startZ, along = Math.max(0, Math.min(1, ((rootX - startX) * deltaX + (rootZ - startZ) * deltaZ) / (deltaX * deltaX + deltaZ * deltaZ)));
+      distance = Math.min(distance, Math.hypot(rootX - startX - along * deltaX, rootZ - startZ - along * deltaZ));
+    }
+    return ss(.67, .89, distance);
+  };
+  const tileData = (tileX, tileZ, layer) => {
+    const key = `${tileX},${tileZ}`, tile = tileCache.get(key) || { tileX, tileZ, layers: [] };
+    if (!tileCache.has(key)) tileCache.set(key, tile);
+    if (tile.layers[layer.index]) return tile.layers[layer.index];
+    const roots = [], shapes = [];
+    for (let tuftIndex = 0; tuftIndex < 256; tuftIndex++) {
+      const cellX = tileX * 16 + tuftIndex % 16, cellZ = tileZ * 16 + Math.floor(tuftIndex / 16), tuftSeed = hash(cellX, cellZ), tuftX = (cellX + .12 + .76 * hash(cellX + 17, cellZ)) * .25, tuftZ = (cellZ + .12 + .76 * hash(cellX, cellZ + 29)) * .25;
+      const lush = .5 + .28 * Math.sin(tuftX * .61 + Math.sin(tuftZ * .23)) + .22 * Math.sin(tuftZ * .83 - tuftX * .29), tuftHeight = .27 + .16 * lush + .07 * tuftSeed, heading = 1.1 + .6 * Math.sin(tuftX * .37 + tuftZ * .19) + (tuftSeed - .5) * 1.4;
+      for (let leafIndex = 0; leafIndex < layer.leaves; leafIndex++) {
+        const identity = tuftIndex * 47 + leafIndex + layer.offset, seed = hash(tileX * 631 + identity, tileZ * 977), spread = .025 + .13 * Math.sqrt(hash(identity + 91, tileX * 71 + tileZ)), angle = hash(identity + 137, tileZ * 41 + tileX) * Math.PI * 2;
+        const rootX = tuftX + Math.cos(angle) * spread, rootZ = tuftZ + Math.sin(angle) * spread, coverage = grassCoverage(rootX, rootZ);
+        if (!coverage) continue;
+        const height = tuftHeight * (.57 + .76 * seed) * coverage, width = (.0065 + .005 * hash(identity + 211, tileX * 101 + tileZ)) * coverage;
+        roots.push(rootX, hill(rootX, rootZ) - .012, rootZ, seed);
+        shapes.push(height, width, .22 + .43 * hash(identity + 313, tileZ * 97 + tileX), heading + (seed - .5) * 2.1);
+      }
+    }
+    return tile.layers[layer.index] = { roots: new Float32Array(roots), shapes: new Float32Array(shapes) };
+  };
+  const vertexShader = `#include <packing>
+    attribute vec4 aRoot, aShape;
+    uniform vec3 uCam; uniform vec2 uFade, uShadowTexel; uniform float uTime, uPixelHeight; uniform mat4 uSM; uniform sampler2D tShadow;
+    centroid varying vec3 vPosition, vNormal, vAcross; centroid varying vec2 vBlade; centroid varying float vSeed, vLight, vCoverage;
+    void main() {
+      float distanceToEye = distance(aRoot.xz, uCam.xz), fade = 1. - smoothstep(uFade.x, uFade.y, distanceToEye);
+      if (fade < .001) { gl_Position = vec4(2., 2., 2., 1.); return; }
+      float along = position.y, seed = aRoot.w, height = aShape.x * fade;
+      vec2 heading = vec2(cos(aShape.w), sin(aShape.w));
+      float twist = aShape.w + (seed - .5) * along * 1.35;
+      vec3 across = vec3(sin(twist), 0., -cos(twist));
+      float gust = .13 + .085 * sin(uTime * 1.15 - aRoot.x * .31 - aRoot.z * .23) + .035 * sin(uTime * 2.1 - aRoot.x * .67 + aRoot.z * .39);
+      vec2 wind = vec2(.8, .6) * gust + vec2(-.6, .8) * .025 * sin(uTime * 1.7 + aRoot.x * .25 + aRoot.z * .32);
+      float curve = aShape.z * along * along, sag = .26 * aShape.z * along * along * along;
+      vec3 center = vec3(heading.x * curve + wind.x * along * along, along - sag, heading.y * curve + wind.y * along * along) * height;
+      float taper = (1. - along) * (.58 + 1.35 * along);
+      float width = aShape.y * taper * fade;
+      float pixelWidth = uPixelHeight > 0. ? max(0., -(viewMatrix * vec4(aRoot.xyz + center, 1.)).z) / (projectionMatrix[1][1] * uPixelHeight) : 0.;
+      float filteredWidth = max(width, pixelWidth * .85); vCoverage = width / max(filteredWidth, .000001);
+      vec3 world = aRoot.xyz + center + across * position.x * filteredWidth;
+      vec3 tangent = vec3(2. * along * (heading.x * aShape.z + wind.x), 1. - .78 * aShape.z * along * along, 2. * along * (heading.y * aShape.z + wind.y));
+      vNormal = normalize(cross(across, tangent)); vAcross = across; vPosition = world; vBlade = vec2(position.x, along); vSeed = seed;
+      vec4 shadow = uSM * vec4(aRoot.xyz + vec3(0., .2, 0.), 1.); vLight = 0.;
+      if (shadow.x > 0. && shadow.x < 1. && shadow.y > 0. && shadow.y < 1. && shadow.z < 1.) {
+        vLight = .25 * (step(shadow.z - .0009, unpackRGBAToDepth(texture2D(tShadow, shadow.xy + uShadowTexel * vec2(-.7, -.7))))
+          + step(shadow.z - .0009, unpackRGBAToDepth(texture2D(tShadow, shadow.xy + uShadowTexel * vec2(.7, -.7))))
+          + step(shadow.z - .0009, unpackRGBAToDepth(texture2D(tShadow, shadow.xy + uShadowTexel * vec2(-.7, .7))))
+          + step(shadow.z - .0009, unpackRGBAToDepth(texture2D(tShadow, shadow.xy + uShadowTexel * vec2(.7, .7)))));
+      }
+      gl_Position = projectionMatrix * viewMatrix * vec4(world, 1.);
+    }`;
+  const fragmentShader = `uniform vec3 uCam, uSun;
+    centroid varying vec3 vPosition, vNormal, vAcross; centroid varying vec2 vBlade; centroid varying float vSeed, vLight, vCoverage;
+    void main() {
+      vec2 blade = clamp(vBlade, vec2(-1., 0.), vec2(1.));
+      float along = blade.y, across = abs(blade.x), openness = smoothstep(.015, .72, along);
+      vec3 normal = normalize(vNormal + vAcross * blade.x * .24); if (!gl_FrontFacing) normal = -normal;
+      vec3 view = normalize(uCam - vPosition), halfLight = normalize(view + uSun);
+      vec3 leaf = mix(vec3(.105, .25, .033), vec3(.145, .32, .047), vSeed * .65 + .18);
+      leaf = mix(vec3(.026, .066, .012), leaf, openness);
+      leaf *= 1. - .12 * across * across + .055 * exp(-blade.x * blade.x * 45.);
+      float detail = 1. - smoothstep(8., 25., distance(vPosition, uCam));
+      float diffuse = mix(.58, .28 + .72 * max(dot(normal, uSun), 0.), detail);
+      float through = pow(max(dot(-view, uSun), 0.), 4.) * (.28 + .72 * (1. - abs(dot(normal, uSun))));
+      vec3 lighting = vec3(.48, .58, .68) * (.25 + .75 * openness) + vec3(4.4, 4.15, 3.65) * vLight * (diffuse * (.33 + .67 * openness) + .65 * through * openness);
+      vec3 sheen = vec3(.08, .11, .045) * pow(max(dot(normal, halfLight), 0.), 12.) * vLight * openness * detail;
+      gl_FragColor = vec4(leaf * lighting + sheen, clamp(vCoverage, 0., 1.));
+    }`;
+  const layers = [{ name: 'near', leaves: 32, offset: 0, start: 7, end: 12, sections: 7 }, { name: 'mid', leaves: 8, offset: 32, start: 21, end: 32, sections: 3 }, { name: 'far', leaves: 2, offset: 40, start: 43, end: 58, sections: 2 }];
+  for (const [index, layer] of layers.entries()) {
+    layer.index = index;
+    const geometry = new THREE.InstancedBufferGeometry(), positions = [], indices = [], capacity = Math.ceil(Math.PI * (layer.end + 6) ** 2 / (tileSize * tileSize)) * 256 * layer.leaves;
+    for (let section = 0; section < layer.sections; section++) positions.push(-1, section / layer.sections, 0, 1, section / layer.sections, 0);
+    positions.push(0, 1, 0);
+    for (let section = 0; section < layer.sections - 1; section++) { const base = section * 2; indices.push(base, base + 1, base + 2, base + 2, base + 1, base + 3); }
+    indices.push(layer.sections * 2 - 2, layer.sections * 2 - 1, layer.sections * 2);
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3)); geometry.setIndex(indices);
+    for (const name of ['aRoot', 'aShape']) geometry.setAttribute(name, new THREE.InstancedBufferAttribute(new Float32Array(capacity * 4), 4).setUsage(THREE.DynamicDrawUsage));
+    geometry.instanceCount = 0;
+    const material = new THREE.ShaderMaterial({ side: THREE.DoubleSide, alphaToCoverage: true, uniforms: { uTime, uCam: { value: grassCamera }, uSun: { value: sunDir }, uFade: { value: new THREE.Vector2(layer.start, layer.end) }, uPixelHeight: { value: 0 }, uSM: { value: new THREE.Matrix4() }, tShadow: { value: null }, uShadowTexel: { value: new THREE.Vector2() } }, vertexShader, fragmentShader });
+    const mesh = new THREE.Mesh(geometry, material); mesh.name = `field-grass-${layer.name}`; mesh.frustumCulled = false; mesh.userData.grassLayer = layer;
+    grass.push(mesh); scene.add(mesh); seeThrough.push(mesh); skyOnly.hill.push(mesh);
+  }
+  updateGrass = viewCamera => {
+    grassCamera.setFromMatrixPosition(viewCamera.matrixWorld); viewCamera.getWorldDirection(direction);
+    if (grassCamera.distanceToSquared(lastPosition) < .0625 && direction.dot(lastDirection) > .9998 && lastProjection.equals(viewCamera.projectionMatrix)) return;
+    lastPosition.copy(grassCamera); lastDirection.copy(direction); lastProjection.copy(viewCamera.projectionMatrix);
+    frustum.setFromProjectionMatrix(projection.multiplyMatrices(viewCamera.projectionMatrix, viewCamera.matrixWorldInverse));
+    const centerX = Math.floor(grassCamera.x / tileSize), centerZ = Math.floor(grassCamera.z / tileSize), candidates = [];
+    for (let tileZ = Math.max(166, centerZ - 16); tileZ <= Math.min(200, centerZ + 16); tileZ++) for (let tileX = Math.max(-22, centerX - 16); tileX <= Math.min(23, centerX + 16); tileX++) {
+      const tileCenterX = (tileX + .5) * tileSize, tileCenterZ = (tileZ + .5) * tileSize, distance = Math.hypot(tileCenterX - grassCamera.x, tileCenterZ - grassCamera.z);
+      if (distance > 62) continue;
+      const key = `${tileX},${tileZ}`;
+      let tile = tileCache.get(key);
+      if (!tile) {
+        const cornerHeights = [hill(tileCenterX - 2, tileCenterZ - 2), hill(tileCenterX + 2, tileCenterZ - 2), hill(tileCenterX - 2, tileCenterZ + 2), hill(tileCenterX + 2, tileCenterZ + 2)], low = Math.min(...cornerHeights), high = Math.max(...cornerHeights);
+        tile = { tileX, tileZ, layers: [], bounds: new THREE.Sphere(new THREE.Vector3(tileCenterX, (low + high) * .5 + .4, tileCenterZ), Math.hypot(3, (high - low) * .5 + .8) + 1.3) }; tileCache.set(key, tile);
+      }
+      tile.distance = distance;
+      if (frustum.intersectsSphere(tile.bounds)) candidates.push(tile);
+    }
+    for (const mesh of grass) {
+      const layer = mesh.userData.grassLayer, rootAttribute = mesh.geometry.attributes.aRoot, shapeAttribute = mesh.geometry.attributes.aShape;
+      let count = 0;
+      for (const tile of candidates) if (tile.distance < layer.end + 3) {
+        const data = tileData(tile.tileX, tile.tileZ, layer);
+        rootAttribute.array.set(data.roots, count * 4); shapeAttribute.array.set(data.shapes, count * 4); count += data.roots.length / 4;
+      }
+      mesh.geometry.instanceCount = count;
+      for (const attribute of [rootAttribute, shapeAttribute]) { attribute.clearUpdateRanges(); if (count) attribute.addUpdateRange(0, count * 4); attribute.needsUpdate = true; }
+    }
+    for (const [key, tile] of tileCache) {
+      const distance = Math.hypot((tile.tileX + .5) * tileSize - grassCamera.x, (tile.tileZ + .5) * tileSize - grassCamera.z);
+      if (distance > 66) tileCache.delete(key);
+      else for (const layer of layers) if (distance > layer.end + 6) tile.layers[layer.index] = null;
+    }
+  };
   // clouds: soft shapes on big cards standing round the horizon
   const cloud = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, uniforms: { uTime },
     vertexShader: 'varying vec2 vUv, vP; void main() { vUv = uv; vP = position.xy; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.); }',
@@ -91,5 +196,14 @@ let grass;
     const m = new THREE.Mesh(g, cloud); m.position.set(4 + Math.sin(a) * d, 110 + 120 * hash(i, 6), 712 + Math.cos(a) * d); m.scale.set(w, w * .5, 1); m.lookAt(4, 40, 712); scene.add(m); seeThrough.push(m); skyOnly.hill.push(m); }
 }
 onSun.push(sun => {
-  grass.material.uniforms.uSM.value = sun.shadow.matrix; grass.onBeforeRender = () => grass.material.uniforms.tShadow.value = sun.shadow.map.texture; // the map exists once anything has been drawn
+  for (const mesh of grass) {
+    mesh.material.uniforms.uSM.value = sun.shadow.matrix;
+    mesh.material.uniforms.uShadowTexel.value.set(1 / sun.shadow.mapSize.x, 1 / sun.shadow.mapSize.y);
+    mesh.onBeforeRender = renderer => { const target = renderer.getRenderTarget(); mesh.material.uniforms.tShadow.value = sun.shadow.map.texture; mesh.material.uniforms.uPixelHeight.value = target?.samples > 1 ? target.height : 0; };
+  }
+  const previous = scene.onBeforeRender;
+  scene.onBeforeRender = function (renderer, world, viewCamera, ...rest) {
+    previous.call(this, renderer, world, viewCamera, ...rest);
+    if (grass[0].visible) updateGrass(viewCamera);
+  };
 });

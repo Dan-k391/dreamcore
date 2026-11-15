@@ -1,6 +1,6 @@
 // Materials more than one place uses, and the helpers places make their own with.
 import * as THREE from 'three';
-import { scene, uTime, V, WY } from './core.js';
+import { scene, uTime, V, WY, sunDir } from './core.js';
 import { maxA, grime, wn0, sets, LIB, libTex, detailTex } from './tex.js';
 
 // ---------- materials ----------
@@ -144,12 +144,40 @@ function M(z, name, o = {}) {
   return m;
 }
 const causticsGLSL = `
-  vec2 h2(vec2 p) { return fract(sin(vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)))) * 43758.5453); }
-  float cell(vec2 p, float t) { vec2 i = floor(p), f = fract(p); float a = 8., b = 8.;
-    for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) { vec2 g = vec2(x, y); float d = length(g + .5 + .42 * sin(t + 6.2831 * h2(i + g)) - f); if (d < a) { b = a; a = d; } else b = min(b, d); }
-    return b - a; }
-  float caus(vec3 w) { vec2 p = w.xz * 1.5 + w.y * .9; p += .3 * sin(p.yx * 1.3 + uTime * .6) + .14 * sin(p.yx * 3.3 - uTime * .9); // warped so the cells don't read as straight-edged polygons
-    return pow(1. - smoothstep(0., .5, min(cell(p, uTime * .8), cell(p * 1.63 + 7.3, uTime * 1.1))), 3.); } // thin bright lines; averages about .22
+  void poolWave(vec2 position, vec2 direction, float frequency, float steepness, float offset, float spread, inout vec2 slope, inout float curvature) {
+    vec2 bend = vec2(-direction.y, direction.x) * .6;
+    float envelope = dot(bend, position) + uTime * .12 + offset * 2.;
+    vec2 wave = direction * frequency + 2.2 * cos(envelope) * bend;
+    float phase = dot(direction * frequency, position) + 2.2 * sin(envelope) - uTime * sqrt(9.81 * frequency) * .32 + offset;
+    vec2 footprint = vec2(dFdx(phase), dFdy(phase));
+    float filtered = exp(-.125 * dot(footprint, footprint) - .5 * frequency * frequency * spread * spread);
+    float amplitude = steepness / frequency * filtered;
+    slope += wave * (amplitude * cos(phase));
+    curvature -= amplitude * (dot(wave, wave) * sin(phase) + 2.2 * dot(bend, bend) * sin(envelope) * cos(phase));
+  }
+  vec3 poolWaves(vec2 position, float spread) {
+    vec2 slope = vec2(0.); float curvature = 0.;
+    poolWave(position, vec2(.94, .342), 6.3, .018, .4, spread, slope, curvature);
+    poolWave(position, vec2(-.42, .907), 11.8, .010, 2.1, spread, slope, curvature);
+    poolWave(position, vec2(.57, -.822), 19.1, .007, 4.7, spread, slope, curvature);
+    poolWave(position, vec2(-.893, -.45), 27.7, .006, 1.3, spread, slope, curvature);
+    poolWave(position, vec2(.147, .989), 38.3, .008, 3.8, spread, slope, curvature);
+    poolWave(position, vec2(.788, -.616), 52.6, .007, 2.7, spread, slope, curvature);
+    poolWave(position, vec2(-.96, -.28), 67.8, .005, 5.1, spread, slope, curvature);
+    return vec3(slope, curvature);
+  }
+  vec3 causticPath(vec3 position) {
+    float depth = max(0., ${WY} - position.y);
+    vec3 lightRay = refract(-normalize(uCausDir), vec3(0., 1., 0.), .75);
+    float travel = depth / max(.35, -lightRay.y);
+    return vec3(position.xz - lightRay.xz * travel, travel);
+  }
+  float caus(vec3 position, float laplacian) {
+    vec3 path = causticPath(position);
+    float curvature = poolWaves(path.xy, .012 * path.z).z + laplacian * 100.;
+    float focus = -.25 * path.z * curvature;
+    return .45 * focus / (.45 + abs(focus)) * exp(-.12 * path.z);
+  }
 `; // the moving light pattern under water. Used by the tiles themselves and by the water, for floor it draws from the still plan
 const glow = S({ color: 0, emissive: 0xffedc0, emissiveIntensity: 14 }); // frosted windows and light wells
 const seaMat = S({ color: 0x0f4652, roughness: .05, normalMap: wn0, normalScale: new THREE.Vector2(.5, .5) });
@@ -162,14 +190,14 @@ const lampOn = M(null, 'troffer'), lampOff = libMat('trofferOff', { roughness: .
 function tileFX(m, z) {
   const u = z.tileU = { uTime, uBand: { value: z.band }, uBandCol: { value: new THREE.Color(...z.bandCol) }, uShimmer: { value: z.shimmer },
               uSim: { value: null }, uPond: { value: new THREE.Vector4(0, 0, 1, 1) }, uPx: { value: new THREE.Vector2() }, // this zone's pool, filled in when the pool is made
-              uLamp: { value: Array.from({ length: 24 }, () => new THREE.Vector4()) }, uLampCol: { value: new THREE.Color(0xffedc0) }, uCaus: { value: z.caus || .45 } }; // caustic strength: full only where the sun reaches // this zone's own fixtures (see fixture())
+              uLamp: { value: Array.from({ length: 24 }, () => new THREE.Vector4()) }, uLampCol: { value: new THREE.Color(0xffedc0) }, uCaus: { value: z.caus || .45 }, uCausDir: { value: z.caus >= .9 ? sunDir : V(0, 1, 0) } }; // caustic strength: full only where the sun reaches // this zone's own fixtures (see fixture())
   z.nl = 0;
   const lib = m.onBeforeCompile; // a library material underneath: its shader first
   m.onBeforeCompile = function (s, r) {
     lib.call(this, s, r);
     Object.assign(s.uniforms, u);
     s.vertexShader = 'varying vec3 vW;\n' + s.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\nvW = (modelMatrix * vec4(transformed, 1.)).xyz;');
-    s.fragmentShader = `varying vec3 vW; uniform float uTime, uBand, uShimmer, uCaus; uniform vec3 uBandCol; uniform sampler2D uSim; uniform vec4 uPond; uniform vec2 uPx;
+    s.fragmentShader = `varying vec3 vW; uniform float uTime, uBand, uShimmer, uCaus; uniform vec3 uBandCol, uCausDir; uniform sampler2D uSim; uniform vec4 uPond; uniform vec2 uPx;
       #ifdef NL
         uniform vec4 uLamp[NL]; uniform vec3 uLampCol;
       #endif
@@ -189,11 +217,11 @@ function tileFX(m, z) {
         #endif`)
       .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
         if (vW.y < ${WY}) { // light focused by the surface: a drifting base pattern plus the real ripples (crests focus, troughs spread)
-          vec2 s = (vW.xz - uPond.xy) / (uPond.zw - uPond.xy), o = uPx * 2.;
+          vec2 s = (causticPath(vW).xy - uPond.xy) / (uPond.zw - uPond.xy), o = uPx * 2.;
           float lap = texture2D(uSim, s - vec2(o.x, 0.)).r + texture2D(uSim, s + vec2(o.x, 0.)).r + texture2D(uSim, s - vec2(0., o.y)).r + texture2D(uSim, s + vec2(0., o.y)).r - 4. * texture2D(uSim, s).r;
-          float c = (max(caus(vW) + clamp(-lap * 30., -.6, 2.5), 0.) - .22) * smoothstep(${WY}, ${WY} - .3, vW.y); // minus its average: caustics move light around, they don't add any
-          reflectedLight.directDiffuse *= max(.2, 1. + 2.2 * uCaus * c); reflectedLight.indirectDiffuse *= max(.4, 1. + .9 * uCaus * c); }
-        else if (uShimmer > 0.) reflectedLight.indirectDiffuse *= 1. + uShimmer * (caus(vW * .6) - .22) * smoothstep(.2, 1.2, vW.y - ${WY}) * exp((${WY} - vW.y) * .3);`);
+          float c = caus(vW, lap) * uCaus;
+          reflectedLight.directDiffuse *= 1. + 1.8 * c; reflectedLight.indirectDiffuse *= 1. + .85 * c; }
+        else if (uShimmer > 0.) reflectedLight.indirectDiffuse *= 1. + uShimmer * caus(vec3(vW.x * .6, ${WY} - .65, vW.z * .6), 0.) * smoothstep(.2, 1.2, vW.y - ${WY}) * exp((${WY} - vW.y) * .3);`);
   };
   return m;
 }
