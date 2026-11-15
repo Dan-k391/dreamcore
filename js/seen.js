@@ -23,7 +23,7 @@ export default {
   j3: ["lW","lX","mT","u3"],
   j4: ["lX","mT","u4"],
   hT: ["bA","bB","cN","mL","sP","t0","t3","t4","t5"],
-  mL: ["bB","fD","gH","hT","j3","j4","lW","lX","mT","pG","pK","pN","pV","sK","sP","t0","t1","t2","t3","t4","t5","u0","u1","u2","u3","u4","u5"],
+  mL: ["bB","cN","fD","gH","hT","j3","j4","lW","lX","mT","nL","pG","pK","pN","pV","sK","sP","t0","t1","t2","t3","t4","t5","u0","u1","u2","u3","u4","u5"],
   sP: ["cN","fD","gH","hT","j3","j4","lW","lX","mL","mT","nL","pG","pK","pN","pV","sK","t0","t1","t2","t3","t4","t5","u0","u1","u2","u3","u4","u5"],
   cN: ["bA","bC","hT","mL","pC","pG","pN","pV","t3"],
   pK: ["bA","bB","bC","mL","pC","pG","pH","pN","pV","t1","t2"],
