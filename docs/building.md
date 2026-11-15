@@ -26,7 +26,7 @@ Shapes go into one list per material and are merged into one mesh each (`add(mat
 
 ## Making things solid
 
-Used by `js/player.js` and `js/physics.js`. A solid blocks the body where it overlaps it above step height (0.35 m), its top is ground you can stand on, and its underside stops a jump. A jump peaks at about 0.84 m.
+Used by `js/player.js` and `js/physics.js`. A solid blocks the body where it overlaps it above step height (0.35 m), its top is ground you can stand on, and its underside stops a jump. A jump peaks at about 0.84 m and carries about 2.1 m walking (2.85 m/s) and 4.5 m running (6 m/s), so a gap narrower than that onto anything standable is reachable.
 
 - `box()` is solid over its true extent by itself. `block()` is the same shape and never solid.
 - For anything built otherwise, add its solid in the same place file:

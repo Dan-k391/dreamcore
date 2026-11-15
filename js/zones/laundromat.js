@@ -235,6 +235,8 @@ cart(602.55, -596.3, .35); cart(598.7, -604.7, 1.45);
   box(As, 570, -.45, -591, 630, -.125, -574.5); kerb(zx, [[570, -.125, -574.5], [630, -.125, -574.5]], { color: 0x8a857c });
   box(Pv, 570, -.3, -574.5, 630, 0, -571); box(Fc, 570, 0, -571, 630, 7, -570.6); // the far side: a blank, unlit front
   streetLamp(zx, 601.6, 0, -591.55, -PI / 2, { power: 260, reach: .95 }); bin(zx, 598.2, 0, -591.6);
+  // unseen walls where the street runs into the dark: along its back either side of the shop, and across both ends (a run once left the level here)
+  solid(570, -.5, -594.2, 595.3, 4, -594); solid(604.7, -.5, -594.2, 630, 4, -594); solid(569.8, -.5, -594.2, 570, 4, -570.6); solid(630, -.5, -594.2, 630.2, 4, -570.6);
 }
 
 // Drawn only when the camera is near (any pass, the probe bakes included): far away the whole place is out of sight anyway, and

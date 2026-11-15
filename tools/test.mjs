@@ -23,16 +23,16 @@ const walks = [
   ['toMall', [3.8, 45, P / 2, R, 1.5], { zone: 'mL', x: -2.2 }],
   ['toCinema', [3.8, 31, -P / 2, R, 3], { zone: 'cN', x: 15.8, y: -1 }],
   ['cinemaBack', [15, 31, P / 2, R, 3], { zone: 'hT', x: 3, y: 0 }],
-  ['toPlay', [-25, 36, P / 2, R, 3.5], { zone: 'sP', x: -36.9, y: -.85 }], // the pit is 85 cm deep since its balls became real (was 55)
+  ['toPlay', [-25, 36, P / 2, R, 3.5], { zone: 'sP', x: -37.5, y: -.85 }], // the pit is 85 cm deep since its balls became real (was 55)
   ['pitOut', [-36, 34, -P / 2, R, 2], { zone: 'sP', x: -30.1, y: 0 }],
   ['softWall', [-30, 37, -P / 2, R, 3], { zone: 'mL', x: -19.37 }],
   ['toGarage', [35, 10.9, -P / 2, R, 1.5], { zone: 'pK', x: 41 }],
   ['toLot', [64, 14, -P / 2, R, 5.5], { zone: 'nL', sky: 'night', x: 686 }],
   ['lotBack', [683, 14, P / 2, R, 5], { zone: 'pK', sky: 'day', x: 63 }],
   ['toTerrace', [33, 49.4, -P / 2, R, 7], { zone: 'sK', sky: 'dusk', x: 659.2, y: 0 }],
-  ['terraceBack', [652, 649.4, P / 2, R, 5], { zone: 'pV', sky: 'day', x: 32.9, y: -.6 }],
+  ['terraceBack', [652, 649.4, P / 2, R, 5], { zone: 'pV', sky: 'day', x: 32.5, y: -.6 }],
   ['lookout', [683, 649.4, -P / 2, R, 4], { zone: 'sK', y: 5, x: 699 }],
-  ['fieldStairs', [22, 692, P, R, 2.5], { zone: 'fD', z: 702 }], // runs up the stair and off its top
+  ['fieldStairs', [22, 692, P, R, 2.5], { zone: 'fD', z: 702.55 }], // runs up the stair and off its top
   ['poolSteps', [.5, -5, 0, R, 2], { zone: 'pH', y: -1.2, z: -9.3 }],
   ['poolOut', [.5, -9, P, R, 2.5], { zone: 'pH', y: 0, z: -1.26 }],
   ['poolWall', [0, -12, -P / 2, R, 2.5], { x: 4.7, y: -1.2 }], // the pool side blocks
@@ -55,7 +55,7 @@ const walks = [
   ['glasshouseBack', [837, -600, P / 2, R, 5], { zone: 'hT', sky: 'day', x: 2.9, z: 49 }],
 ];
 
-const dev = run(base + '?dev&bare', `[${walks.map(([, a]) => `dev.go(${a.join(',')})`).join(',')}]`);
+const dev = run(base + '?dev&bare', `[${walks.map(([, a]) => `dev.go(${a.slice(0, 4).join(",")},${a[4] / 1.5})`).join(',')}]`); // the walks' times were written at the old speeds (1.9 and 4 m/s); the body is 1.5 times faster now
 check('dev mode loads without console errors', !dev.errors.length, dev.errors.join(' | ').slice(0, 600));
 walks.forEach(([name, , want], k) => {
   const got = dev.result?.[k], bad = got ? Object.entries(want).filter(([key, v]) => typeof v === 'number' ? !(Math.abs(got[key] - v) <= .35) : got[key] !== v) : [1];
@@ -66,10 +66,10 @@ walks.forEach(([name, , want], k) => {
 const PIT = 'dev.go(-31.6, 30.45, P / 2); dev.key("KeyW", true); dev.key("ShiftLeft", true); dev.key("Space", true); for (let i = 0; i < 100; i++) { dev.step(1); if (i === 2) dev.key("Space", false); if (i === 30) { dev.key("KeyW", false); dev.key("ShiftLeft", false); } }'; // run down the slide into the pit and jump off its end (the block it stood on became the slide)
 const near = (a, b, e = .05) => Math.abs(a - b) <= e;
 // the night hall's flume: hold keys, turn to face a point every step; up its stair (south from the east deck) to the platform at 3.6 m
-const FLUME = 'const F = (await import("/js/zones/nighthall.js")).flume, face = (x, z) => { const p = dev.camera.position; dev.camera.rotation.set(0, Math.atan2(-(x - p.x), -(z - p.z)), 0, "YXZ"); }, hold = (yaw, t) => { dev.camera.rotation.set(0, yaw, 0, "YXZ"); dev.key("KeyW", true); dev.step(t * 60); dev.key("KeyW", false); dev.step(10); return dev.state(); }, steer = (x, z, n = 600) => { dev.key("KeyW", true); for (let i = 0; i < n; i++) { face(x, z); dev.step(1); const p = dev.camera.position; if (Math.hypot(p.x - x, p.z - z) < .2) break; } dev.key("KeyW", false); dev.step(10); return dev.state(); }; dev.go(42.9, -8.6, P);';
+const FLUME = 'const F = (await import("/js/zones/nighthall.js")).flume, face = (x, z) => { const p = dev.camera.position; dev.camera.rotation.set(0, Math.atan2(-(x - p.x), -(z - p.z)), 0, "YXZ"); }, hold = (yaw, t) => { dev.camera.rotation.set(0, yaw, 0, "YXZ"); dev.key("KeyW", true); dev.step(t * 40); dev.key("KeyW", false); dev.step(10); return dev.state(); }, steer = (x, z, n = 600) => { dev.key("KeyW", true); for (let i = 0; i < n; i++) { face(x, z); dev.step(1); const p = dev.camera.position; if (Math.hypot(p.x - x, p.z - z) < .2) break; } dev.key("KeyW", false); dev.step(10); return dev.state(); }; dev.go(42.9, -8.6, P);';
 const solids = [
-  ['walk straight back from the laundromat and the metro: out of the recess to the far wall, turn, and on through the open door without a sidestep', 'const W = ["KeyW", "ShiftLeft"], back = (x, z, yaw, t) => { const s = dev.go(x, z, yaw, W, t); return dev.go(s.x, s.z, P / 2, W, 3); }; return [back(597, -602.6, 0, 2), back(702, -597, P, 1.5)]', ([l, m]) => l.zone === 'hT' && near(l.x, 2.9, .35) && near(l.z, 42, .1) && m.zone === 'hT' && near(m.x, 2.9, .35) && near(m.z, 45.6, .1)],
-  ['jump onto the mall bench: standing on its seat', 'return dev.go(-18, 33.9, P, ["KeyW", "Space"], .35)', s => near(s.y, .45, .02) && !s.air && near(s.z, 34.6, .2)],
+  ['walk straight back from the laundromat and the metro: out of the recess to the far wall, turn, and on through the open door without a sidestep', 'const W = ["KeyW", "ShiftLeft"], back = (x, z, yaw, t) => { const s = dev.go(x, z, yaw, W, t); return dev.go(s.x, s.z, P / 2, W, 2); }; return [back(597, -602.6, 0, 1.33), back(702, -597, P, 1)]', ([l, m]) => l.zone === 'hT' && near(l.x, 2.9, .35) && near(l.z, 42, .1) && m.zone === 'hT' && near(m.x, 2.9, .35) && near(m.z, 45.6, .1)],
+  ['jump onto the mall bench: standing on its seat', 'dev.go(-18, 33.9, P, ["KeyW", "Space"], .15); dev.step(20, .05); return dev.state()', s => near(s.y, .45, .02) && !s.air && near(s.z, 34.6, .2)],
   ['walk into the bench from the front, west and east', 'return [dev.go(-18, 33.4, P, ["KeyW"], 1.5).z, dev.go(-20.2, 34.7, -P / 2, ["KeyW"], 1.5).x, dev.go(-15.8, 34.7, P / 2, ["KeyW"], 1.5).x]', ([s, w, e]) => near(s, 34.18) && near(w, -19.3) && near(e, -16.7)],
   ['walk into the field bench from behind: its back stops you', 'return dev.go(-9.5, 705.4, P / 2, ["KeyW"], 1.5)', s => near(s.x, -9.88) && s.y < 3.3],
   ['the leaf of an open hotel door, swung into its passage, stops you (the passage wall is 0.3 m further)', 'return dev.go(5.7, 41.7, P, ["KeyW"], 1.5)', s => s.z < 42.25 && s.zone === 't3'], // it stands along the north side
@@ -79,7 +79,7 @@ const solids = [
   ['jumping into the pit: you reach its floor and the balls are thrown', `const a = Float32Array.from(dev.balls(2)); ${PIT}; const p = dev.balls(2); let moved = 0, low = 9, out = 0, over = 0; for (let i = 0; i < p.length; i += 3) { if (Math.hypot(p[i] - a[i], p[i + 1] - a[i + 1], p[i + 2] - a[i + 2]) > .05) moved++; low = Math.min(low, p[i + 1]); if (p[i] < -41 || p[i] > -27 || p[i + 2] < 28.4 || p[i + 2] > 43.6) out++; if (!(p[i] > -40 && p[i] < -33 && p[i + 2] > 30 && p[i + 2] < 37)) over++; } return { s: dev.state(), moved, low, out, over }`, r => near(r.s.y, -.85, .01) && r.moved > 50 && r.low >= -.755 && !r.out && r.over <= 10], // over: thrown over the rim
   ['the pile comes to rest within 5 s, none under the floor or out of the room', `${PIT}; let n = 0; while (dev.bodies().groups[2].awake && n < 300) { dev.step(1); n++; } const g = dev.bodies().groups[2]; return { n, g }`, ({ n, g }) => n < 300 && g.lo[1] >= -.755 && g.lo[0] >= -41 && g.hi[0] <= -27 && g.lo[2] >= 28.4 && g.hi[2] <= 43.6],
   ['the field ball rolls when walked into, then stops', 'const a = dev.bodies().groups[3].at; dev.go(-8.2, 701.1, P, ["KeyW"], 1.5); let n = 0; while (dev.bodies().groups[3].awake && n < 600) { dev.step(1); n++; } return [a, dev.bodies().groups[3].at, n]', ([a, b, n]) => Math.hypot(b[0] - a[0], b[2] - a[2]) > .5 && n < 600],
-  ['loose things cost under 0.3 ms a frame at rest, even standing in the pit', 'dev.go(-31.6, 34.5, P / 2, ["KeyW"], 1.5); dev.step(600); return [dev.bodies().groups[2].awake, dev.physics(120)]', ([n, ms]) => !n && ms < .3],
+  ['loose things cost under 0.3 ms a frame at rest, even standing in the pit', 'dev.go(-31.6, 34.5, P / 2, ["KeyW"], .9); dev.step(600); return [dev.bodies().groups[2].awake, dev.physics(120)]', ([n, ms]) => !n && ms < .3],
   ['a jump in beside the beach ball nudges it (stays low, goes under 3 m), and the rings settle back to the still water', 'const a = dev.bodies().groups.findIndex(g => g.n === 1 && g.at[2] < 0), b = dev.balls(a), s = [b[0], b[2]]; dev.go(5.8, -12, P / 2); dev.key("KeyW", true); dev.key("ShiftLeft", true); dev.key("Space", true); let top = 0; for (let i = 0; i < 300; i++) { dev.step(1); top = Math.max(top, b[1]); if (i === 2) dev.key("Space", false); if (i === 60) { dev.key("KeyW", false); dev.key("ShiftLeft", false); } } const far = Math.hypot(b[0] - s[0], b[2] - s[1]); dev.go(8, -3, 0); dev.step(900); return [top, far, dev.bodies().rings.map(r => r.y)]', ([top, far, ys]) => top < .4 && far < 3 && ys.every(y => near(y, -.07, .015))],
   ['the field ball run into the door stays in the field', 'dev.go(3.8, 672, 0); dev.balls(3).set([3.8, .17, 667]); dev.go(3.8, 667.8, 0, ["KeyW", "ShiftLeft"], 1.5); dev.step(120); return dev.balls(3)[2]', z => z >= 665.7],
   ['and a splash costs under 1 ms a frame (median) and under 3 ms (95th percentile), the heap falling asleep included', `dev.go(-31.6, 30.6, P / 2); dev.key("KeyW", true); dev.key("ShiftLeft", true); dev.key("Space", true); const t = []; for (let i = 0; i < 300; i++) { t.push(dev.physics(1)); if (i === 2) dev.key("Space", false); if (i === 30) { dev.key("KeyW", false); dev.key("ShiftLeft", false); } } t.sort((a, b) => a - b); return [t[150], t[285]]`, ([med, p95]) => med < 1 && p95 < 3], // wall-clock: the median and 95th, not the single worst frame, so a busy machine doesn't fail it
@@ -89,7 +89,7 @@ const solids = [
   ['running past the gallery beach ball to the pool steps, it bobs within 20 cm of its rest and settles', 'const g = (await import("/js/physics.js")).groups[1], rest = g.p[1]; dev.go(23.6, 25, P); dev.key("KeyW", true); dev.key("ShiftLeft", true); dev.step(240); dev.key("KeyW", false); dev.key("ShiftLeft", false); let top = -9, n = 0; while (g.awake && n < 900) { dev.step(1); n++; top = Math.max(top, g.p[1]); } return [top - rest, n]', ([up, n]) => up < .2 && n < 900],
   ['running through the pool, a ring rides the water: off its height limits, tilted under .2 rad', 'const f = (await import("/js/physics.js")).floaters[0]; dev.go(-3.6, -9.2, -P / 2); dev.key("KeyW", true); dev.key("ShiftLeft", true); let lo = 9, hi = -9, t = 0; for (let i = 0; i < 240; i++) { dev.step(1); lo = Math.min(lo, f.y); hi = Math.max(hi, f.y); t = Math.max(t, Math.hypot(f.ax, f.az)); } dev.key("KeyW", false); dev.key("ShiftLeft", false); return [lo, hi, t]', ([lo, hi, t]) => lo > -.135 && hi < -.005 && t < .2],
   ['a jump at the pit wall gets you out of the pit', 'dev.go(-38, 33.5, P / 2, ["KeyW"], 2); dev.key("KeyW", true); dev.key("Space", true); dev.step(2); dev.key("Space", false); dev.step(60); dev.key("KeyW", false); dev.step(30); return dev.state()', s => s.x < -40 && near(s.y, 0, .01)],
-  ['standing still among the pit balls uploads nothing to the fine mesh', 'const g = (await import("/js/physics.js")).groups[2]; dev.go(-31.6, 34.5, P / 2, ["KeyW"], 1.5); dev.step(400); const v = g.fine.instanceMatrix.version + g.fine.instanceColor.version; dev.step(60); return [g.fine.count, g.fine.instanceMatrix.version + g.fine.instanceColor.version - v]', ([k, d]) => k > 20 && d === 0],
+  ['standing still among the pit balls uploads nothing to the fine mesh', 'const g = (await import("/js/physics.js")).groups[2]; dev.go(-31.6, 34.5, P / 2, ["KeyW"], .9); dev.step(400); const v = g.fine.instanceMatrix.version + g.fine.instanceColor.version; dev.step(60); return [g.fine.count, g.fine.instanceMatrix.version + g.fine.instanceColor.version - v]', ([k, d]) => k > 20 && d === 0],
   ['every ball mesh, fine ones too, keeps its own material, not one swapped in while programs compile', 'const g = (await import("/js/physics.js")).groups; return g.flatMap(x => [x.mesh, x.fine].filter(Boolean).map(m => m.material.type))', t => t.length > 4 && t.every(s => s !== "MeshNormalMaterial" && s !== "MeshDepthMaterial")],
   ['night hall flume: up the stair onto the platform (3.6 m), its south wall, west and east rails and the north rail by the stair stop you; north from the west corner the tub wall turns you into the flume, not off the edge', `${FLUME} const top = hold(P, 5), w = hold(P / 2, 3), n = hold(0, 3); steer(41.9, -1); return [top, w, n, hold(0, 2), steer(42, -.5) && hold(-P / 2, 2)]`, ([t, w, n, nr, e]) => near(t.y, 3.6, .01) && near(t.z, -.32, .05) && near(w.x, 39.66, .08) && near(w.y, 3.6, .01) && n.y > 3.3 && (n.z > -2.8 || Math.abs(n.x - 40.4) < .5) && near(nr.z, -2.47, .08) && near(nr.y, 3.6, .01) && near(e.x, 43.1, .08) && near(e.y, 3.6, .01)],
   ['night hall flume: from the platform into the start tub and run down it, in its bed all the way, out into the pool; its side wall stops you', `${FLUME} steer(42.9, -2.2); steer(40.4, -1.9); const a0 = F.at(2.5); steer(a0[0], a0[2]); const side = hold(-P / 2, 1); let s = 2, lat = 0, dy = 0; dev.key("KeyW", true); dev.key("ShiftLeft", true);
@@ -97,7 +97,7 @@ const solids = [
       const a = F.at(s); lat = Math.max(lat, best); dy = Math.max(dy, Math.abs(dev.state().y - a[1])); const b = F.at(s + 1); face(b[0], b[2]); dev.step(1); }
     dev.step(90); dev.key("KeyW", false); dev.key("ShiftLeft", false); dev.step(30); return { side, s, L: F.L, lat, dy, end: dev.state() }`, r => near(r.side.x, 40.55, .06) && r.side.y > 3.2 && r.s >= r.L - .3 && r.lat < .2 && r.dy < .12 && r.end.x < 33 && near(r.end.y, -1.2, .02) && r.end.zone === 'pN'],
   ['walk under the flume platform along the south deck, between its posts, to the east wall', 'return dev.go(36.5, -1.4, -P / 2, ["KeyW"], 5)', s => near(s.x, 44.7, .05) && near(s.y, 0, .01)],
-  ['in the pit the near balls are drawn with the fine shape, none from afar','const Ph = await import("/js/physics.js"), g = Ph.groups[2]; dev.go(-31.6, 34.5, P / 2, ["KeyW"], 1.5); dev.step(2); const near = g.fine.count; dev.go(-20, 36, P / 2); dev.step(2); return [near, g.fine.count]', ([near, far]) => near > 20 && far === 0],
+  ['in the pit the near balls are drawn with the fine shape, none from afar','const Ph = await import("/js/physics.js"), g = Ph.groups[2]; dev.go(-31.6, 34.5, P / 2, ["KeyW"], .9); dev.step(2); const near = g.fine.count; dev.go(-20, 36, P / 2); dev.step(2); return [near, g.fine.count]', ([near, far]) => near > 20 && far === 0],
 ];
 const loose = run(base + '?dev&bare', `(async () => { const P = Math.PI, out = []; for (const f of [${solids.map(([, e]) => `async () => { ${e} }`).join(',')}]) out.push(await f()); return out; })()`);
 check('solids page loads without console errors', !loose.errors.length, loose.errors.join(' | ').slice(0, 600));
@@ -145,7 +145,7 @@ catch (e) { check('js/seen.js covers what each zone can see (tools/pvs.mjs --che
 
 // Every registered ladder (plain ?dev, so the yard's dry one too), from the water: forward facing it, forward at 0.9 rad off it, jump alone,
 // run; from the deck: walk off toward the water, and back down facing it. Each must arrive (on the deck, or standing in the water) with the
-// eye never moving more than 3 cm in a frame. Ladders once only worked from one side of a pool.
+// eye never moving more than 4 cm in a frame (the climb itself is 3). Ladders once only worked from one side of a pool.
 { const f = run(base + '?dev', `(async () => { const { ladders } = await import('/js/build.js'), P = Math.PI, out = [];
   for (const [x1, z1, x2, z2, dx, dz, top] of ladders) { const cx = (x1 + x2) / 2, cz = (z1 + z2) / 2, yaw = Math.atan2(-dx, -dz), b = () => { const s = dev.state(); return .15 - ((s.x - cx) * dx + (s.z - cz) * dz); };
     const up = () => { const s = dev.state(); return Math.abs(s.y - top) < .02 && !s.air && b() < .1; }, dn = () => { const s = dev.state(); return s.y < top - .5 && !s.air && b() > .25; };
@@ -156,7 +156,7 @@ catch (e) { check('js/seen.js covers what each zone can see (tools/pvs.mjs --che
     water(); r.upJump = hold(['Space'], yaw, up, 300); onto(); r.downW = hold(['KeyW'], yaw + P, dn, 200);
     r.upRun = hold(['KeyW', 'ShiftLeft'], yaw, up, 300); onto(); r.downBack = hold(['KeyS'], yaw, dn, 200); out.push(r); }
   return out; })()`, '--wait', '200000');
-  const bad = (f.result || []).filter(r => Object.entries(r).some(([k, v]) => k !== 'at' && !(v >= 0 && v <= .03)));
+  const bad = (f.result || []).filter(r => Object.entries(r).some(([k, v]) => k !== 'at' && !(v >= 0 && v <= .04)));
   check('every ladder climbs up from the water and down from the deck, either way round, smoothly', f.result?.length >= 7 && !bad.length && !f.errors.length, JSON.stringify(bad.length ? bad : f).slice(0, 600)); }
 
 // Production address: no window.dev, the start overlay is up once the level is built.

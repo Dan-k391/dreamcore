@@ -37,7 +37,7 @@ addEventListener('blur', letGo); // a key held while the window loses focus neve
 addEventListener('mousemove', e => { // mouse look: captured pointer where the browser allows it, bare cursor movement where it doesn't
   if (!locked() && !free) return;
   const m = free ? 60 : 250, cl = v => Math.max(-m, Math.min(m, v)); // drop the one-event jumps browsers report on re-entry or under capture
-  turn(cl(e.movementX) * .0022 * camera.fov / 72, cl(e.movementY) * .0022 * camera.fov / 72); // slower while zoomed in
+  turn(cl(e.movementX) * .0022 * Math.min(72, camera.fov) / 72, cl(e.movementY) * .0022 * Math.min(72, camera.fov) / 72); // slower while zoomed in, the same while running widens the view
 });
 addEventListener('keydown', e => { if (paused()) return; keys[e.code] = 1; if (e.code === 'Space') e.preventDefault(); if (e.code === 'KeyM') sfx?.mute(); });
 addEventListener('keyup', e => keys[e.code] = 0);
@@ -66,31 +66,32 @@ console.assert(floorH(0, -12) === -1.2 && floorH(0, -6.2) === -.3 && floorH(15, 
   && (q => collide(q) && q.z > 1.29)(V(5, 0, .6)) && Object.values(zones).every(z => inR(z.probe.x, z.probe.z, ...z.box)) && emitters.every(e => inR(e.p.x, e.p.z, ...e.zone.box)), 'level self-check failed');
 
 const vel = new THREE.Vector2(), UP = new THREE.Vector3(0, 1, 0);
-let stride = 0, foot = 0, feet = floorH(camera.position.x, camera.position.z), vy = 0, air = false, grip = false, drop = 0, simT = 0, hitP = 0, splashP = false, fallP = 0; // feet: height of the player's soles
+let stride = 0, foot = 0, feet = floorH(camera.position.x, camera.position.z), vy = 0, air = false, grip = false, drop = 0, simT = 0, hitP = 0, splashP = false, fallP = 0, coy = 0, buf = 0, spaceWas = 0, lag = 0, dip = 0, dipV = 0; // feet: height of the player's soles; coy, buf: jump grace times; lag, dip: the eye's easing and landing dip
 const place = (x, z, yaw, pitch) => { // teleport: stand at (x, z) facing that way, at rest
   camera.position.x = x; camera.position.z = z; camera.rotation.set(pitch, yaw, 0, 'YXZ');
-  feet = floorH(x, z); vy = 0; vel.set(0, 0); air = grip = false;
+  feet = floorH(x, z); vy = lag = dip = dipV = 0; vel.set(0, 0); air = grip = false;
 };
 const eye = { lift: 0 }; // metres added to the eye height; only dev.lift (?dev) changes it
 const frame = dt => { // one game frame of dt seconds: the loop below passes the real time, dev.step() a fixed one
-  const p = camera.position, k = c => keys[c] ? 1 : 0, ease = Math.min(1, dt * 8);
+  const p = camera.position, k = c => keys[c] ? 1 : 0, sp = vel.length();
   uTime.value += dt;
-  const fov = k('KeyC') ? 22 : 72; // hold C to zoom in
-  if (Math.abs(camera.fov - fov) > .05) { camera.fov += (fov - camera.fov) * Math.min(1, dt * 12); camera.updateProjectionMatrix(); }
+  const fov = k('KeyC') ? 22 : 72 + 4 * Math.max(0, Math.min(1, (sp - 2.85) / 3.15)); // hold C to zoom in; running widens the view up to 4 degrees
+  if (Math.abs(camera.fov - fov) > .05) { camera.fov += (fov - camera.fov) * Math.min(1, dt * (fov < 70 || camera.fov < 70 ? 12 : 3)); camera.updateProjectionMatrix(); }
   const pool = !!zone.tile, deep = (pool || zone.wade) && feet < -.5; // only the pool rooms have water below 0; elsewhere a low floor is just a low floor
-  const speed = (k('ShiftLeft') ? 4 : 1.9) * (deep ? .55 : 1); // wading is slower
-  vel.x += ((k('KeyD') - k('KeyA')) * speed - vel.x) * ease;
-  vel.y += (((k('KeyW') | k('ArrowUp')) - (k('KeyS') | k('ArrowDown'))) * speed - vel.y) * ease;
+  const speed = (k('ShiftLeft') ? 6 : 2.85) * (deep ? .55 : 1); // wading is slower
   camera.rotateOnWorldAxis(UP, ((k('ArrowLeft') | k('KeyQ')) - (k('ArrowRight') | k('KeyE'))) * dt * 2.2);
-  const yaw = eu.setFromQuaternion(camera.quaternion).y, sn = Math.sin(yaw), cs = Math.cos(yaw);
+  const yaw = eu.setFromQuaternion(camera.quaternion).y, sn = Math.sin(yaw), cs = Math.cos(yaw), ix = k('KeyD') - k('KeyA'), iy = (k('KeyW') | k('ArrowUp')) - (k('KeyS') | k('ArrowDown'));
+  // vel is in the world, so turning in the air doesn't swing the jump round; diagonals are no faster; quick to start (90% in 0.23 s), quicker to stop, and a jump steers only a little
+  const il = Math.hypot(ix, iy) || 1, tx = (ix * cs - iy * sn) / il * speed, tz = (-ix * sn - iy * cs) / il * speed, ease = Math.min(1, dt * (air ? 3 : tx * tx + tz * tz < sp * sp ? 14 : 10));
+  vel.x += (tx - vel.x) * ease; vel.y += (tz - vel.y) * ease;
   const warp = warps.find(w => inR(p.x, p.z, w[0], w[1], w[2], w[3]));
   if (warp) { p.x += warp[4]; p.z += warp[5]; }
   // Ladders: at one, moving toward its deck (whichever way you face) or jumping climbs, moving toward the water descends; once holding on, gravity lets go of you.
-  const lad = ladders.find(l => inR(p.x, p.z, l[0], l[1], l[2], l[3])), top = lad ? lad[6] : 0, ix = k('KeyD') - k('KeyA'), iy = (k('KeyW') | k('ArrowUp')) - (k('KeyS') | k('ArrowDown'));
+  const lad = ladders.find(l => inR(p.x, p.z, l[0], l[1], l[2], l[3])), top = lad ? lad[6] : 0;
   const toward = lad && (ix || iy) ? ((ix * cs - iy * sn) * lad[4] + (-ix * sn - iy * cs) * lad[5]) / Math.hypot(ix, iy) : 0, below = lad && Math.min(feet, floorH(p.x, p.z)) < top - .01; // below: not standing on the deck
   const climb = toward < -.3 ? -1 : toward > .3 || (below && k('Space')) ? 1 : 0, at = !!lad && (below || toward < -.3);
   const hang = grip && at && feet < top - .05; // on the rungs below the deck: the body stays on the ladder
-  let mx = (vel.x * cs - vel.y * sn) * dt, mz = (-vel.x * sn - vel.y * cs) * dt;
+  let mx = vel.x * dt, mz = vel.y * dt;
   if (lad && k('Space') && !iy && !ix && Math.abs(feet - top) < .03 && (p.x - (lad[0] + lad[2]) / 2) * lad[4] + (p.z - (lad[1] + lad[3]) / 2) * lad[5] < .5) { mx += lad[4] * 1.5 * dt; mz += lad[5] * 1.5 * dt; } // jump held at the top: step off onto the deck
   const ox = p.x, oz = p.z, n = Math.max(1, Math.ceil(Math.hypot(mx, mz) / .1));
   const fb = grip ? feet - .3 : feet; // on a ladder a solid deck is stepped onto only once the feet are level with it, as below
@@ -106,7 +107,7 @@ const frame = dt => { // one game frame of dt seconds: the loop below passes the
   const ground = groundAt(p.x, p.z, feet), was = feet;
   let landed = false, hit = 0;
   grip = at && (grip || climb !== 0);
-  if (grip) { feet = Math.max(Math.min(ground, feet + 4 * dt), Math.min(top, feet + climb * 1.3 * dt)); vy = 0; }
+  if (grip) { feet = Math.max(Math.min(ground, feet + 4 * dt), Math.min(top, feet + climb * 1.8 * dt)); vy = 0; }
   else if (vy > 0 || feet > ground + (air ? .001 : .12)) { // off the ground: gravity, and drag once the legs are under water. Walking off a ledge is a fall; walking down a slope is not
     vy -= 11 * dt; if (pool && feet < WY) vy -= vy * Math.min(1, 4 * dt);
     feet += vy * dt;
@@ -114,13 +115,20 @@ const frame = dt => { // one game frame of dt seconds: the loop below passes the
     if (feet <= ground) { hit = -vy; feet = ground; vy = 0; landed = true; }
   } else feet = Math.min(ground, feet + 4 * dt); // a step up is climbed, not jumped to
   air = feet > ground + .001;
-  if (k('Space') && !air) vy = pool && feet < -.5 ? 2.8 : 4.3; // deep water weighs a jump down (a dry pit only slows the walk: you can jump out of it)
+  // a jump pressed up to 0.1 s before landing, or up to 0.1 s after walking off an edge, still jumps
+  coy = air ? coy - dt : .1; buf = k('Space') && !spaceWas ? .1 : buf - dt; spaceWas = k('Space');
+  if ((buf > 0 || k('Space')) && coy > 0 && !grip && vy <= 0) { vy = pool && feet < -.5 ? 2.8 : 4.3; coy = buf = 0; } // deep water weighs a jump down (a dry pit only slows the walk: you can jump out of it)
   const splash = pool && was > WY && feet <= WY; // the moment the feet break the surface
   if (splash) drop = .35;
-  if (!air) stride += vel.length() * dt;
-  p.y = feet + 1.62 + eye.lift + Math.sin(stride * 3.4) * .018 * Math.min(1, vel.length());
-  const f = Math.floor(stride * 3.4 / Math.PI); // one footfall per half bob cycle, one on landing, one on entering water
-  if (sfx && ((f !== foot && !air && vel.length() > .5) || landed || splash)) sfx.step(pool ? ground < 0 ? 'water' : 'tile' : zone.step || 'carpet');
+  // the eye: a step up or down is eased over about 0.07 s instead of popping, a landing dips it by about 1 cm per m/s of fall, and
+  // walking bobs it 1.6 cm (2.2 running), lowest at each footfall; a step is longer the faster you go (1.26 m walking, 2.05 m running)
+  if (!air && !landed) lag = Math.max(-.4, Math.min(.4, lag - (feet - was))); lag *= Math.exp(-dt * 15);
+  if (landed && hit > 1.5) dipV -= Math.min(hit, 9) * .3;
+  for (let t = dt; t > 1e-6; t -= 1 / 60) { const h = Math.min(t, 1 / 60); dipV += (-150 * dip - 24.5 * dipV) * h; dip += dipV * h; } // critically damped
+  if (!air) stride += Math.PI * sp * dt / (.55 + .25 * sp);
+  p.y = feet + 1.62 + eye.lift + lag + dip - Math.cos(2 * stride) * .008 * Math.min(1.4, sp / 2.85);
+  const f = Math.floor(stride / Math.PI); // one footfall per bob, one on landing, one on entering water
+  if (sfx && ((f !== foot && !air && sp > .5) || landed || splash)) sfx.step(pool ? ground < 0 ? 'water' : 'tile' : zone.step || 'carpet');
   foot = f;
 
   const here = Object.values(zones).find(z => inR(p.x, p.z, ...z.box));
@@ -153,7 +161,7 @@ const looseCost = { ms: 0 }; // what the loose things cost the last frame, in ms
 // ?dev only (dev.reset): everything a walk leaves behind put back to what a fresh load at (x, z) would start with, so one page can take many photos
 function resetAll(x, z, yaw, pitch) {
   for (const c in keys) keys[c] = 0; eye.lift = 0; uTime.value = 0; camera.fov = 72; camera.updateProjectionMatrix();
-  place(x, z, yaw, pitch); stride = foot = vy = drop = simT = hitP = fallP = 0; grip = splashP = false; vel.set(0, 0);
+  place(x, z, yaw, pitch); stride = foot = vy = drop = simT = hitP = fallP = coy = buf = spaceWas = 0; grip = splashP = false; vel.set(0, 0);
   zone = Object.values(zones).find(q => inR(x, z, ...q.box)) || zones.bA; // as lights.js picks zone0
   resetWater(); resetLoose();
   setSky(zone.sky || 'day'); relight(camera.position, zone, 1); relight(camera.position, zone, 1);
