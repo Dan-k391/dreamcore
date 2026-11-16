@@ -138,9 +138,10 @@ const waterFS = `uniform sampler2D tMirror, tUnder, tUnderZ, tPlan, tGround, tNo
       }
       if (uMain > 0.) { float lo = 0., st = t / 16.; // the height map's columns are their colliders, a few cm proud of the stone, and it has no rails or rungs: so the
         for (int i = 1; i <= 16; i++) { float ti = st * float(i); vec4 cq = clip(vW + T * ti); vec2 uq = wide(cq); float dz = off(uq) ? -1. : cq.w - seen(uq); // first point the ray reaches
-          if (dz > 0. && dz < .1 + st) { float hi = ti; for (int k = 0; k < 4; k++) { float tm = .5 * (lo + hi); vec4 cm = clip(vW + T * tm); if (cm.w > seen(wide(cm))) hi = tm; else lo = tm; } t = hi; break; } // just behind the
+          if (dz > 0. && dz < .1 + st) { float hi = ti; for (int k = 0; k < 4; k++) { float tm = .5 * (lo + hi); vec4 cm = clip(vW + T * tm); if (cm.w > seen(wide(cm))) hi = tm; else lo = tm; }
+            if (seen(wide(clip(vW + T * lo))) - seen(wide(clip(vW + T * hi))) < .1 + .03 * cq.w) t = hi; break; } // just behind the
           lo = ti; } // underwater picture's surface is what it really meets, and the picture holds it; the height map stays the fallback where the picture has nothing
-      }
+      } // ...unless the picture's depth jumps there: then the ray went behind an edge the camera sees over (a step's nosing), not into a surface, and the height map's point stands
       vec3 hit = vW + T * t; vec4 ch = clip(hit); vec2 hu = wide(ch);
       float live = off(hu) ? 0. : uMain * (1. - smoothstep(.05 + .02 * ch.w, .14 + .05 * ch.w, abs(ch.w - seen(hu)))); // can the camera see the point the ray reached? (its depth there must match)
       vec3 still = texture2D(tPlan, plan(hit.xz)).rgb; // the plan is a still, so it gets the same moving light the tiles give the live picture: drifting pattern plus the real ripples
