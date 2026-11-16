@@ -1,5 +1,5 @@
 // Walking through every portal (build.js portal(), js/portals.js):
-//   node tools/portals.mjs [--port 8200] [--only i,j] [--modes walk,run,hop,diag,back,same,sweep,clip] [--json f]
+//   node tools/portals.mjs [--port 8200] [--only i,j] [--modes walk,run,hop,diag,back,same,sweep,clip,leak] [--json f]
 // Loads ?dev (the yard's test pair too) and, for every portal end i (build.js ends), walks through it from 2.5 m before to 2.5 m past
 // with dev.hold + dev.step: walk (2.85 m/s, 1/60 s frames), run (6 m/s), hop (7.2 m/s, Space held, 0.05 s frames), diag (walking
 // 0.2 rad off square, aimed at the middle), back (until 0.15 m past the plane, then backing out). Asserts per walk:
@@ -23,7 +23,7 @@ import { writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const argv = process.argv.slice(2), arg = (k, d) => { const i = argv.indexOf('--' + k); return i < 0 ? d : argv[i + 1]; };
-const port = arg('port', '8200'), opts = { only: arg('only', ''), modes: arg('modes', 'walk,run,hop,diag,back,same,sweep,clip').split(',') };
+const port = arg('port', '8200'), opts = { only: arg('only', ''), modes: arg('modes', 'walk,run,hop,diag,back,same,sweep,clip,leak').split(',') };
 
 async function page(o) {
   const B = await import('/js/build.js'), { renderer: r, camera } = dev, gl = r.getContext();
@@ -38,7 +38,7 @@ async function page(o) {
   const out = [], only = o.only ? o.only.split(',').map(Number) : null, keysAll = ['KeyW', 'KeyS', 'ShiftLeft', 'Space'];
   for (const [i, e] of B.ends.entries()) { if (only && !only.includes(i)) continue;
     const name = `${i}:${e.zone.id}>${e.to.zone.id}`; swing(e, 1);
-    for (const m of o.modes.filter(m => !['same', 'sweep', 'clip'].includes(m))) {
+    for (const m of o.modes.filter(m => !['same', 'sweep', 'clip', 'leak'].includes(m))) {
       const dt = m === 'hop' ? .05 : 1 / 60, sp = m === 'run' ? 6 : m === 'hop' ? 7.2 : 2.85, a = m === 'diag' ? .2 : 0, L = 2; // L: the run-up and run-out, inside the hallway's 2.4 m (2.5 began on the facing door's plane, in its shut leaf, and ran out through it)
       const dir = [-e.n.x * Math.cos(a) + e.r.x * Math.sin(a), -e.n.z * Math.cos(a) + e.r.z * Math.sin(a)], sx = e.p.x - dir[0] * L, sz = e.p.z - dir[1] * L, yaw = Math.atan2(-dir[0], -dir[1]);
       const walk = hook => { // hook(k): called with the state the frame before picture k left, just before stepping to it
@@ -79,6 +79,12 @@ async function page(o) {
       dev.view(e.p.x, y, e.p.z, e.ry, -.05); const A = grab(); dev.view(fx, y + e.to.p.y - e.p.y, fz, e.ry + e.turn, -.05); const F = grab();
       dev.view(e.p.x + e.n.x * .02, y, e.p.z + e.n.z * .02, e.ry, -.05); const A2 = grab();
       out.push({ name, m: 'same', mean: +diff(A, F).toFixed(2), move2cm: +diff(A, A2).toFixed(2), ok: diff(A, F) < 1.5 }); }
+    if (o.modes.includes('leak') && e.door) { // the owner's 307-then-308: the doors behind the eye, opened, must not change the picture through this one, looked at from its threshold, turned 0.3 rad either way (another opening behind the eye once took the whole screen and drew over this one's picture)
+      const ex = e.p.x + e.n.x * .25, ez = e.p.z + e.n.z * .25; let worst = 0, n = 0;
+      for (const t of [-.3, 0, .3]) { const yw = e.ry + t, dx = -Math.sin(yw), dz = -Math.cos(yw); // this room's doors onto other rooms, wholly behind the eye: they must add nothing
+        const others = B.ends.filter(f => f !== e && f.door && f.zone === e.zone && f.to.zone !== e.to.zone && Math.hypot(f.p.x - ex, f.p.z - ez) < 80 && (f.p.x - ex) * dx + (f.p.z - ez) * dz < -.6), set = v => others.forEach(g => swing(g, v));
+        const look = () => { dev.view(ex, y, ez, yw, 0); return grab(); }; set(0); const A = look(); set(1); worst = Math.max(worst, diff(look(), A)); set(0); n += others.length; }
+      swing(e, 1); out.push({ name, m: 'leak', worst: +worst.toFixed(3), n, ok: worst < .1 }); }
     if (o.modes.includes('clip')) {
       const { scene } = await import('/js/core.js'), T = dev.THREE, card = new T.Mesh(new T.PlaneGeometry(.6, .6), new T.MeshBasicMaterial({ color: 0xff40ff, side: T.DoubleSide }));
       card.layers.enableAll(); card.frustumCulled = false; card.rotation.y = e.to.ry; scene.add(card);
@@ -102,7 +108,7 @@ const browse = fileURLToPath(new URL('./browse.mjs', import.meta.url));
 const res = JSON.parse(execFileSync(process.execPath, [browse, '--url', `http://127.0.0.1:${port}/?dev#3.8,30,0,0`, '--size', '640x360', '--wait', '900000', '--eval', `(${page})(${JSON.stringify(opts)})`], { encoding: 'utf8', maxBuffer: 1 << 26 }));
 if (res.errors?.length) console.log('page errors:', res.errors.slice(0, 3));
 const rows = res.result || [];
-for (const q of rows) console.log(`${q.ok ? 'ok  ' : 'FAIL'} ${q.name.padEnd(12)} ${q.m.padEnd(5)} ` + (q.m === 'same' ? `mean ${q.mean} (a 2 cm move: ${q.move2cm})` : q.m === 'sweep' ? `the 2 cm step across the plane ${q.at} vs the steps within 10 cm ${q.near}` : q.m === 'clip' ? `a card behind the far plane changes it ${q.behind} (in front: ${q.front})`
+for (const q of rows) console.log(`${q.ok ? 'ok  ' : 'FAIL'} ${q.name.padEnd(12)} ${q.m.padEnd(5)} ` + (q.m === 'same' ? `mean ${q.mean} (a 2 cm move: ${q.move2cm})` : q.m === 'sweep' ? `the 2 cm step across the plane ${q.at} vs the steps within 10 cm ${q.near}` : q.m === 'leak' ? `${q.n} doors behind the eye opened change the picture through it by ${q.worst}` : q.m === 'clip' ? `a card behind the far plane changes it ${q.behind} (in front: ${q.front})`
   : `end off by ${q.err} m${q.slid ? ` (slid along a solid${q.bend !== null ? `, first pushed off its line ${q.bend} m from the plane` : ''})` : q.bend !== null ? `, PUSHED OFF ITS LINE STRADDLING THE PLANE (${q.bend} m)` : ''}, facing ${q.face}, zone ${q.zoneOk ? 'ok' : 'WRONG'}, top ${q.top} m/s, state jump on crossing ${q.jump} vs frames before ${q.pre} (the picture's own change ${q.around})${q.crossed ? '' : ', NEVER CROSSED'}`));
 if (arg('json')) writeFileSync(arg('json'), JSON.stringify(rows, null, 1));
 const bad = rows.filter(q => !q.ok).length; console.log(`${rows.length - bad} passed, ${bad} failed`); process.exit(bad || res.errors?.length ? 1 : 0);
