@@ -40,5 +40,9 @@
  {"name": "baths-axis", "hash": "-1398.5,1416,-1.5708,0.05"},
  {"name": "baths-gallery", "hash": "-1358.5,1411,1.25,-0.18", "lift": 4.5},
  {"name": "baths-waterline", "hash": "-1380,1412,-1.2,-0.03"},
- {"name": "baths-door", "hash": "4,24.2,-1.5708,0"}
+ {"name": "baths-door", "hash": "4,24.2,-1.5708,0"},
+ {"name": "gallery-length", "hash": "333.6,300.5,1.45,0.05"},
+ {"name": "gallery-bench", "hash": "327.6,300.4,-2.356,-0.1"},
+ {"name": "lobby-lifts", "hash": "359.2,299.6,-2.356,0"},
+ {"name": "lobby-west-lift", "hash": "360.8,301,1.5708,0"}
 ]
