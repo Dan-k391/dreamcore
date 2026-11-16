@@ -1,7 +1,8 @@
 // Regression suite: loads the game with and without ?dev through tools/browse.mjs, walks the routes between places with dev.go
 // and checks where you end up. One line per check; exit code 1 if any fails.
-//   node tools/test.mjs [--port 8200] [--all]   (default prints only failed checks and a final count; --all prints every line)
-import { execFileSync } from 'node:child_process';
+//   node tools/test.mjs [--port 8200] [--all] [--only area,area] [--list]   (default prints only failed checks and a final count; --all prints every line)
+//   Each area is its own child process (--child <area>) with its own browsers; areas that measure time (perf) run alone first, the rest side by side.
+import { execFileSync, spawn } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const argv = process.argv.slice(2), i = argv.indexOf('--port'), base = `http://127.0.0.1:${i < 0 ? 8200 : argv[i + 1]}/`;
@@ -10,6 +11,37 @@ const run = (url, expr, ...opt) => { // -> {result, errors}; browse.mjs exits 1 
   try { return JSON.parse(execFileSync(process.execPath, [browse, '--url', url, '--eval', expr, ...opt], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })); }
   catch (e) { try { return JSON.parse(e.stdout); } catch { return { result: null, errors: [String(e.stderr || e.message)] }; } }
 };
+const AREAS = { // area: [check count (a full run warns when it differs), runs alone, what it covers]
+  perf: [5, 1, 'checks that measure time: library bake, ready, first sign, openings, physics budgets'],
+  seen: [1, 0, 'js/seen.js covers what each zone can see (tools/pvs.mjs --check, the longest single check)'],
+  move: [47, 0, 'walks between places, jumping and hopping, ladders, passage warps, noclip, the flume'],
+  load: [12, 0, 'page loads, draw-call and shader-compile guards, frame ceilings, the single file, other hosts, production'],
+  water: [9, 0, 'pool pictures, optics, mirror reflections, skipped pool pictures'],
+  solid: [11, 0, 'what stops you: benches, doors, arches, the flume; coplanar faces; nothing pops at an opening'],
+  light: [2, 0, 'shadow maps: every caster, the loose-things cache'],
+  look: [9, 0, 'zone culling, mood at openings and passages, settings panel, grass viewport'],
+  loose: [13, 0, 'balls, rings, the pit and what they do'],
+  sound: [1, 0, 'music'],
+};
+const oi = argv.indexOf('--only'), ci = argv.indexOf('--child'), A = ci < 0 ? null : argv[ci + 1], on = a => A === a;
+if (argv.includes('--list')) { for (const [a, [n, , d]] of Object.entries(AREAS)) console.log(`${a.padEnd(6)} ${String(n).padStart(3)} checks  ${d}`); process.exit(0); }
+if (!A) { // the scheduler: one child per area
+  const want = oi < 0 ? Object.keys(AREAS) : (argv[oi + 1] || '').split(','), unknown = want.filter(a => !AREAS[a]);
+  if (unknown.length) { console.error(`unknown area: ${unknown.join(', ')} (areas: ${Object.keys(AREAS).join(', ')})`); process.exit(2); }
+  const go = a => new Promise(done => { const t0 = Date.now(), p = spawn(process.execPath, [fileURLToPath(import.meta.url), '--port', i < 0 ? '8200' : argv[i + 1], '--child', a, ...(argv.includes('--all') ? ['--all'] : [])]); let out = '';
+    p.stdout.on('data', d => out += d); p.stderr.on('data', d => out += d); p.on('close', () => done({ a, out: out.trim(), s: (Date.now() - t0) / 1000 })); });
+  const t0 = Date.now(), res = [];
+  for (const a of want.filter(a => AREAS[a][1])) res.push(await go(a));
+  const queue = want.filter(a => !AREAS[a][1]), ji = argv.indexOf('--jobs'), jobs = +(ji < 0 ? process.env.JOBS || 5 : argv[ji + 1]); // the GPU is shared: past a few browsers at once, everything only gets slower
+  await Promise.all(Array.from({ length: Math.min(jobs, queue.length) }, async () => { for (let a; a = queue.shift();) res.push(await go(a)); }));
+  let p = 0, f = 0;
+  for (const a of want) { const r = res.find(r => r.a === a), lines = r.out.split('\n').map(l => l.trimEnd()), m = /^(\d+) passed, (\d+) failed$/.exec(lines.at(-1)), n = m ? +m[1] + +m[2] : 0;
+    if (m) { p += +m[1]; f += +m[2]; } else { f++; lines.push('FAIL ' + a + ' area crashed'); }
+    console.log(`${a.padEnd(6)} ${r.s.toFixed(1).padStart(6)} s  ${m ? m[1] + ' passed, ' + m[2] + ' failed' : 'crashed'}${AREAS[a][0] && n !== AREAS[a][0] ? `  (expected ${AREAS[a][0]} checks, ran ${n})` : ''}`);
+    for (const l of lines.slice(0, m ? -1 : undefined)) if (l) console.log('  ' + l); }
+  console.log(`${p} passed, ${f} failed  (${((Date.now() - t0) / 1000).toFixed(1)} s)`);
+  process.exit(f ? 1 : 0);
+}
 let fails = 0, passes = 0;
 const all = argv.includes('--all');
 const check = (name, ok, detail = '') => { if (ok) passes++; else fails++; if (all || !ok) console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}${detail ? '  ' + detail : ''}`); };
@@ -55,12 +87,14 @@ const walks = [
   ['glasshouseBack', [837, -600, P / 2, R, 5], { zone: 'hT', sky: 'day', x: 2.9, z: 49 }],
 ];
 
+if (on('move')) {
 const dev = run(base + '?dev&bare', `[${walks.map(([, a]) => `dev.go(${a.slice(0, 4).join(",")},${a[4] / 1.5})`).join(',')}]`); // the walks' times were written at the old speeds (1.9 and 4 m/s); the body is 1.5 times faster now
 check('dev mode loads without console errors', !dev.errors.length, dev.errors.join(' | ').slice(0, 600));
 walks.forEach(([name, , want], k) => {
   const got = dev.result?.[k], bad = got ? Object.entries(want).filter(([key, v]) => typeof v === 'number' ? !(Math.abs(got[key] - v) <= .35) : got[key] !== v) : [1];
   check(name, !bad.length, got ? (bad.length ? `want ${JSON.stringify(want)} got ${JSON.stringify(got)}` : '') : 'no result');
 });
+}
 
 // Solids and loose things: [name, page function body (dev, P = Math.PI in scope; it returns a value), test of that value in node]. Each starts from a teleport.
 const PIT = 'dev.go(-31.6, 30.45, P / 2); dev.key("KeyW", true); dev.key("ShiftLeft", true); dev.key("Space", true); for (let i = 0; i < 100; i++) { dev.step(1); if (i === 2) dev.key("Space", false); if (i === 30) { dev.key("KeyW", false); dev.key("ShiftLeft", false); } }'; // run down the slide into the pit and jump off its end (the block it stood on became the slide)
@@ -111,20 +145,31 @@ const solids = [
   ['walk under the flume platform along the south deck, between its posts, to the east wall', 'return dev.go(36.5, -1.4, -P / 2, ["KeyW"], 5)', s => near(s.x, 44.7, .05) && near(s.y, 0, .01)],
   ['in the pit the near balls are drawn with the fine shape, none from afar','const Ph = await import("/js/physics.js"), g = Ph.groups[2]; dev.go(-31.6, 34.5, P / 2, ["KeyW"], .9); dev.step(2); const near = g.fine.count; dev.go(-20, 36, P / 2); dev.step(2); return [near, g.fine.count]', ([near, far]) => near > 20 && far === 0],
 ];
-const loose = run(base + '?dev&bare', `(async () => { const P = Math.PI, out = []; for (const f of [${solids.map(([, e]) => `async () => { ${e} }`).join(',')}]) out.push(await f()); return out; })()`);
-check('solids page loads without console errors', !loose.errors.length, loose.errors.join(' | ').slice(0, 600));
-solids.forEach(([name, , ok], k) => { const got = loose.result?.[k]; let pass = false; try { pass = got !== undefined && ok(got); } catch {} check(name, pass, pass ? '' : 'got ' + JSON.stringify(got)); });
+// The area of each solids entry, in order: m move, s solid, l loose, p perf (wall-clock budgets, run alone). Entries of one area share a page, in this order: a
+// ball test leaves the pit and the rings as it found them for the next, so the loose ones stay together.
+const solidArea = 'mmsssssllllpllpsllllmmmmmmllsmsl', AN = { m: 'move', s: 'solid', l: 'loose', p: 'perf' };
+if (solidArea.length !== solids.length) throw new Error(`solidArea has ${solidArea.length} letters for ${solids.length} entries`);
+const mine = solids.filter((_, k) => AN[solidArea[k]] === A);
+if (mine.length) {
+  const loose = run(base + '?dev&bare', `(async () => { const P = Math.PI, out = []; for (const f of [${mine.map(([, e]) => `async () => { ${e} }`).join(',')}]) out.push(await f()); return out; })()`);
+  if (on('solid')) check('solids page loads without console errors', !loose.errors.length, loose.errors.join(' | ').slice(0, 600));
+  else if (loose.errors.length) check(`${A}: its solids page loads without console errors`, false, loose.errors.join(' | ').slice(0, 600));
+  mine.forEach(([name, , ok], k) => { const got = loose.result?.[k]; let pass = false; try { pass = got !== undefined && ok(got); } catch {} check(name, pass, pass ? '' : 'got ' + JSON.stringify(got)); });
+}
 
 // Cost guards: a place drawn under another place's sky shows as draw calls at the terrace lookout (42 when only the terrace is
 // drawn, 238 with the main building); a shader compiled late (a hitch on first sight) shows as programs growing on a tour of every zone, four ways, and the passages.
+if (on('load') || on('perf')) {
 const cost = run(base + '?dev#702.5,649.4,1.5708,-0.2', `(() => { dev.hold = true; dev.step(2); const look = dev.info().calls, p0 = dev.renderer.info.programs.length;
   for (const z of Object.values(dev.zones)) for (const yaw of [0, 1.57, 3.14, 4.71]) dev.go(z.probe.x, z.probe.z, yaw);
   const P = Math.PI, R = ['KeyW', 'ShiftLeft']; dev.go(3.8, 50.5, P, R, 6); dev.go(3.8, 668, 0, R, 5); dev.go(65.5, 14, -P / 2, R, 6); dev.go(683, 14, P / 2, R, 5); dev.go(34, 49.4, -P / 2, R, 7); dev.go(652, 649.4, P / 2, R, 5);
   const took = n => Math.round(performance.getEntriesByName(n)[0]?.duration ?? 1e9);
   return { look, p0, p1: dev.renderer.info.programs.length, load: dev.readyAt, bake: Math.round(dev.lib.ms), sign: took('load: first sign'), openings: took('load: openings') }; })()`);
+if (on('load')) {
 check('cost page loads without console errors', !cost.errors.length, cost.errors.join(' | ').slice(0, 600));
 check('only the terrace is drawn at the terrace lookout (under 120 draw calls; 238 when other places leak in)', cost.result?.look < 120, JSON.stringify(cost.result));
 check('no shader compiles after load on a tour of every zone and passage', cost.result && cost.result.p1 === cost.result.p0, JSON.stringify(cost.result));
+} else {
 // Load guards, loose enough for a shared GPU and a cold CDN: the library bake (every showroom set too) took 3.5 s when its
 // programs compiled again, one by one, on first draw; it takes about 0.5 s with them compiled ahead
 check('the material library bakes in under 6 s (0.5 s on a quiet GPU; other agents share it)', cost.result?.bake < 6000, JSON.stringify(cost.result));
@@ -132,26 +177,28 @@ check('dev mode is ready in under 30 s', cost.result?.load < 30000, JSON.stringi
 // the first sign's lettering waited 2.5-5 s on its font's start-up on most loads until index.html drew that font first (about 5 ms now);
 // the search for the openings between zones took half a second when every sample scanned every solid (about 25 ms now)
 check('the first sign is drawn in under 0.5 s and the openings are found in under 0.2 s', cost.result?.sign < 500 && cost.result?.openings < 200, JSON.stringify(cost.result));
+}
+}
 
 // Frame-cost ceilings at the two heaviest views of the real game (every pass of one frame). Before places were culled by what can be
 // seen from where you stand (js/seen.js) the gallery drew 902 calls / 6.9 M triangles; now about 340 / 1.4 M, the corridor 680 / 3.2 M.
-for (const [name, hash, calls, tris] of [['gallery-pool', '23.2,14.2,3.14159,-0.08', 500, 2.5e6], ['corridor', '10.5,10.8,-1.5708,0', 900, 4.2e6]]) {
+if (on('load')) for (const [name, hash, calls, tris] of [['gallery-pool', '23.2,14.2,3.14159,-0.08', 500, 2.5e6], ['corridor', '10.5,10.8,-1.5708,0', 900, 4.2e6]]) {
   const f = run(base + '?dev&bare#' + hash, `(() => { dev.hold = true; dev.step(60); const n = dev.info(); return { calls: n.calls, tris: n.triangles }; })()`);
   check(`${name} draws under ${calls} calls and ${tris / 1e6} M triangles a frame`, f.result?.calls < calls && f.result?.tris < tris, JSON.stringify(f.result));
 }
 // The pool's underwater picture is taken from the eye: a scene hook calling getWorldPosition() once reset three's Refractor camera
 // to the origin, and the arcade's water showed the sea under it instead of its basin.
-{ const f = run(base + '?dev&bare#10.5,-12,-1.5708,-0.05', `(() => { dev.hold = true; dev.step(3); const P = new dev.THREE.Vector3(), e = dev.camera.getWorldPosition(new dev.THREE.Vector3()); let d = -1;
+if (on('water')) { const f = run(base + '?dev&bare#10.5,-12,-1.5708,-0.05', `(() => { dev.hold = true; dev.step(3); const P = new dev.THREE.Vector3(), e = dev.camera.getWorldPosition(new dev.THREE.Vector3()); let d = -1;
     dev.scene.traverse(o => { if (o.lens && o.rect.x < e.x && e.x < o.rect.z && o.rect.y < e.z && e.z < o.rect.w) d = P.setFromMatrixPosition(o.lens.camera.matrixWorld).distanceTo(e); }); return { d: +d.toFixed(3) }; })()`);
   check('the arcade water\'s underwater picture is taken from the eye', f.result?.d >= 0 && f.result.d < .01, JSON.stringify(f.result)); }
 // The water's pictures against direct renders (dev.waterCheck, surface flat): the lens must carry what pierces the surface (the steps'
 // rail, a column under water) and show no band; it once fell back to the pool's top-down plan there (seam 16, mean 6.0; now 0.6, 4.6).
-{ const f = run(base + '?dev&bare', `({ steps: dev.waterCheck(0.5, -5.3, 0, -0.95), column: dev.waterCheck(28, -4.5, 0, -0.7) })`);
+if (on('water')) { const f = run(base + '?dev&bare', `({ steps: dev.waterCheck(0.5, -5.3, 0, -0.95), column: dev.waterCheck(28, -4.5, 0, -0.7) })`);
   const s = f.result?.steps, c = f.result?.column;
   check('the pools\' lens and mirror pictures match direct renders (no seam, nothing piercing the water lost)', s && c && s.lens.seam < 4 && c.lens.mean < 5.3 && s.mirror.mean < 6 && c.mirror.mean < 6, JSON.stringify({ s, c })); }
 // Coplanar pools share only the mirror/lens pair of the current scene render. Compare the actual final pixels with
 // the original per-pool captures, at all quality levels and changing views without advancing the shader clock.
-{ const f = run(base + '?dev&bare', `(async () => {
+if (on('water')) { const f = run(base + '?dev&bare', `(async () => {
     const { waterViews } = await import('/js/water.js');
     const r = dev.renderer, gl = r.getContext(), draw = r.render, cases = [
       [10.5, 1.62, 10.8, -1.5708, 0], [23.2, 1.62, 14.2, Math.PI, -.08],
@@ -178,37 +225,37 @@ for (const [name, hash, calls, tris] of [['gallery-pool', '23.2,14.2,3.14159,-0.
   check('shared pool pictures match per-pool captures across qualities and same-clock camera changes', f.result?.count === 27 && f.result.maxMean < .05 && f.result.maxDelta <= 8 && !f.errors.length, JSON.stringify(f));
   check('at most one mirror/lens pair is rendered per main scene render', f.result?.maxCaptures === 2 && !f.errors.length, JSON.stringify(f.result)); }
 
-{ const f = run(base + '?dev&bare', `(async () => (await import('/tools/water-optics.js')).waterOptics(dev))()`);
+if (on('water')) { const f = run(base + '?dev&bare', `(async () => (await import('/tools/water-optics.js')).waterOptics(dev))()`);
   check('pool focusing is bounded, balanced, animated, depth-filtered and responds to disturbances', f.result && Object.values(f.result.field).every(Boolean) && !f.errors.length, JSON.stringify(f.result || f));
   check('all four pool palettes retain finite nonnegative water and visible caustic modulation', f.result?.rows.length === 4 && f.result.rows.every(row => row.waterPixels > 10000 && row.nonfinite === 0 && row.negative === 0 && row.meanLinearModulation > 1e-5) && !f.errors.length, JSON.stringify(f.result?.rows || f));
   check('water optics stays within sixteen active samplers without GL errors', f.result?.maxSamplers <= 16 && f.result.glError === 0 && !f.errors.length, JSON.stringify(f.result && { samplers: f.result.maxSamplers, glError: f.result.glError })); }
 
-{ const f = run(base + '?dev&bare', `(async () => (await import('/tools/grass-viewport.js')).grassViewport(dev))()`);
+if (on('look')) { const f = run(base + '?dev&bare', `(async () => (await import('/tools/grass-viewport.js')).grassViewport(dev))()`);
   check('stationary narrow-to-wide resize shows the same grass as a freshly rebuilt view', f.result?.samePose && f.result.width === 1280 && f.result.height === 720 && f.result.maxDelta <= 1 && f.result.meanDelta <= .01 && f.result.glError === 0 && !f.errors.length, JSON.stringify(f.result || f)); }
 
 // No two faces of different materials in one plane (they z-fight, the flicker on door frames and passages): tools/seams.mjs --scan, every sky's places.
-try { execFileSync(process.execPath, [fileURLToPath(new URL('./seams.mjs', import.meta.url)), '--port', base.split(':')[2].slice(0, -1), '--scan'], { encoding: 'utf8' }); check('no coplanar overlapping faces (tools/seams.mjs --scan)', true); }
+if (on('solid')) try { execFileSync(process.execPath, [fileURLToPath(new URL('./seams.mjs', import.meta.url)), '--port', base.split(':')[2].slice(0, -1), '--scan'], { encoding: 'utf8' }); check('no coplanar overlapping faces (tools/seams.mjs --scan)', true); }
 catch (e) { check('no coplanar overlapping faces (tools/seams.mjs --scan)', false, String(e.stdout || e.message).slice(0, 600)); }
 // Reflections where a mirror puts them: the mall's skylight in its marble floor, from two places (tools/reflect.mjs; 568 px off before box projection, 5 after).
-{ let r; try { r = JSON.parse(execFileSync(process.execPath, [fileURLToPath(new URL('./reflect.mjs', import.meta.url)), '--port', base.split(':')[2].slice(0, -1), '--only', 'mL', '--json'], { encoding: 'utf8' })); } catch (e) { r = String(e.stdout || e.message).slice(0, 600); }
+if (on('water')) { let r; try { r = JSON.parse(execFileSync(process.execPath, [fileURLToPath(new URL('./reflect.mjs', import.meta.url)), '--port', base.split(':')[2].slice(0, -1), '--only', 'mL', '--json'], { encoding: 'utf8' })); } catch (e) { r = String(e.stdout || e.message).slice(0, 600); }
   check('the mall floor mirrors its skylight within 25 px of where a mirror puts it, from both places', Array.isArray(r) && r.length === 2 && r.every(m => m.err !== null && m.err < 25), JSON.stringify(r)); }
 // What can be seen from where: js/seen.js must still cover every zone the eye can see from each zone (a new doorway or window needs tools/pvs.mjs run again).
-try { execFileSync(process.execPath, [fileURLToPath(new URL('./pvs.mjs', import.meta.url)), '--port', base.split(':')[2].slice(0, -1), '--check'], { encoding: 'utf8' }); check('js/seen.js covers what each zone can see (tools/pvs.mjs --check)', true); }
+if (on('seen')) try { execFileSync(process.execPath, [fileURLToPath(new URL('./pvs.mjs', import.meta.url)), '--port', base.split(':')[2].slice(0, -1), '--check'], { encoding: 'utf8' }); check('js/seen.js covers what each zone can see (tools/pvs.mjs --check)', true); }
 catch (e) { check('js/seen.js covers what each zone can see (tools/pvs.mjs --check)', false, String(e.stdout || e.message).slice(0, 600)); }
 // Nothing pops in at a doorway: crossing each opening (20 cm steps, standing and mid-jump eyes), every mesh in view is on the camera's layers.
-try { execFileSync(process.execPath, [fileURLToPath(new URL('./seams.mjs', import.meta.url)), '--port', base.split(':')[2].slice(0, -1), '--pop', '--fast'], { encoding: 'utf8' }); check('nothing pops in crossing an opening (tools/seams.mjs --pop --fast)', true); }
+if (on('solid')) try { execFileSync(process.execPath, [fileURLToPath(new URL('./seams.mjs', import.meta.url)), '--port', base.split(':')[2].slice(0, -1), '--pop', '--fast'], { encoding: 'utf8' }); check('nothing pops in crossing an opening (tools/seams.mjs --pop --fast)', true); }
 catch (e) { check('nothing pops in crossing an opening (tools/seams.mjs --pop --fast)', false, String(e.stdout || e.message).slice(0, 600)); }
 // Pool pictures skipped while a pool is hidden, or cut to what the screen samples (water.js), never show: the night hall's openings
 // run through, jumped, spun at and flicked round, each frame against the same frame drawn with the culling off.
-{ let out; try { out = execFileSync(process.execPath, [fileURLToPath(new URL('./pool-skip.mjs', import.meta.url)), '--port', base.split(':')[2].slice(0, -1), '--only', 'pN'], { encoding: 'utf8' }); } catch (e) { out = String(e.stdout || e.message); }
+if (on('water')) { let out; try { out = execFileSync(process.execPath, [fileURLToPath(new URL('./pool-skip.mjs', import.meta.url)), '--port', base.split(':')[2].slice(0, -1), '--only', 'pN'], { encoding: 'utf8' }); } catch (e) { out = String(e.stdout || e.message); }
   const m = /(\d+) frames \((\d+) with a picture skipped\).*: (\d+) differ/.exec(out);
   check('skipped and cut pool pictures never show (tools/pool-skip.mjs --only pN)', m && +m[2] > 20 && +m[3] === 0, out.slice(0, 600)); }
 // No light through walls: from each zone, every shadow map holds every caster (three culls casters by the eye's layers; build.js turns them all on).
-try { execFileSync(process.execPath, [fileURLToPath(new URL('./leaks.mjs', import.meta.url)), '--port', base.split(':')[2].slice(0, -1), '--fast'], { encoding: 'utf8' }); check('every shadow map has every caster (tools/leaks.mjs --fast)', true); }
+if (on('light')) try { execFileSync(process.execPath, [fileURLToPath(new URL('./leaks.mjs', import.meta.url)), '--port', base.split(':')[2].slice(0, -1), '--fast'], { encoding: 'utf8' }); check('every shadow map has every caster (tools/leaks.mjs --fast)', true); }
 catch (e) { check('every shadow map has every caster (tools/leaks.mjs --fast)', false, String(e.stdout || e.message).slice(0, 600)); }
 // A redraw asked for only by loose things copies the map's cached static casters back and draws just the loose things (physics.js):
 // after rings drift, a ball pit is jumped into and the field's ball is kicked, every map so redrawn equals the same map drawn in full.
-{ const f = run(base + '?dev&bare', `(async () => { const { renderer: r, scene, camera } = dev, ls = [...(await import('/js/lights.js')).lights, (await import('/js/sky.js')).sun], SM = r.shadowMap, out = [];
+if (on('light')) { const f = run(base + '?dev&bare', `(async () => { const { renderer: r, scene, camera } = dev, ls = [...(await import('/js/lights.js')).lights, (await import('/js/sky.js')).sun], SM = r.shadowMap, out = [];
     const read = () => ls.map(l => { const m = l.shadow.map, a = new Uint8Array(m.width * m.height * 4); r.readRenderTargetPixels(m, 0, 0, m.width, m.height, a); return a; });
     for (const [x, z, yaw, keys] of [[26.5, -12, -1.75, ['KeyW']], [-28, 36, 1.5708, ['KeyW', 'Space']], [-8.2, 700, Math.PI, ['KeyW', 'ShiftLeft']]]) {
       dev.hold = true; dev.reset(x, z, yaw, 0); dev.step(2); let n = 0; const inner = SM.render; SM.render = function (lights, ...a) { if (SM.needsUpdate) for (const l of lights) if (l.isDirectionalLight ? l.shadow.needsUpdate : l.shadow.loose && !l.shadow.needsUpdate) n++; return inner.call(this, lights, ...a); };
@@ -220,7 +267,7 @@ catch (e) { check('every shadow map has every caster (tools/leaks.mjs --fast)', 
   check('shadow maps redrawn for loose things alone match the full redraw (night hall rings, ball pit, field ball)', f.result?.length === 3 && f.result.every(o => o.n > 0 && o.diff === 0) && !f.errors.length, JSON.stringify(f.result || f.errors)); }
 // Every zone seen.js lists is culled: its meshes have a layer bit of their own group, not layer 0 (drawn from everywhere). Bits once ran
 // out at 31 zones and the 32nd on stayed on layer 0 unnoticed.
-{ const f = run(base + '?dev&bare', `(async () => { const seen = (await import('/js/seen.js')).default, bad = new Set(), got = new Set();
+if (on('look')) { const f = run(base + '?dev&bare', `(async () => { const seen = (await import('/js/seen.js')).default, bad = new Set(), got = new Set();
     dev.scene.traverse(o => { const id = o.userData?.zone; if (o.isMesh && id in seen) { got.add(id); if (o.layers.mask === 1) bad.add(id); } });
     return { bad: [...bad], none: Object.keys(seen).filter(id => !got.has(id)) }; })()`);
   check('every zone in js/seen.js is culled (its meshes on a layer bit, not drawn from everywhere)', f.result && !f.result.bad.length && !f.result.none.length, JSON.stringify(f.result)); }
@@ -228,7 +275,7 @@ catch (e) { check('every shadow map has every caster (tools/leaks.mjs --fast)', 
 // Noclip (V): through the soft play's east wall (walking stops at x -19.37, softWall above), up with nothing under you and staying there,
 // about 12 m/s (30 running); turned off inside a solid it puts you back where it was turned on, on the floor; off in the air over a floor
 // you land; above a ceiling it puts you back too. Then walking is as before: the same walk as softWall, from the same start, ends at the same wall.
-{ const f = run(base + '?dev', `(async () => { const P = Math.PI, v = () => { dev.key('KeyV', true); dev.step(1); dev.key('KeyV', false); dev.step(1); }, s = () => dev.state(), r = {};
+if (on('move')) { const f = run(base + '?dev', `(async () => { const P = Math.PI, v = () => { dev.key('KeyV', true); dev.step(1); dev.key('KeyV', false); dev.step(1); }, s = () => dev.state(), r = {};
   const fly = (keys, n) => { for (const c of keys) dev.key(c, true); dev.step(n); const a = s(); dev.step(30); const b = s(); for (const c of keys) dev.key(c, false); dev.step(30); return [a, b]; };
   const speed = ([a, b]) => +(Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z) * 2).toFixed(1);
   dev.reset(-30, 37, -P / 2); dev.step(10); v(); r.walk = speed(fly(['KeyW'], 60)); r.through = s().x; r.run = speed(fly(['KeyW', 'ShiftLeft'], 60));
@@ -247,7 +294,7 @@ catch (e) { check('every shadow map has every caster (tools/leaks.mjs --fast)', 
 // run; from the deck: walk off toward the water, and back down facing it. Each must arrive (on the deck, or standing in the water) with the
 // eye never moving more than 4 cm in a frame (the climb itself is 3). Then, at the bottom, off it turned away, left and right, and back up.
 // Ladders once only worked from one side of a pool, and later held the body at the bottom for good.
-{ const f = run(base + '?dev', `(async () => { const { ladders } = await import('/js/build.js'), P = Math.PI, out = [];
+if (on('move')) { const f = run(base + '?dev', `(async () => { const { ladders } = await import('/js/build.js'), P = Math.PI, out = [];
   for (const [x1, z1, x2, z2, dx, dz, top] of ladders) { const cx = (x1 + x2) / 2, cz = (z1 + z2) / 2, yaw = Math.atan2(-dx, -dz), b = () => { const s = dev.state(); return .15 - ((s.x - cx) * dx + (s.z - cz) * dz); };
     const up = () => { const s = dev.state(); return Math.abs(s.y - top) < .02 && !s.air && b() < .1; }, dn = () => { const s = dev.state(); return s.y < top - .5 && !s.air && b() > .25; };
     // off: in the pool, a metre from the ladder and out of its zone; or, where a pool wall is nearer than that (the gallery's ladders are 0.7 m
@@ -270,7 +317,7 @@ catch (e) { check('every shadow map has every caster (tools/leaks.mjs --fast)', 
 
 // The settings panel (js/settings.js): High is the default render; volume and quality set through the panel reach the master gain and the
 // pixel ratio and come back from storage (load() is what a reload runs); the fps readout gives a plausible number once on, and its toggle is saved.
-{ const f = run(base + '?dev&bare', `(async () => { const a = await import('/js/audio.js'), $ = id => document.getElementById(id), r = {};
+if (on('look')) { const f = run(base + '?dev&bare', `(async () => { const a = await import('/js/audio.js'), $ = id => document.getElementById(id), r = {};
     r.def = [dev.renderer.getPixelRatio(), dev.settings.s.q, document.querySelector('[data-q="2"]').getAttribute('aria-pressed')];
     a.startAudio(Object.values(dev.zones)[0]); $('pv').value = 50; $('pv').dispatchEvent(new Event('input')); document.querySelector('[data-q="0"]').click();
     r.set = [+a.sound.gain.value.toFixed(3), dev.renderer.getPixelRatio()];
@@ -285,7 +332,7 @@ catch (e) { check('every shadow map has every caster (tools/leaks.mjs --fast)', 
 
 // Music (js/music.js): every zone names a piece or deliberately none; a crossfade between neighbours (backrooms to pool hall) keeps the summed power of its
 // fade gains within 1.5 dB, adds no sample step much larger than the music's own notes make, and nothing reaches full scale before the master compressor.
-{ const f = run(base + '?dev&bare', `(async () => { const Z = dev.zones, P = dev.music.pieces, sr = 44100, r = {};
+if (on('sound')) { const f = run(base + '?dev&bare', `(async () => { const Z = dev.zones, P = dev.music.pieces, sr = 44100, r = {};
     r.bad = Object.values(Z).filter(z => !('music' in z) || z.music !== null && !P[z.music]).map(z => z.id);
     const seq = [[0, Z.bA], [8, Z.pH]], m = await dev.music.render(seq, 20), law = (await dev.music.render(seq, 20, { tap: true })).buf.getChannelData(0);
     r.law = 0; for (let i = 8 * sr; i < 18 * sr; i++) r.law = Math.max(r.law, Math.abs(10 * Math.log10(law[i] + 1e-20)));
@@ -298,7 +345,7 @@ catch (e) { check('every shadow map has every caster (tools/leaks.mjs --fast)', 
 // The single file (tools/bundle.mjs -> dreamcore.html): current with the code, no URL outside a comment or the licence but
 // createElementNS's XHTML namespace (a name, never fetched), no CDN at all, and from file:// it reaches dev.ready with no console
 // error and no request but itself. The served game asks nothing of any host but its own.
-{ const { bundle } = await import('./bundle.mjs'), { readFileSync, existsSync } = await import('node:fs'), file = fileURLToPath(new URL('../dreamcore.html', import.meta.url));
+if (on('load')) { const { bundle } = await import('./bundle.mjs'), { readFileSync, existsSync } = await import('node:fs'), file = fileURLToPath(new URL('../dreamcore.html', import.meta.url));
   const have = existsSync(file) ? readFileSync(file, 'utf8').replace(/\r\n/g, '\n') : '';
   check('dreamcore.html is current (rebuild: node tools/bundle.mjs)', have === bundle());
   const a = have.indexOf('const src = ') + 12, b = have.indexOf(', imports = {};'), bad = [];
@@ -310,13 +357,13 @@ catch (e) { check('every shadow map has every caster (tools/leaks.mjs --fast)', 
   check('dreamcore.html has no URL outside comments and none to a CDN', !bad.length, bad.join(' ').slice(0, 600));
   const f = run(pathToFileURL(file).href + '?dev&bare', '({ ready: dev.ready, zone: dev.state().zone })');
   check('dreamcore.html from file:// reaches dev.ready with no console errors and no requests', f.result?.ready === true && !f.errors.length && f.requests?.length === 1 && f.requests[0].startsWith(pathToFileURL(file).href), JSON.stringify(f).slice(0, 600));
-  const other = (dev.requests || []).filter(u => !u.startsWith(base));
-  check('the served game requests nothing from any other host', dev.requests?.length > 0 && !other.length, other.join(' ').slice(0, 600)); }
+  const dv = run(base + '?dev&bare', 'dev.ready'), other = (dv.requests || []).filter(u => !u.startsWith(base));
+  check('the served game requests nothing from any other host', dv.requests?.length > 0 && !other.length, other.join(' ').slice(0, 600)); }
 
 // Production address: no window.dev, the start overlay is up once the level is built.
 // Between places: every opening found at load can be walked straight through its middle (none lies on a wall), and walking out
 // of a dark passage the view from its mouth never gets brighter than both its ends anywhere (the grey haze the mood once eased through).
-{ const f = run(base + '?dev&bare', `(async () => { const L = await import('/js/lights.js'), PL = await import('/js/player.js'), r = dev.renderer, gl = r.getContext(), out = { walls: [], n: L.openings?.length };
+if (on('look')) { const f = run(base + '?dev&bare', `(async () => { const L = await import('/js/lights.js'), PL = await import('/js/player.js'), r = dev.renderer, gl = r.getContext(), out = { walls: [], n: L.openings?.length };
   for (const o of L.openings || []) { const c = (o.lo + o.hi) / 2, [x, z] = o.ax ? [c, o.at - 1] : [o.at - 1, c]; const s = dev.go(x, z, o.ax ? Math.PI : -Math.PI / 2, ['KeyW'], 2 / 2.85);
     if (s.zone !== o.q.id) out.walls.push(o.p.id + '>' + o.q.id + ' ended in ' + s.zone); }
   const W = gl.drawingBufferWidth, H = gl.drawingBufferHeight, px = new Uint8Array(W * H * 4), grab = () => { r.setRenderTarget(null); gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, px); const g = new Float32Array(W * H); for (let i = 0; i < g.length; i++) g[i] = .2126 * px[4 * i] + .7152 * px[4 * i + 1] + .0722 * px[4 * i + 2]; return g; };
@@ -345,10 +392,12 @@ catch (e) { check('every shadow map has every caster (tools/leaks.mjs --fast)', 
   check('both ends of every passage warp show the same mood', f.result?.warp === 0, JSON.stringify(f.result?.warp ?? f.errors));
   check('no grey wash leaving a dark passage', f.result && Object.values(f.result.wash).every(v => v < .3), JSON.stringify(f.result?.wash ?? f.errors)); }
 
+if (on('load')) {
 const prod = run(base, `await new Promise(ok => { const t = setInterval(() => /click to enter/.test(document.getElementById('s').textContent) && (clearInterval(t), ok()), 100); }),
   { dev: typeof window.dev, overlay: getComputedStyle(document.getElementById('o')).display !== 'none' }`, '--wait', '15000', '--settle', '0'); // browse.mjs waits out --wait for a dev.ready that never comes here
 check('production loads without console errors', !prod.errors.length, prod.errors.join(' | ').slice(0, 600));
 check('production has no window.dev', prod.result?.dev === 'undefined', JSON.stringify(prod.result));
 check('production shows the start overlay', prod.result?.overlay === true);
+}
 console.log(`${passes} passed, ${fails} failed`);
 process.exit(fails ? 1 : 0);

@@ -52,7 +52,7 @@ Quality is not negotiable; waste is. Half of what a subagent costs is re-reading
 Use these, not the shared Browser pane. Details, the `?dev` hooks and the photo tools: [docs/testing.md](docs/testing.md).
 
 - `node tools/serve.mjs <port>`: serve the copy you are working in (background; stop it when done). The lead's main checkout is usually on 8200.
-- `node tools/test.mjs [--port 8200] [--all]`: the regression suite. Prints only failures and a count. Must be green before you report.
+- `node tools/test.mjs [--port 8200] [--all] [--only <area>[,<area>]] [--list]`: the regression suite (areas run in parallel; `--list` names them). Prints per-area seconds, then only failures and a count. Must be green before you report.
 - `node tools/browse.mjs --url "http://127.0.0.1:<port>/?dev#x,z,yaw,pitch" --shot out.png --eval "<js>"`: load the game headless on the real GPU, run JavaScript in the page, save a photo, print `{result, errors}`.
 - `node tools/shots.mjs <outDir> [--port] [--only a,b] [--views file.json] [--size WxH]`: a batch of repeatable photos.
 - `python tools/compare.py <dirA> <dirB>`: picture difference per view, side-by-sides for the largest only.
