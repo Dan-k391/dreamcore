@@ -19,6 +19,10 @@ camera.position.set(spawned ? spawn[0] : 1.9, 1.62, spawned ? spawn[1] : 20);
 if (spawned) camera.rotation.set(spawn[3] || 0, spawn[2] || 0, 0, 'YXZ');
 const uTime = { value: 0 }, V = (x, y, z) => new THREE.Vector3(x, y, z), sunDir = V(0, 1, 0);
 const quadVS = 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0., 1.); }';
+// The one clipping plane every program is built with: js/portals.js moves it onto a portal's far plane while drawing what is seen through
+// it, and everywhere else it clips nothing. Set, and one render made, before anything compiles (compile() takes the clipping state of the
+// last render), so no program is ever built twice for it.
+const clip = new THREE.Plane(V(0, 1, 0), 1e6); renderer.clippingPlanes = [clip]; renderer.render(new THREE.Scene(), camera);
 const H = 2.7, PH = 5, WY = -0.12; // backrooms ceiling, pool hall ceiling, water level (shared by every pool)
 
 // ---------- zones: each has its own materials, ambient probe, exposure, fog, grade and room tone ----------
@@ -30,4 +34,4 @@ const zones = {}; // id -> zone, in the order the places register them (see leve
 const defZone = (id, z) => zones[id] = Object.assign(z, { id, mats: [], fog: new THREE.Vector4(...z.fog), tint: V(...z.tint), probe: V(...(z.probe || [(z.box[0] + z.box[2]) / 2, 1.4, (z.box[1] + z.box[3]) / 2])) });
 const inR = (x, z, x1, z1, x2, z2) => x > x1 && x < x2 && z > z1 && z < z2;
 
-export { renderer, scene, camera, uTime, V, sunDir, quadVS, H, PH, WY, warm, dark, dry, zones, defZone, inR };
+export { clip, renderer, scene, camera, uTime, V, sunDir, quadVS, H, PH, WY, warm, dark, dry, zones, defZone, inR };

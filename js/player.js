@@ -1,7 +1,7 @@
 // The player: controls, collision and the frame step.
 import * as THREE from 'three';
 import { renderer, camera, uTime, V, WY, zones, inR } from './core.js';
-import { colliders, emitters, warps, ladders, floorH, clear, out, near } from './build.js';
+import { colliders, emitters, warps, ladders, ends, side, across, carry, spin, behind, floorH, clear, out, near } from './build.js';
 import { setSky, sun } from './sky.js';
 import { ponds, ripple, resetWater } from './water.js';
 import { relight, zone0, lights, weights } from './lights.js';
@@ -53,12 +53,19 @@ const R = .3, RS = .22, STEP = .35, TALL = 1.75;
 // in (the classic air-strafe rule), up to TOP, which is 6 m/s × sqrt(16 / 11): no jump lands farther, at any height, than a 6 m/s run did before.
 const G_UP = 16, G_DOWN = 24, JUMP = 4.3 * Math.sqrt(G_UP / 11), AIR = 10, AIR_CAP = .76, TOP = 7.2;
 const blocks = (c, feet) => c[5] > feet + STEP && c[4] < feet + 1.7;
+// A body straddling a portal's plane, inside its opening, meets the solids of both sides: this side's that are not wholly behind the
+// plane, and the far side's (in its own space, the push brought back) that are not wholly behind the far end.
+const straddle = (x, z, feet) => ends.find(e => Math.abs(side(e, x, z)) < R && Math.abs(across(e, x, z)) < e.w / 2 + R && feet < e.p.y + e.h && feet + TALL > e.p.y);
+function overlaps(p, feet, r, push) { // every solid the body of radius r overlaps; push: move it out of each as found
+  const g = straddle(p.x, p.z, feet); let hit = false;
+  for (const c of colliders) if (near(c, p.x, p.z, r) && blocks(c, feet) && !(g && behind(g, c)) && clear(c, p.x, null, p.z, r)) { if (!push) return true; p.x += out.x; p.z += out.z; hit = true; }
+  if (g) { const [qx, qz] = carry(g, p.x, p.z), f = feet + g.to.p.y - g.p.y;
+    for (const c of colliders) if (near(c, qx, qz, r) && blocks(c, f) && !behind(g.to, c) && clear(c, qx, null, qz, r)) { if (!push) return true; const [dx, dz] = spin(g.to, out.x, out.z); p.x += dx; p.z += dz; hit = true; break; } } // one far solid a pass: the next pass re-carries the moved body
+  return hit;
+}
 function collide(p, feet = 0) { // push the body out of every solid it overlaps; a few passes settle corners between solids
-  for (let pass = 0; pass < 4; pass++) { let hit = false;
-    for (const c of colliders) if (near(c, p.x, p.z, R) && blocks(c, feet) && clear(c, p.x, null, p.z, R)) { p.x += out.x; p.z += out.z; hit = true; }
-    if (!hit) return true;
-  }
-  return !colliders.some(c => near(c, p.x, p.z, R - .002) && blocks(c, feet) && clear(c, p.x, null, p.z, R - .002)); // false: still inside something
+  for (let pass = 0; pass < 4; pass++) if (!overlaps(p, feet, R, true)) return true;
+  return !overlaps(p, feet, R - .002, false); // false: still inside something
 }
 const groundAt = (x, z, feet) => { // the highest floor or solid top under the body that a step from `feet` reaches
   let g = floorH(x, z);
@@ -77,7 +84,7 @@ let stride = 0, foot = 0, feet = floorH(camera.position.x, camera.position.z), v
 let fly = false, fvy = 0, from = null, vWas = 0;
 const cue = document.body.appendChild(document.createElement('div')); cue.hidden = true; cue.textContent = 'noclip';
 cue.style.cssText = 'position:fixed;left:16px;top:14px;font-size:11px;letter-spacing:.3em;color:#f2e4c4;opacity:.6;pointer-events:none';
-const inside = (x, z, f) => colliders.some(c => near(c, x, z, R - .002) && blocks(c, f) && clear(c, x, null, z, R - .002));
+const inside = (x, z, f) => overlaps(V(x, 0, z), f, R - .002, false);
 const setFly = on => { const p = camera.position;
   if (on) from = { x: p.x, z: p.z, feet };
   else { const fl = floorH(p.x, p.z), top = colliders.filter(c => c[5] <= feet + STEP && near(c, p.x, p.z, RS) && clear(c, p.x, null, p.z, RS)).sort((c, d) => d[5] - c[5])[0];
@@ -123,12 +130,18 @@ const frame = dt => { // one game frame of dt seconds: the loop below passes the
   const hang = grip && at && !off && feet < top - .05; // on the rungs below the deck: the body stays on the ladder
   let mx = vel.x * dt, mz = vel.y * dt;
   if (lad && k('Space') && !iy && !ix && Math.abs(feet - top) < .03 && (p.x - (lad[0] + lad[2]) / 2) * lad[4] + (p.z - (lad[1] + lad[3]) / 2) * lad[5] < .5) { mx += lad[4] * 1.5 * dt; mz += lad[5] * 1.5 * dt; } // jump held at the top: step off onto the deck
-  let ox = p.x, oz = p.z, warp; const n = Math.max(1, Math.ceil(Math.hypot(mx, mz) / .1));
+  let ox = p.x, oz = p.z, warp, gate; const n = Math.max(1, Math.ceil(Math.hypot(mx, mz) / .1));
   const fb = grip ? feet - .3 : feet; // on a ladder a solid deck is stepped onto only once the feet are level with it, as below
   let roomy = fly || collide(p, fb); // false: squeezed somewhere a teleport put you, so any move is allowed until you are out
   for (let i = 0; i < n; i++) { // in steps of 10 cm at most, so nothing thin is run through and no passage warp strip is stepped over
     const sx = p.x, sz = p.z; p.x += mx / n; p.z += mz / n; const stop = !fly && !collide(p, fb) && roomy; if (stop) { p.x = sx; p.z = sz; }
     if (!fly && !warp && (warp = warps.find(w => inR(p.x, p.z, w[0], w[1], w[2], w[3])))) { p.x += warp[4]; p.z += warp[5]; ox += warp[4]; oz += warp[5]; }
+    // a portal: the centre went from in front of its plane to behind it, through the opening (the eye within its height). Everything that
+    // has a place or a direction is taken through exactly: where you are, where the frame started, the move left, the speed, the facing
+    if (!gate && (gate = ends.find(e => { const a = side(e, sx, sz), b = side(e, p.x, p.z), y = feet + 1.62 + eye.lift - e.p.y; if (!(a >= 0 && b < 0) || y < 0 || y > e.h) return false;
+      const t = a / (a - b); return Math.abs(across(e, sx + (p.x - sx) * t, sz + (p.z - sz) * t)) < e.w / 2; }))) {
+      [p.x, p.z] = carry(gate, p.x, p.z); [ox, oz] = carry(gate, ox, oz); [mx, mz] = spin(gate, mx, mz); const [vx, vz] = spin(gate, vel.x, vel.y); vel.set(vx, vz);
+      camera.rotateOnWorldAxis(UP, gate.turn); feet += gate.to.p.y - gate.p.y; }
     if (stop) break; }
   if (hang) { // held between the rails: within 10 cm of the ladder's middle, and inside its zone
     const cx = (lad[0] + lad[2]) / 2, cz = (lad[1] + lad[3]) / 2, [dx, dz] = [lad[4], lad[5]], a0 = (p.x - cx) * -dz + (p.z - cz) * dx, a = a0 - (a0 - Math.max(-.1, Math.min(.1, a0))) * Math.min(1, dt * 8), b = Math.max(-.6, Math.min(.6, (p.x - cx) * dx + (p.z - cz) * dz));
