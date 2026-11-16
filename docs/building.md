@@ -88,7 +88,7 @@ Two things keep the pair cheap; `waterViews.cull = false` turns both off (`tools
 
 ## Portals
 
-Two openings joined as if they were one doorway, at any distance, height and turn about the vertical: you see through one into the place behind the other, with exact perspective, and walk through with no visible move. Used by the hotel's west door 34.8 and east door 38.4, which both open into the vestibule (`js/zones/hotel.js`), by its east door 24, which opens into the baths' entrance passage (declared in `js/zones/baths.js`, which finds that door in `build.js`'s `doors`, since places never import each other), and by the dev yard's test pair (`js/zones/yard.js`).
+Two openings joined as if they were one doorway, at any distance, height and turn about the vertical: you see through one into the place behind the other, with exact perspective, and walk through with no visible move. Used by the hotel's west door 34.8 and east door 38.4, which both open into the vestibule (`js/zones/hotel.js`), by its east door 24, which opens into the baths' entrance passage (declared in `js/zones/baths.js`, which finds that door in `build.js`'s `doors`, since places never import each other), by the terrace court's free-standing blue door, whose west face opens onto the sky stair hanging east of the lookout (`js/zones/terrace.js`; its east face is an ordinary doorway, and `portals.mjs`'s `same` cannot pass there, since around a free-standing door the two places differ by design), and by the dev yard's test pair (`js/zones/yard.js`).
 
 **Adding a portal room:**
 

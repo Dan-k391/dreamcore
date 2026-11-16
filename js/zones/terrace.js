@@ -2,9 +2,9 @@
 import * as THREE from 'three';
 import { scene, uTime, sunDir, dry, zones, defZone } from '../core.js';
 import { P, M } from '../mat.js';
-import { flats, seeThrough, skyOnly, block, box, solid, slab } from '../build.js';
+import { flats, seeThrough, skyOnly, block, box, solid, slab, portal, via } from '../build.js';
 import { globeLamp } from '../props/lights.js';
-import { doorway, railing } from '../props/metalwork.js';
+import { door, doorway, railing } from '../props/metalwork.js';
 import { column, pier, steps } from '../props/structure.js';
 import { parkBench, palmPlanter } from '../props/garden.js';
 
@@ -30,7 +30,7 @@ defZone('sK', { music: 'terrace', ...dry, amb: { wind: 1.1, crickets: .6, sea: [
   for (const zc of [642.65, 656.15]) for (const x of [670.6, 674, 677.4]) pier(z, x, 0, zc, 0, { w: .81, h: 3.3, mat: "stucco", color: 0xfff4e6, course: .22 });
   for (const x of [667.25, 680.75]) for (const zc of [646, 649.4, 652.8]) pier(z, x, 0, zc, PI / 2, { w: .81, h: 3.3, mat: "stucco", color: 0xfff4e6, course: .22 });
   for (const x of [667.25, 680.75]) for (const zc of [642.65, 656.15]) pier(z, x, 0, zc, 0, { w: .71, d: .71, h: 3.3, mat: "stucco", color: 0xfff4e6, course: .22 }); // the corners
-  doorway(blue, blue, 674, 0, 649.4, PI / 2, 2.2);
+  const BLUE = { openable: true, frame: 0x86a8d8, color: 0x86a8d8 }, courtDoor = door(z, 674, 0, 649.4, PI / 2, BLUE); // the court's free-standing door: from its west face it opens onto the sky stair (below)
   block(Su, 684, -8, 645.4, 694, 0, 653.4); steps(z, 689, 0, 649.4, -PI / 2, { n: 20, r: .25, g: .5, w: 8, color: 0xffffff, insert: 0x8a8276 }); // the stair, between stepped walls
   for (let i = 0; i < 4; i++) for (const zc of [645, 653.4]) { box(Su, 684 + 2.5 * i, -8, zc, 686.5 + 2.5 * i, 1.25 * (i + 1) + .9, zc + .4); edge(684 + 2.5 * i, zc, 686.5 + 2.5 * i, zc + .4, 1.25 * (i + 1) + .9, zc < 649 ? 'n' : 's'); }
   block(Ls, 694, -8, 645, 704, 5, 653.8); flats.push([694, 645.4, 704, 653.4, () => 5]); rail(694, 645, 704, 645.4, 5, 'n'); rail(694, 653.4, 704, 653.8, 5, 's'); rail(703.6, 645.4, 704, 653.4, 5, 'e'); // the lookout
@@ -41,7 +41,24 @@ defZone('sK', { music: 'terrace', ...dry, amb: { wind: 1.1, crickets: .6, sea: [
   parkBench(z, 701.2, 5, 649.4, PI / 2, { iron: 0x1f2c25 }); // a bench facing the sun
   palmPlanter(z, 665.6, 0, 641.2); palmPlanter(z, 682.3, 0, 657.8);
   // things that hang in the sky out of reach: stairs and doors
-  for (const [x, y, zc, n, ry] of [[690, 9, 622, 9, .4], [712, 3, 676, 12, -1.1], [735, 12, 640, 7, 2]]) { const c = .25 * (n - 1); steps(z, x + c * Math.cos(ry), y, zc - c * Math.sin(ry), ry - PI / 2, { n, r: .25, g: .5, w: 2, color: 0xffffff, insert: 0x8a8276 }); doorway(blue, blue, x, y + .25 * n, zc - 3, ry); }
+  for (const [x, y, zc, n, ry] of [[690, 9, 622, 9, .4], [712, 3, 676, 12, -1.1]]) { const c = .25 * (n - 1); steps(z, x + c * Math.cos(ry), y, zc - c * Math.sin(ry), ry - PI / 2, { n, r: .25, g: .5, w: 2, color: 0xffffff, insert: 0x8a8276 }); doorway(blue, blue, x, y + .25 * n, zc - 3, ry); }
+  { // The sky stair: white stone hanging east of the lookout, nothing holding it up. Its door is the court's door through a portal
+    // (docs/building.md, Portals): in at the court door's west face, out at the top of the stair facing south, down 7 risers to a landing to
+    // stand at. The door's back is an ordinary doorway in the court; up here nobody reaches it. Steel rails all round, each with an unseen
+    // pane on its line 3.6 m tall (as the terrace's parapets), and panes from the rails to the door's jambs: no way off, onto a rail or round the frame.
+    const X = 735, Z = 636.5, Y = 13.75, g = .5, S0 = Z + 1.2, S1 = S0 + 7 * g, E = S1 + 2.4, xl = X - .92, xr = X + .92, y0 = 11.4, y1 = Y + 3.6;
+    box(Ls, X - 1, Y - .3, Z - .1, X + 1, Y, S0); // the top landing, carrying the door's frame just past its plane
+    steps(z, X, Y - 1.75, (S0 + S1) / 2, 0, { n: 7, r: .25, g, w: 2, color: 0xffffff, insert: 0x8a8276, soffit: .3 }); // its waist meets both landings' undersides
+    box(Ls, X - 1, 11.7, S1 - .6, X + 1, 12, E); // the landing, running under the flight's foot
+    flats.push([X - 1, Z - .1, X + 1, S0, () => Y], [X - 1, S0, X + 1, S1, (x, zz) => 12 + .25 * Math.min(7, Math.ceil((S1 - zz) / g))], [X - 1, S1, X + 1, E, () => 12]);
+    const run = x => [[x, Y, Z + .2], ...[7, 5, 3, 1].map(k => [x, 12 + .25 * k, S1 - (k - .5) * g]), [x, 12, S1 + .5]]; // posts on alternate treads' middles
+    railing(z, [...run(xl), [xl, 12, E - .08], [xr, 12, E - .08], ...run(xr).reverse()]);
+    for (const x of [xl, xr]) solid(x - .03, y0, Z - .05, x + .03, y1, E - .05);
+    solid(xl - .03, y0, E - .11, xr + .03, y1, E - .05);
+    solid(xl - .03, y0, Z - .05, X - .55, y1, Z + .03); solid(X + .55, y0, Z - .05, xr + .03, y1, Z + .03); // to the jambs, either side of the door
+    const [a] = portal([674, 0, 649.4, -PI / 2], [X, Y, Z, 0], 1, 2.24, courtDoor);
+    a.to.door = door(z, ...via(a, 674, 0, 649.4, PI / 2), { ...BLUE, copy: courtDoor });
+  }
   // The ashlar and the cast steps are greyer than the white plaster this place was built in; lift them back to sunlit white stone
   // (the same keys the kit asks for, so its piers, columns and steps share them: at the court, the lookout and under the cloud)
   for (const fl of [0, 5, -8]) M(z, 'limestone', { color: 0xffffff, wear: 0, floor: fl }).color.setScalar(1.3);
