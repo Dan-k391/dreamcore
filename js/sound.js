@@ -115,7 +115,7 @@ function makeSound(ac, out, L) { // L: the level: { zones, zoneAt(x, z), emitter
 
   // ---- what you hear from where you stand ----
   let cur = L.zones[0], tick = 0, rung = 0, lastStep = 0, lastLand = -1, wadeL = null, rollL = null, cost = { ms: 0, n: 0 }, stirred = 0;
-  const hums = [], laps = [], gx = { t: 0, t2: 0 };
+  const hums = [], laps = [], gx = { t: 0, t2: 0 }, sv = [0, 0, 0];
   const near2 = (e, x, z) => (e.p.x - x) ** 2 + (e.p.z - z) ** 2;
   const set = (param, v, tc = .06) => param.setTargetAtTime(v, now(), tc);
   function frame(st) { // st: { x, y, z, fx, fy, fz, ux, uy, uz (the ear and where it looks), wts (lights.js weights), zone, body: {...} }
@@ -134,8 +134,8 @@ function makeSound(ac, out, L) { // L: the level: { zones, zoneAt(x, z), emitter
       if (Math.abs(b.tp - b.gp) > .005) set(b.pt.gain, b.gp = b.tp); if (Math.abs(b.tb - b.gb) > .005) set(b.bed.gain, b.gb = b.tb, .25);
       const f = 500 * 36 ** b.tc; if (Math.abs(f - b.f) > b.f * .03) set(b.lp.frequency, b.f = f, .2); }
     // the body's own sounds take the reverb of where it stands, blended across a doorway
-    const sv = [0, 0, 0]; for (const [z, s] of st.wts) ambOf(z).verb.forEach((v, i) => sv[i] += v * s);
-    selfSend.forEach((g, i) => Math.abs(g.gain.value - sv[i] * verbGain[i]) > .003 && set(g.gain, sv[i] * verbGain[i], .15));
+    sv[0] = sv[1] = sv[2] = 0; for (const [z, s] of st.wts) { const v = ambOf(z).verb; for (let i = 0; i < 3; i++) sv[i] += v[i] * s; }
+    for (let i = 0; i < 3; i++) { const v = sv[i] * verbGain[i]; if (Math.abs(selfSend[i].gain.value - v) > .003) set(selfSend[i].gain, v, .15); }
     body(st.body, st); nodes.peak = Math.max(nodes.peak, nodes.live);
     if (t >= tick) { tick = t + .1; slow(st, t); }
     cost.ms += performance.now() - t0; cost.n++;

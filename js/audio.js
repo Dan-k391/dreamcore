@@ -29,7 +29,7 @@ let lv;
 const level = () => lv ||= { zones: Object.values(zones), zoneAt: (x, z) => { for (const q of lv.zones) if (inR(x, z, ...q.box)) return q; return null; }, emitters, ponds, floorAt };
 const ear = { x: 0, y: 0, z: 0, fx: 0, fy: 0, fz: -1, ux: 0, uy: 1, uz: 0, wts: null, zone: null, body: null }; // one object, filled each frame
 function hear(cam, wts, zone, body) { const e = cam.matrixWorld.elements, p = cam.position;
-  Object.assign(ear, { x: p.x, y: p.y, z: p.z, fx: -e[8], fy: -e[9], fz: -e[10], ux: e[4], uy: e[5], uz: e[6], wts, zone, body }); return ear; }
+  ear.x = p.x; ear.y = p.y; ear.z = p.z; ear.fx = -e[8]; ear.fy = -e[9]; ear.fz = -e[10]; ear.ux = e[4]; ear.uy = e[5]; ear.uz = e[6]; ear.wts = wts; ear.zone = zone; ear.body = body; return ear; } // no new object a frame
 function startAudio(zone) { // zone: where you are when it starts
   const ac = new AudioContext(), comp = ac.createDynamicsCompressor(), g = graph(ac), { master } = g;
   master.connect(comp).connect(ac.destination); sound.gain = master.gain; sound.mus = v => g.music.level(v); sound.set(sound.level, sound.muted);
