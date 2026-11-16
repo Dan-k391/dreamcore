@@ -19,8 +19,9 @@ import * as THREE from 'three';
 import { renderer, scene, camera, clip } from './core.js';
 import { ends, side, across, live } from './build.js';
 import { ponds } from './water.js';
+import { through } from './seen.js';
 
-const LIM = { depth: 8, minpx: 6, fill: 1 }, // levels at most (each costs what its far zone submits in its cone: 0.05 to 0.8 Mtri; past 8 the gallery loop's openings are 13 px across at 2560x1440); the narrow side in px under which an opening ends; the end fill's brightness (endFill)
+const LIM = { depth: 8, minpx: 6, fill: 1, cull: true }, // levels at most (each costs what its far zone submits in its cone: 0.05 to 0.8 Mtri; past 8 the gallery loop's openings are 13 px across at 2560x1440); the narrow side in px under which an opening ends; the end fill's brightness (endFill)
   D = 1, REACH = 80; // the pocket's depth (any works: the test is at the plane); no portal farther from the eye at the top level (a zone drawn from everywhere, the dev yard, would draw its far sides behind every wall)
 const gl = renderer.getContext(), st = renderer.state, sb = st.buffers.stencil, draw = renderer.render.bind(renderer);
 const U = { uC: { value: new THREE.Vector3() }, uN: { value: new THREE.Vector3() }, uR: { value: new THREE.Vector3() }, uS: { value: new THREE.Vector2() }, uP: { value: new THREE.Matrix4() }, uMode: { value: 0 }, uFill: { value: new THREE.Color() } };
@@ -42,17 +43,41 @@ const TAKEN = 0x80, take = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THR
   vertexShader: 'void main() { gl_Position = vec4(position.xy, 0., 1.); }', fragmentShader: 'void main() { gl_FragColor = vec4(0.); }' }));
 take.frustumCulled = false; take.matrixAutoUpdate = false; const taking = new THREE.Scene(); taking.add(take);
 const cams = Array.from({ length: 64 }, () => new THREE.PerspectiveCamera()), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _v = new THREE.Vector4(), _p = new THREE.Vector3(), _at = new THREE.Vector3(), Y = new THREE.Vector3(0, 1, 0);
-// The far draw culled to its opening: three builds its view frustum from projection * view once per render(), right after scene.onBeforeRender
-// (the shadow cameras' frusta come later and from their own matrices): while crop is set, that one call takes the crop first, so only what
-// can show inside the opening's screen rectangle is submitted (a level costs what its rectangle holds, not what the whole far zone does)
-let crop = null; const setFrustum = THREE.Frustum.prototype.setFromProjectionMatrix, _cm = new THREE.Matrix4();
+// The far draw culled to its opening: three builds its view frustum from projection * view once per render(), right after scene.onBeforeRender.
+// While crop is set, a frustum built from exactly that camera's projection * view (pv) takes the crop first, so only what can show inside the
+// opening's screen rectangle is submitted; any other camera's (a shadow camera, a water or cube capture, the field's grass cull for another eye) is untouched
+let crop = null; const setFrustum = THREE.Frustum.prototype.setFromProjectionMatrix, _cm = new THREE.Matrix4(), pv = new THREE.Matrix4();
 // Its near plane becomes the far end's plane (the clip): what lies between the eye taken through and the far end is clipped away anyway, and
 // for a hallway end that was everything of the hallway's neighbours in the cone (0.83 Mtri a level for a 27 x 60 px opening, against 0.05)
-THREE.Frustum.prototype.setFromProjectionMatrix = function (m, cs) { if (!crop) return setFrustum.call(this, m, cs);
-  setFrustum.call(this, _cm.multiplyMatrices(crop, m), cs); crop = null; this.planes[5].copy(clip); return this; };
+THREE.Frustum.prototype.setFromProjectionMatrix = function (m, cs) { if (this === cut) cut = null; if (!crop || !m.equals(pv)) return setFrustum.call(this, m, cs);
+  setFrustum.call(this, _cm.multiplyMatrices(crop, m), cs); this.planes[5].copy(clip); if (LIM.cull) { if (deep < Infinity) this.planes[4].copy(farP); cut = this; } return this; }; // cull: the depth bound and box test below (off: for an A/B)
+// A cropped frustum also tests each mesh's world box after its bounding sphere: a merged chunk's sphere (15 m across the mall) reaches into
+// the narrow slab behind an opening where its box does not
+let cut = null; const isect = THREE.Frustum.prototype.intersectsObject, _b = new THREE.Box3();
+THREE.Frustum.prototype.intersectsObject = function (o) { if (!isect.call(this, o)) return false; if (this !== cut || o.isSkinnedMesh) return true;
+  const h = o.isInstancedMesh ? o : o.geometry; if (!h.boundingBox) h.computeBoundingBox(); return this.intersectsBox(_b.copy(h.boundingBox).applyMatrix4(o.matrixWorld)); };
+// And its far plane is as deep as anything seen through the far end inside the rectangle can lie: tools/pvs.mjs records, for each end
+// whose zone sees others, the distance of the farthest surface seen through its opening by direction (32 x 32 bins over its front half);
+// the bins the rectangle's edge rays fall in (and one round them) give the farthest, and a depth past the opening's farthest corner by
+// that, plus half a metre, bounds it (a hallway end straight on: about 3 m to the opposite wall, where the mall behind it was all drawn)
+const NB = 32, farP = new THREE.Plane(), _d = new THREE.Vector3(), _f = new THREE.Vector3(), _o = new THREE.Vector3(); let deep = Infinity;
+function depthOf(f, v, r) {
+  const t = f.tab ??= (s => s ? Uint8Array.from(atob(s), c => c.charCodeAt(0)) : null)(through[[f.p.x, f.p.y, f.p.z].map(c => +c.toFixed(2)).join()]), eye = v.position;
+  if (!t || side(f, eye.x, eye.z) > -.3) return Infinity; // an eye at the plane: the rectangle's rays fan out too wide to bin
+  let a1 = 9, a2 = -9, b1 = 9, b2 = -9;
+  for (let k = 0; k <= 4; k++) { const s = k / 4, x = r[0] + s * (r[2] - r[0]), y = r[1] + s * (r[3] - r[1]);
+    for (const [px, py] of [[x, r[1]], [x, r[3]], [r[0], y], [r[2], y]]) { _d.set(px, py, .5).unproject(v).sub(eye).normalize(); const dn = _d.dot(f.n); if (dn < .02) return Infinity;
+      const a = Math.atan2(_d.dot(f.r), dn), b = Math.asin(_d.y); a1 = Math.min(a1, a); a2 = Math.max(a2, a); b1 = Math.min(b1, b); b2 = Math.max(b2, b); } }
+  const bin = q => Math.floor((q / Math.PI + .5) * NB); let m = 0;
+  for (let j = Math.max(0, bin(b1) - 1); j <= Math.min(NB - 1, bin(b2) + 1); j++) for (let i = Math.max(0, bin(a1) - 1); i <= Math.min(NB - 1, bin(a2) + 1); i++) m = Math.max(m, t[j * NB + i]);
+  if (m === 255) return Infinity;
+  _f.set(0, 0, -1).transformDirection(v.matrixWorld); let o = 0;
+  for (const [u, h] of [[-.5, 0], [.5, 0], [-.5, 1], [.5, 1]]) o = Math.max(o, _o.copy(f.p).addScaledVector(f.r, u * f.w).addScaledVector(Y, h * f.h).sub(eye).dot(_f));
+  const d = o + m * .25 + .5; farP.normal.copy(_f).negate(); farP.constant = _f.dot(eye) + d; return d;
+}
 const cropOf = (r, M) => M.set(2 / (r[2] - r[0]), 0, 0, -(r[0] + r[2]) / (r[2] - r[0]), 0, 2 / (r[3] - r[1]), 0, -(r[1] + r[3]) / (r[3] - r[1]), 0, 0, 1, 0, 0, 0, 0, 1);
 const crops = Array.from({ length: 64 }, () => new THREE.Matrix4());
-const stats = { drawn: 0, levels: 0, ends: [] }; // what the last main-camera frame drew through portals (ends: each opening ended by the fill, its pixel rectangle [x1, y1, x2, y2]) (tools/portals.mjs, tools/profile.mjs)
+const stats = { drawn: 0, levels: 0, ends: [], blits: 0 }; // what the last main-camera frame drew through portals (ends: each opening ended by the fill, its pixel rectangle [x1, y1, x2, y2]) (tools/portals.mjs, tools/profile.mjs)
 
 let ref = -1, fn = gl.EQUAL, off = false; // while a far side is drawn, every material tests the stencil for this level, whatever its own settings say (a door drawn again over a picture and those inside it: LEQUAL)
 const setMaterial = st.setMaterial.bind(st);
@@ -102,7 +127,7 @@ function pass(cam, level, lim, rt, out) {
     v.matrixWorld.multiplyMatrices(e.M, cam.matrixWorld); v.matrixWorld.decompose(v.position, v.quaternion, v.scale); v.updateMatrixWorld(true); v.userData.mask = e.to.mask;
     const was = clip.clone(); clip.normal.copy(e.to.n); clip.constant = -e.to.n.dot(e.to.p) + 1e-3; // keep what lies in front of the far end
     const fc = e.to.door?.meshes || []; for (const m of fc) m.visible = false; // the far copy of the door in this opening: drawn by this side's (below)
-    ref = level + 1; crop = cropOf(r, crops[level]); draw(scene, v); crop = null; ref = -1; if (!scene.overrideMaterial) stats.drawn++; stats.levels = Math.max(stats.levels, level + 1);
+    ref = level + 1; crop = cropOf(r, crops[level]); pv.multiplyMatrices(v.projectionMatrix, v.matrixWorldInverse); deep = depthOf(e.to, v, r); draw(scene, v); crop = null; ref = -1; if (!scene.overrideMaterial) stats.drawn++; stats.levels = Math.max(stats.levels, level + 1);
     pass(v, level + 1, r, rt, e.to);
     for (const m of fc) m.visible = true; clip.copy(was); scissor(rt, r);
     take.material.stencilRef = TAKEN | level; draw(taking, cam);
@@ -139,9 +164,13 @@ renderer.render = (s, c) => {
   const rt = renderer.getRenderTarget(), auto = renderer.autoClear, upd = scene.matrixWorldAutoUpdate, on = ponds.map(w => w.visible);
   if (!scene.overrideMaterial) { stats.drawn = stats.levels = 0; stats.ends = []; }
   renderer.autoClear = false; scene.matrixWorldAutoUpdate = false; for (const w of ponds) w.visible = false; // shortcut: no pool is drawn through a portal (its pictures are of the main view)
+  held = true; // every render() ends by resolving a multisampled target (a full-size blit): 5 or 6 a level, 50 a frame in the gallery loop; one, after
   try { pass(c, 0, [-1, -1, 1, 1], rt, null); }
-  finally { ref = -1; sb.setMask(0xff); renderer.autoClear = auto; scene.matrixWorldAutoUpdate = upd; ponds.forEach((w, i) => w.visible = on[i]); scissor(rt, null); }
+  finally { ref = -1; crop = null; sb.setMask(0xff); scene.matrixWorldAutoUpdate = upd; ponds.forEach((w, i) => w.visible = on[i]); scissor(rt, null);
+    held = false; if (stats.blits) draw(none, c); stats.blits = 0; renderer.autoClear = auto; } // an empty render, no clear: three's own resolve, once
 };
+const none = new THREE.Scene(), blit = gl.blitFramebuffer; let held = false;
+gl.blitFramebuffer = function (...a) { if (held) stats.blits++; else blit.apply(gl, a); };
 const warm = new Set(); // the passes (by override material) whose target the pocket's three programs and the take's were drawn into once (a program's output colour space is the target's): none on first sight of a portal
 
 export { stats, LIM, rectOf };
