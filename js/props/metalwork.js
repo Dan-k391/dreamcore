@@ -107,8 +107,11 @@ const turnTo = (g, dir) => g.applyQuaternion(new THREE.Quaternion().setFromUnitV
 // radians about its hinge edge at -x. Clear opening o.w (default 1.0, up to 2.4) x 2.24 m; frame o.w + .2 x 2.34 m, 150 mm deep.
 // o.leaf false: the frame alone. o.double (default when o.w > 1.3): a pair of leaves hung from both jambs, meeting in the middle
 // (the +x leaf mirrored, opening by the same o.open), no strike on the jamb.
+// o.pivot (always with o.openable): double-acting, so it swings either way: the leaf hung at its middle on a top pivot and a floor spring
+// (its cover plate in the floor), its hinge stile radiused about the axis, 4 mm clear of a plain frame (no stop, no threshold), kick plates
+// both faces, no overhead closer (the floor spring closes it).
 function door(z, x, y, zc, ry = 0, o = {}) {
-  const Wc = o.w ?? 1, dbl = o.double ?? Wc > 1.3, K = parts(o.leaf === false ? 'frame' : dbl ? 'doubleDoor' : 'door'), Hc = 2.24, FU = .1, FD = .075, open = o.openable ? 0 : o.open ?? 0;
+  const Wc = o.w ?? 1, dbl = o.double ?? Wc > 1.3, K = parts(o.leaf === false ? 'frame' : dbl ? 'doubleDoor' : 'door'), Hc = 2.24, FU = .1, FD = .075, open = o.openable ? 0 : o.open ?? 0, piv = !!(o.openable || o.pivot);
   const F = M(z, 'paintedSteel', { color: o.frame ?? 0xe9e5dc, dirt: .35, dirtCol: [.5, .45, .38], wear: .3 });
   const Lf = M(z, 'paintedSteel', { color: o.color ?? 0x3a6d98, dirt: .35, dirtCol: [.5, .45, .38], wear: .3 });
   const St = M(z, 'brushedSteel'), Al = M(z, 'anodised', { color: 0xc8c8c4, roughness: .42 }), Rb = M(z, 'rubber', { color: 0x2a2826 });
@@ -116,7 +119,7 @@ function door(z, x, y, zc, ry = 0, o = {}) {
   // The opening cut for it is o.w x 2.24; the frame stands SH proud of that cut all round, so its faces never lie in the wall's
   // reveal and soffit (they would z-fight). RB: the rebate's soffit, which the leaf closes into and the strike sits on.
   const SH = .002, RB = .016 - SH;
-  const prof = rshape([[-SH, .025], [-SH, FD], [FU, FD], [FU, -FD], [RB, -FD], [RB, .025]], [.0015, .003, .003, .003, .003, .0015]);
+  const prof = piv ? rshape([[-SH, -FD], [-SH, FD], [FU, FD], [FU, -FD]], .003) : rshape([[-SH, .025], [-SH, FD], [FU, FD], [FU, -FD], [RB, -FD], [RB, .025]], [.0015, .003, .003, .003, .003, .0015]);
   const member = (len, map, mitre) => { // one frame member: the profile run `len`, mitred at 45 degrees where it meets the next
     const g = prism(prof, len), p = g.attributes.position, nm = g.attributes.normal;
     for (let i = 0; i < p.count; i++) { const u = p.getX(i), v = p.getY(i); let a = p.getZ(i); if (mitre[1] && a > len - 1e-5) a += u; if (mitre[0] && a < 1e-5) a -= u;
@@ -127,17 +130,18 @@ function door(z, x, y, zc, ry = 0, o = {}) {
   member(Hc, (u, v, a, n) => n ? [u, a, -v] : [Wc / 2 + u, a, -v], [0, 1]);
   member(Wc, (u, v, a, n) => n ? [a, u, v] : [a - Wc / 2, Hc + u, v], [1, 1]);
   for (const sx of [-1, 1]) { K.p(F, rbox(.04, .004, .1, .0015).translate(sx * (Wc / 2 + .05), .002, 0)); K.p(St, screw(.004).translate(sx * (Wc / 2 + .05), .004, 0)); } // floor anchor tabs, screwed down
-  if (!dbl) for (const yy of [.4, 1.25, 2.0]) K.p(Rb, lathe([[.0045, 0], [.0042, .0012], [.003, .0022], [0, .0026]], 8).rotateX(-Math.PI / 2).translate(Wc / 2 + RB / 2 - SH / 2, yy, .025)); // silencers on the stop
+  if (!dbl && !piv) for (const yy of [.4, 1.25, 2.0]) K.p(Rb, lathe([[.0045, 0], [.0042, .0012], [.003, .0022], [0, .0026]], 8).rotateX(-Math.PI / 2).translate(Wc / 2 + RB / 2 - SH / 2, yy, .025)); // silencers on the stop
   // threshold: a brushed saddle with chamfered nosings, grain along its length
-  K.p(St, planar(prism(rshape([[-.085, -.002], [.085, -.002], [.085, .002], [.05, .011], [-.05, .011], [-.085, .002]], .002), Wc + .03).translate(0, 0, -(Wc + .03) / 2).rotateY(Math.PI / 2), 'x', 'z'), true);
+  if (!piv) K.p(St, planar(prism(rshape([[-.085, -.002], [.085, -.002], [.085, .002], [.05, .011], [-.05, .011], [-.085, .002]], .002), Wc + .03).translate(0, 0, -(Wc + .03) / 2).rotateY(Math.PI / 2), 'x', 'z'), true);
   // strike plate on the lock jamb, two countersunk screws; hinge leaves let into the hinge jamb
-  if (!dbl) { K.p(St, rbox(.002, .115, .025, .0008).translate(Wc / 2 + RB - .0005, 1.05, -.0085)); // its face 1.5 mm proud of the soffit
-  K.p(Rb, rbox(.0022, .022, .009, .0006).translate(Wc / 2 + RB - .0019, 1.05, -.0055)); // the latch hole, a dark slot 1.5 mm proud of the plate
-  { const c = [Wc / 2 + RB - .0015 - .012, -.021], arc = [], N = 6; // the lip: the plate rolled out of the soffit so the latch rides up it
+  const SO = piv ? -SH : RB, SZ = piv ? 0 : -.0085; // the soffit the strike sits on, and the strike's middle through the wall
+  if (!dbl && !(piv && o.leaf === false)) { K.p(St, rbox(.002, .115, .025, .0008).translate(Wc / 2 + SO - .0005, 1.05, SZ)); // its face 1.5 mm proud of the soffit
+  K.p(Rb, rbox(.0022, .022, .009, .0006).translate(Wc / 2 + SO - .0019, 1.05, SZ + .003)); // the latch hole, a dark slot 1.5 mm proud of the plate
+  if (!piv) { const c = [Wc / 2 + RB - .0015 - .012, -.021], arc = [], N = 6; // the lip: the plate rolled out of the soffit so the latch rides up it
     for (let k = 0; k <= N; k++) { const a = -k / N * 1.25; arc.push([c[0] + .012 * Math.cos(a), -(c[1] + .012 * Math.sin(a))]); }
     for (let k = N; k >= 0; k--) { const a = -k / N * 1.25; arc.push([c[0] + .0105 * Math.cos(a), -(c[1] + .0105 * Math.sin(a))]); }
     K.p(St, prism(rshape(arc, .0004), .07).rotateX(-Math.PI / 2).translate(0, 1.015, 0)); }
-  for (const yy of [1.0, 1.1]) K.p(St, screw(.003, false).rotateZ(Math.PI / 2).translate(Wc / 2 + RB - .0015, yy, -.0085)); }
+  for (const yy of [1.0, 1.1]) K.p(St, screw(.003, false).rotateZ(Math.PI / 2).translate(Wc / 2 + SO - .0015, yy, SZ)); }
   const hy = [.25, 1.15, 1.98];
   // the leaf, about its own hinge axis at the origin; set in the frame afterwards
   const hinge = (ax, az) => { // a butt hinge's knuckle: five knuckles with hairline joints, a pin and two finials
@@ -145,16 +149,20 @@ function door(z, x, y, zc, ry = 0, o = {}) {
       g.push(lathe([[.0001, .0105], [.0045, .0096], [.0068, .0055]], 12).translate(0, .05 - .0055, 0), lathe([[.0068, -.0055], [.0045, -.0096], [.0001, -.0105]], 12).translate(0, -.05 + .0055, 0));
       return merge(g); }).translate(ax, 0, az);
   };
-  const AX = -Wc / 2 - .0095, AZ = -.0295; // the hinge axis: in the corner of soffit and pull face, the knuckles proud of both
-  for (const yy of hy) for (const sx of dbl ? [1, -1] : [1]) { K.p(St, hinge(sx * AX, AZ).translate(0, yy, 0)); if (o.leaf === false) K.p(St, rbox(.0025, .1, .03, .001).translate(sx * (-Wc / 2 - RB + .00025), yy, AZ + .016)); } // a frame alone keeps its hinge leaves, 1.5 mm proud
+  const LT = .045, AX = piv ? -Wc / 2 + SH + .004 + LT / 2 : -Wc / 2 - .0095, AZ = piv ? 0 : -.0295; // the hinge axis: in the corner of soffit and pull face, the knuckles proud of both (a pivot: the leaf's middle, LT / 2 in from its edge)
+  if (!piv) for (const yy of hy) for (const sx of dbl ? [1, -1] : [1]) { K.p(St, hinge(sx * AX, AZ).translate(0, yy, 0)); if (o.leaf === false) K.p(St, rbox(.0025, .1, .03, .001).translate(sx * (-Wc / 2 - RB + .00025), yy, AZ + .016)); } // a frame alone keeps its hinge leaves, 1.5 mm proud
   // one leaf hung at the -x jamb; mirrored onto the +x jamb for the second of a pair (the winding turned back so its faces stay out)
   const flip = g => { g = (g.index ? g.toNonIndexed() : g).applyMatrix4(new THREE.Matrix4().makeScale(-1, 1, 1));
     for (const a of Object.values(g.attributes)) { const w = a.itemSize, A = a.array; for (let i = 0; i < a.count; i += 3) for (let c = 0; c < w; c++) { const t = A[(i + 1) * w + c]; A[(i + 1) * w + c] = A[(i + 2) * w + c]; A[(i + 2) * w + c] = t; } }
     return g; };
   const hang = mirror => {
-    const LW = dbl ? Wc / 2 + .011 : Wc + .026, LH = Hc - .012, LT = .045, x0 = -Wc / 2 - .013, cx = x0 + LW - .06; // closed, the leaf spans x0 .. x0 + LW; the lock 60 mm in from its edge
+    const x0 = piv ? AX : -Wc / 2 - .013, LW = piv ? (dbl ? -.002 : Wc / 2 - SH - .004) - AX : dbl ? Wc / 2 + .011 : Wc + .026, LH = Hc - .012, cx = x0 + LW - .06; // closed, the leaf spans x0 .. x0 + LW; the lock 60 mm in from its edge
     const leaf = [], LP = (m, g, own = false) => leaf.push([m, g, own]), out = [], KP = (m, g, own = false) => out.push([m, g, own]);
     LP(Lf, rbox(LW, LH, LT, .004, 2).translate(x0 + LW / 2, .006 + LH / 2, 0));
+    if (piv) { LP(Lf, cyl(LT / 2, LH, 24).translate(AX, .006 + LH / 2, 0)); // the radiused hinge stile: the leaf turns in its own outline, 4 mm off the jamb
+      LP(St, rbox(.055, .012, LT + .003, .002, 2).translate(AX + .012, .006 + LH - .006, 0)); // the top pivot's strap round the corner
+      LP(St, rbox(.075, .032, LT + .003, .003, 2).translate(AX + .022, .005 + .016, 0)); // its underside 1 mm below the leaf's (one plane, two materials, would flicker) // the bottom shoe on the floor spring's spindle
+      for (const sd of [1, -1]) for (const [px, py] of [[AX + .03, .006 + LH - .006], [AX + .045, .022]]) LP(St, screw(.0025, false).rotateX(sd * Math.PI / 2).translate(px, py, sd * (LT / 2 + .0015))); }
     LP(St, rbox(.0025, .235, .024, .0008).translate(x0 + LW + .0007, 1.05, 0)); // lock face plate on the leaf edge
     for (const sd of [1, -1]) { // lever handles both sides, on roses, with a cylinder escutcheon below
       const fz = sd * LT / 2;
@@ -162,17 +170,17 @@ function door(z, x, y, zc, ry = 0, o = {}) {
       LP(St, lathe([[0, .0062], [.0075, .0062], [.0085, .0075], [.011, .0075], [.019, .005], [.0225, .0018], [.023, 0]], 18).rotateX(sd * Math.PI / 2).translate(cx, .978, fz)); // the cylinder face sits in a recess
       LP(St, sweep([[cx, 1.05, fz + sd * .006], [cx, 1.05, fz + sd * .062], [cx - .118, 1.05, fz + sd * .062], [cx - .124, 1.05, fz + sd * .03]], .0095, .026, 16, true), true); // a returned lever
     }
-    if (o.kick !== false) { // kick plate on the push face: 1.2 mm, grain along x, eight countersunk screws
-      LP(St, planar(rbox(LW - .1, .25, .0012, .0005, 1).translate(x0 + LW / 2, .14, LT / 2 + .0006), 'x', 'y'), true);
-      for (const sx of [-.42, -.14, .14, .42].map(v => v * (LW - .1) / .926)) for (const sy of [.035, .245]) LP(St, screw(.003, false).rotateX(Math.PI / 2).translate(x0 + LW / 2 + sx, sy, LT / 2 + .0012));
+    if (o.kick !== false) for (const sd of piv ? [1, -1] : [1]) { // kick plate on the push face (a pivot: both): 1.2 mm, grain along x, eight countersunk screws
+      LP(St, planar(rbox(LW - .1, .25, .0012, .0005, 1).translate(x0 + LW / 2, .14, sd * (LT / 2 + .0006)), 'x', 'y'), true);
+      for (const sx of [-.42, -.14, .14, .42].map(v => v * (LW - .1) / .926)) for (const sy of [.035, .245]) LP(St, screw(.003, false).rotateX(sd * Math.PI / 2).translate(x0 + LW / 2 + sx, sy, sd * (LT / 2 + .0012)));
     }
     // the closer body on the pull face by the hinge, just under the head, its spindle at the hinge end
     const bz = -LT / 2 - .027, by = 2.186, bx0 = x0 + .05;
-    LP(Al, rbox(.27, .055, .052, .012, 3).translate(bx0 + .135, by, bz)); // cast aluminium body (box UVs: its texture is not stretched)
+    const sp = V3(bx0 + .06, by + .0275, bz);
+    if (!piv) { LP(Al, rbox(.27, .055, .052, .012, 3).translate(bx0 + .135, by, bz)); // cast aluminium body (box UVs: its texture is not stretched)
     for (const ex of [bx0 - .003, bx0 + .273]) LP(Al, rbox(.007, .05, .046, .003, 2).translate(ex, by, bz)); // end caps
     LP(Al, cyl(.0035, .002, 12).rotateZ(Math.PI / 2).translate(bx0 + .277, by - .012, bz)); // the valve screw in the end cap
-    const sp = V3(bx0 + .06, by + .0275, bz);
-    LP(St, cyl(.0085, .012, 16).translate(sp.x, sp.y + .004, sp.z));
+    LP(St, cyl(.0085, .012, 16).translate(sp.x, sp.y + .004, sp.z)); }
     const swing = (g, a = open) => g.translate(-AX, 0, -AZ).rotateY(a).translate(AX, 0, AZ);
     const F = V3(-Wc / 2 + .3, 0, -FD - .016), L1 = .2, L2 = .22, ay = sp.y + .012;
     const link = (p, q, w, yy) => rbox(p.distanceTo(q) + .018, .0055, w, .0025, 2).rotateY(-Math.atan2(q.z - p.z, q.x - p.x)).translate((p.x + q.x) / 2, yy, (p.z + q.z) / 2);
@@ -183,28 +191,36 @@ function door(z, x, y, zc, ry = 0, o = {}) {
       const E = S.clone().addScaledVector(dir, k).addScaledVector(pv, pv.dot(n) > 0 ? hh : -hh);
       return [[Al, link(S, E, .017, ay)], [Al, link(E, F, .013, ay + .0058)], [Al, lathe([[.009, -.004], [.0095, -.002], [.0095, .009], [.008, .0105], [0, .011]], 16).translate(E.x, ay, E.z)]]; // the elbow knuckle
     };
-    if (!D) { for (const [m, g, own] of leaf) KP(m, swing(g), own); for (const [m, g] of arm(open)) KP(m, g); }
-    KP(St, cyl(.0055, .012, 14).translate(F.x, ay + .006, F.z));
+    if (!D) { for (const [m, g, own] of leaf) KP(m, swing(g), own); if (!piv) for (const [m, g] of arm(open)) KP(m, g); }
+    if (!piv) { KP(St, cyl(.0055, .012, 14).translate(F.x, ay + .006, F.z));
     KP(St, rbox(.06, .07, .016, .004).translate(F.x, Hc + .02, -FD - .008)); // the shoe, dropping from the head face to the arm
-    for (const sx of [-.02, .02]) KP(St, screw(.003).rotateX(-Math.PI / 2).translate(F.x + sx, Hc + .035, -FD - .016));
+    for (const sx of [-.02, .02]) KP(St, screw(.003).rotateX(-Math.PI / 2).translate(F.x + sx, Hc + .035, -FD - .016)); }
+    else { // the floor spring's cover plate flush in the floor under the shut leaf, its spindle cap; the top pivot's plate in the head's soffit
+      KP(St, planar(rbox(.34, .003, .09, .001, 1).translate(AX + .13, .0015, 0), 'x', 'z'), true);
+      KP(St, cyl(.014, .002, 24).translate(AX, .0035, 0)); for (const px of [AX + .05, AX + .27]) for (const pz of [-.03, .03]) KP(St, screw(.0028, false).translate(px, .003, pz));
+      KP(St, rbox(.07, .004, .04, .0015, 1).translate(AX + .012, Hc - SH - .002, 0)); for (const px of [AX - .01, AX + .035]) KP(St, screw(.0025, false).rotateX(Math.PI).translate(px, Hc - SH - .004, 0)); }
     for (const [m, g, own] of out) K.p(m, mirror ? flip(g) : g, own);
     const sx = mirror ? -1 : 1, at = a => { const c = V3(x0 + LW / 2 - AX, 0, -AZ).applyAxisAngle(V3(0, 1, 0), a).add(V3(AX, 0, AZ)); return spot(x, zc, ry, sx * c.x, c.z); };
     const k = turned(...at(open), LW / 2, LT / 2, ry + sx * open, y + .03, y + 2.23); // the leaf is solid where it stands
     if (D) { // openable: the leaf (about its hinge axis) and the arm's links are meshes of their own, moved by D.set
       const mesh = (m, gs) => { const q = new THREE.Mesh(merge(gs.map(g => mirror ? flip(g) : g)), m); q.castShadow = q.receiveShadow = true; q.matrixAutoUpdate = false; D.meshes.push(q); scene.add(q); return q; };
       const by = new Map(); for (const [m, g, own] of leaf) { const n = g.index ? g.toNonIndexed() : g; if (!own) boxUV(n); n.translate(-AX, 0, -AZ); by.has(m) ? by.get(m).push(n) : by.set(m, [n]); }
-      const lm = [...by].map(([m, gs]) => mesh(m, gs)), am = mesh(Al, arm(0).map(([, g]) => boxUV(g.index ? g.toNonIndexed() : g)));
+      const lm = [...by].map(([m, gs]) => mesh(m, gs)), am = piv ? null : mesh(Al, arm(0).map(([, g]) => boxUV(g.index ? g.toNonIndexed() : g)));
       const base = new THREE.Matrix4().makeRotationY(ry).setPosition(x, y, zc), hinge = base.clone().multiply(new THREE.Matrix4().makeTranslation(sx * AX, 0, AZ)), R = new THREE.Matrix4();
       D.leaves.push(a => {
         R.makeRotationY(sx * a); for (const q of lm) { q.matrix.multiplyMatrices(hinge, R); q.matrixWorld.copy(q.matrix); }
-        am.geometry.dispose(); am.geometry = merge(arm(a).map(([, g]) => { g = boxUV(g.index ? g.toNonIndexed() : g); return mirror ? flip(g) : g; })); am.matrix.copy(base); am.matrixWorld.copy(base);
+        if (am) { am.geometry.dispose(); am.geometry = merge(arm(a).map(([, g]) => { g = boxUV(g.index ? g.toNonIndexed() : g); return mirror ? flip(g) : g; })); am.matrix.copy(base); am.matrixWorld.copy(base); }
         turn(k, ...at(a), LW / 2, LT / 2, ry + sx * a);
       });
       D.k.push(k);
     }
   };
-  // o.openable: the leaf swings open to o.swing radians and back on E (player.js), solid all the way; shut to start (o.open ignored)
-  const D = o.openable && o.leaf !== false ? { ...(([a, b]) => ({ x: a, z: b }))(spot(x, zc, ry, 0, -.6)), y, ry, max: o.swing ?? 1.75, kind: o.kind ?? 'metal', f: 0, to: 0, u: 0, meshes: [], leaves: [], k: [], set(f) { this.f = f; for (const s of this.leaves) s(f * this.max); } } : null;
+  // o.openable: the leaf swings open to o.swing radians and back on E (player.js), away from whoever opens it (dir 1: to -z, -1: to +z),
+  // solid all the way; shut to start (o.open ignored). o.copy: this is that door seen through a portal (built at the linked place, its
+  // leaf moved with it): one leaf in both spaces, each copy cut at the plane by the portal's drawing (docs/building.md, Portals).
+  const D = o.openable && o.leaf !== false ? { ...(([a, b]) => ({ x: a, z: b }))(spot(x, zc, ry, 0, -.6)), at: [x, zc], zone: z, y, ry, max: o.swing ?? 1.5, kind: o.kind ?? 'metal', f: 0, dir: 1, to: 0, u: 0, meshes: [], leaves: [], k: [],
+    set(f, dir) { this.f = f; if (dir) this.dir = dir; for (const s of this.leaves) s(f * this.max * this.dir); this.copy?.set(f, this.dir); } } : null;
+  if (D && o.copy) { D.of = o.copy; o.copy.copy = D; }
   if (o.leaf !== false) { hang(false); if (dbl) hang(true); }
   K.place(x, y, zc, ry);
   if (D) { D.set(0); doors.push(D); }

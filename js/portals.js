@@ -9,7 +9,11 @@
 //  2. the depth there is set to the far plane, and the scene is drawn again from the eye taken through the portal (the same projection,
 //     so the depth and normals the AO and fog read are exactly those of a real doorway), only where marked, scissored to the opening's
 //     screen rectangle, with the far side's own zone layers (seen.js), clipped at the far end's plane by core.js's clip plane.
-//  3. inside that picture, openings seen through it are drawn the same way, DEPTH levels deep; past that an opening is a dark fill.
+//  3. a door in the opening (build.js portal()'s da, db: one leaf, a copy each side) is drawn once, whole, by this side's copy: the far copy
+//     is hidden in the far draw and this side's leaf meshes drawn again over the picture, depth tested against it, so the part of the
+//     leaf past the plane is lit by the lamps on the side it is seen from (the far copy, behind which there is no room, would get no light
+//     on its face toward the plane: black), and it is the same leaf in every frame up to the plane.
+//  4. inside that picture, openings seen through it are drawn the same way, DEPTH levels deep; past that an opening is a dark fill.
 import * as THREE from 'three';
 import { renderer, scene, camera, clip } from './core.js';
 import { ends, side, live } from './build.js';
@@ -32,9 +36,9 @@ const pocket = new THREE.Scene(), pm = new THREE.Mesh(new THREE.BoxGeometry(1, 1
 const cams = Array.from({ length: DEPTH }, () => new THREE.PerspectiveCamera()), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _v = new THREE.Vector4(), _p = new THREE.Vector3(), Y = new THREE.Vector3(0, 1, 0);
 const stats = { drawn: 0, levels: 0 }; // what the last main-camera frame drew through portals (tools/portals.mjs, tools/profile.mjs)
 
-let ref = -1; // while a far side is drawn, every material tests the stencil for this level, whatever its own settings say
+let ref = -1, fn = gl.EQUAL; // while a far side is drawn, every material tests the stencil for this level, whatever its own settings say (a door drawn again over a picture and those inside it: LEQUAL)
 const setMaterial = st.setMaterial.bind(st);
-st.setMaterial = (m, cw) => { setMaterial(m, cw); if (ref >= 0) { sb.setTest(true); sb.setMask(0); sb.setFunc(gl.EQUAL, ref, 0xff); sb.setOp(gl.KEEP, gl.KEEP, gl.KEEP); } };
+st.setMaterial = (m, cw) => { setMaterial(m, cw); if (ref >= 0) { sb.setTest(true); sb.setMask(0); sb.setFunc(fn, ref, 0xff); sb.setOp(gl.KEEP, gl.KEEP, gl.KEEP); } };
 
 function rectOf(e, cam, lim) { // the opening's screen rectangle in NDC [x1, y1, x2, y2], inside lim; null if none
   let x1 = 1, y1 = 1, x2 = -1, y2 = -1;
@@ -68,11 +72,22 @@ function pass(cam, level, lim, rt, out) {
     const v = cams[level]; v.projectionMatrix.copy(cam.projectionMatrix); v.projectionMatrixInverse.copy(cam.projectionMatrixInverse); v.near = cam.near; v.far = cam.far;
     v.matrixWorld.multiplyMatrices(e.M, cam.matrixWorld); v.matrixWorld.decompose(v.position, v.quaternion, v.scale); v.updateMatrixWorld(true); v.userData.mask = e.to.mask;
     const was = clip.clone(); clip.normal.copy(e.to.n); clip.constant = -e.to.n.dot(e.to.p) + 1e-3; // keep what lies in front of the far end
+    const fc = e.to.door?.meshes || []; for (const m of fc) m.visible = false; // the far copy of the door in this opening: drawn by this side's (below)
     ref = level + 1; draw(scene, v); ref = -1; if (!scene.overrideMaterial) stats.drawn++; stats.levels = Math.max(stats.levels, level + 1);
     pass(v, level + 1, r, rt, e.to);
-    clip.copy(was); scissor(rt, r);
+    for (const m of fc) m.visible = true; clip.copy(was); scissor(rt, r);
+  }
+  const ds = list.map(([, e]) => e.door).filter(Boolean);
+  if (ds.length && level < DEPTH) { // this side's leaf in each opening just drawn through, whole, over the pictures (3. above)
+    lamps ??= (() => { const a = []; scene.traverse(o => o.isLight && a.push(o)); return a; })(); // all of them, so its programs are the scene's
+    one.children = [...lamps, ...ds.flatMap(d => d.meshes)]; one.fog = scene.fog; one.environment = scene.environment; one.overrideMaterial = scene.overrideMaterial;
+    rc.projectionMatrix.copy(cam.projectionMatrix); rc.projectionMatrixInverse.copy(cam.projectionMatrixInverse); rc.near = cam.near; rc.far = cam.far;
+    rc.matrixWorld.copy(cam.matrixWorld); rc.matrixWorld.decompose(rc.position, rc.quaternion, rc.scale); rc.updateMatrixWorld(true);
+    const sm = renderer.shadowMap, nu = sm.needsUpdate; sm.needsUpdate = false; scissor(rt, level ? lim : null);
+    ref = level; fn = gl.LEQUAL; try { draw(one, rc); } finally { ref = -1; fn = gl.EQUAL; sm.needsUpdate = nu; one.children = []; }
   }
 }
+const one = new THREE.Scene(), rc = new THREE.PerspectiveCamera(); one.matrixWorldAutoUpdate = false; rc.layers.enableAll(); let lamps = null; // the doors' own draw: their meshes and the scene's lamps
 // The hook: right after the scene is drawn from the main camera (any pass: colour, or the AO pass's normals with its override material).
 renderer.render = (s, c) => {
   draw(s, c);
