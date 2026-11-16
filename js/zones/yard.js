@@ -5,7 +5,7 @@
 // dark (walls, floor and ceiling), for judging a lamp alight.
 import { dry, zones, defZone } from '../core.js';
 import { M, lampOn } from '../mat.js';
-import { block, box, lit } from '../build.js';
+import { block, box, lit, portal } from '../build.js';
 import { lamp } from '../props/lights.js';
 import * as lights from '../props/lights.js';
 import * as metalwork from '../props/metalwork.js';
@@ -27,3 +27,10 @@ const X0 = -700, Z0 = -700, W = 14, D = 8, A = 8, h = 7; // bay i spans x X0+16i
   box(lampOn, x + 13.2, h - .012, Z0 + 9.4, x + 13.8, h + .01, Z0 + 10.6); lit(z, x + 13.5, h - .1, Z0 + 10, 170, [cx, .5, Z0 + 4], 1, 20, 0xffd8a4); // the key
   kit.yard({ zone: z, x, z: Z0, w: W, d: D });
 });
+
+// The portal test pair (docs/building.md, Portals): two plain walls in the first bay's aisle, 6 m apart and facing each other, each with
+// a 1.0 x 2.24 opening, the two openings joined. Walking south through either comes out of the other still walking south: an endless
+// corridor, so every view down it shows portals seen through portals (tools/portals.mjs, the regression photos).
+{ const z = zones.yd0, L = M(z, 'plaster', { color: 0xb9b0a2 }), x = -692;
+  for (const [z1, z2] of [[-691, -690.8], [-685.2, -685]]) { box(L, x - 1.5, 0, z1, x - .5, 2.8, z2); box(L, x + .5, 0, z1, x + 1.5, 2.8, z2); box(L, x - .5, 2.24, z1, x + .5, 2.8, z2); }
+  portal([x, 0, -691, 0], [x, 0, -685, Math.PI]); }

@@ -40,11 +40,11 @@ Loads the page in a private headless browser on the real GPU, waits for `dev.rea
 
 The regression suite: the page loads with and without `?dev` with no console errors or failed asserts; walks between places land where they should; solids, the ball pit, rings and loose balls behave; physics stays within its cost. Prints one line per area (seconds, passed / failed), then only the failed checks and a final `N passed, M failed (total seconds)`; `--all` prints every line. Run the areas your change touches while working (`--only move,solid`), the whole suite once on the final result; it must be green. `--list` prints the areas with their check counts; an unknown area is an error (exit 2).
 
-Areas (110 checks; every check is in exactly one; alone, in seconds on the lead's machine):
+Areas (111 checks; every check is in exactly one; alone, in seconds on the lead's machine):
 
 - `perf` (5, 36 s): the checks that measure time (library bake, ready, first sign, openings, the two physics budgets). It runs alone, first: other browsers on the GPU would change its numbers.
 - `seen` (1, 217 s): `tools/pvs.mjs --check`, js/seen.js covers what each zone sees; the longest single check, so the full run is about as long as it.
-- `move` (47, 116 s): the walks between places, solid ends of walks, jumping, hopping, passage warps, the flume run, noclip, every ladder.
+- `move` (48, 116 s): the walks between places, solid ends of walks, jumping, hopping, passage warps, portals (`tools/portals.mjs --only 0,1`), the flume run, noclip, every ladder.
 - `load` (12, 74 s): page loads without errors, draw calls at the lookout, no late shader compile, frame ceilings, `dreamcore.html`, no other host, production.
 - `water` (9, 68 s): pool pictures against direct renders, shared pictures, optics, the mall floor's reflection, skipped pool pictures.
 - `solid` (11, 48 s): what stops you (benches, door leaf, shelter, arch, flume deck), coplanar faces, nothing pops at an opening.
