@@ -26,10 +26,15 @@ const libPars = `uniform sampler2D tLA, tLB, tLD; uniform vec4 uL0, uL1, uL2, uL
   // uL2: normal strength, floor height, metres per UV unit (u, v). uL3: emitter?, back-face albedo, macro amount, swap u and v?
   // uL4: grime, metres of the finest pattern (0: no fade)
   const mat2 lRot = mat2(.8, .6, -.6, .8);
+  // A pattern finer than the pixel fades to its average instead of beating against the pixel grid: where the short axis of the
+  // pixel's footprint comes near the finest pattern (uL4.y metres) the lookup is biased up to a footprint of twice it. A bias on
+  // the hardware's own choice: it still filters anisotropically, and is never sharper than it, far or grazing.
+  float lBias(vec2 t) { if (uL4.y <= 0.) return 0.; float f = uL4.y * uL0.x, l = max(min(length(dFdx(t)), length(dFdy(t))), 1e-9);
+    return smoothstep(.3, .6, l / f) * log2(max(1., 2. * f / l)); } // up to a footprint of 2 f; none while the pattern spans 3 pixels or more
   void lTap(vec2 t, out vec4 a, out vec4 b) {
-    a = texture2D(tLA, t); b = texture2D(tLB, t);
+    float lb = lBias(t); a = texture(tLA, t, lb); b = texture(tLB, t, lb);
     if (uL1.z > 0.) { // break the repeat: a second, turned copy faded in and out by a slow field
-      vec2 t2 = lRot * t + vec2(.371, .713); vec4 a2 = texture2D(tLA, t2), b2 = texture2D(tLB, t2);
+      vec2 t2 = lRot * t + vec2(.371, .713); vec4 a2 = texture(tLA, t2, lb), b2 = texture(tLB, t2, lb);
       b2.xy = ((b2.xy * 2. - 1.) * lRot) * .5 + .5; // its normal turned back into this frame
       float w = smoothstep(.4, .6, texture2D(tLD, t * .23 + .5).a); a = mix(a, a2, w); b = mix(b, b2, w); } }
   mat3 lFrame(vec3 N, vec3 p, vec2 uv) { vec3 d1 = dFdx(p), d2 = dFdy(p); vec2 e1 = dFdx(uv), e2 = dFdy(uv); vec3 a = cross(d2, N), b = cross(N, d1);
@@ -50,12 +55,7 @@ const libMain = `
     lTap(vLW.zy * uL0.x, ax, bx); lTap(vLW.xz * uL0.x, ay, by); lTap(vLW.xy * uL0.x, az, bz);
     la = ax * w.x + ay * w.y + az * w.z; lb = bx * w.x + by * w.y + bz * w.z;
     vec3 nx = lNz((bx.xy * 2. - 1.) * uL2.x), ny = lNz((by.xy * 2. - 1.) * uL2.x), nz = lNz((bz.xy * 2. - 1.) * uL2.x); // whiteout blend
-    lNW = normalize(vec3(nx.xy + lN.zy, nx.z * lN.x).zyx * w.x + vec3(ny.xy + lN.xz, ny.z * lN.y).xzy * w.y + vec3(nz.xy + lN.xy, nz.z * lN.z) * w.z);
-    lM = w.x > max(w.y, w.z) ? vLW.zy : w.y > w.z ? vLW.xz : vLW.xy; lT = lM * uL0.x; }
-  if (uL4.y > 0.) { // a pattern finer than the pixel fades to its average (the last mip) instead of beating against the pixel grid
-    float lFd = smoothstep(.25, .7, length(fwidth(lM)) / uL4.y);
-    if (lFd > 0.) { float lod = log2(uL4.y * uL0.x * float(textureSize(tLA, 0).x)) + 1.; // the mip whose texels span the fine pattern: it goes, larger structure stays
-      la = mix(la, textureLod(tLA, lT, lod), lFd); lb.xy = mix(lb.xy, textureLod(tLB, lT, lod).xy, lFd); } }
+    lNW = normalize(vec3(nx.xy + lN.zy, nx.z * lN.x).zyx * w.x + vec3(ny.xy + lN.xz, ny.z * lN.y).xzy * w.y + vec3(nz.xy + lN.xy, nz.z * lN.z) * w.z); }
   vec4 lD;
   if (uL0.y < .5) lD = texture2D(tLD, lM * uL0.z);
   else lD = texture2D(tLD, vLW.zy * uL0.z) * lW3.x + texture2D(tLD, vLW.xz * uL0.z) * lW3.y + texture2D(tLD, vLW.xy * uL0.z) * lW3.z; // blended: no seam where the dominant projection changes
