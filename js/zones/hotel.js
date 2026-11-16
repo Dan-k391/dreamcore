@@ -66,7 +66,7 @@ const gates = {}; // the hallway's two openable doors onto the vestibule, by wal
     let z0 = 21.4;
     for (const [c, isDoor] of ops) { // the wall round each 1.0 x 2.24 m opening; a room door's opening is shut by its leaf and a dark backing
       box(W, x1, 0, z0, x2, h, c - .5); box(W, x1, 2.24, c - .5, x2, h, c + .5); z0 = c + .5;
-      const open = isDoor && k < 0 && OPEN.includes(c), gate = isDoor && GATE[k] === c, shut = isDoor && !open && !gate; // gate: open on the vestibule (below), its leaf swung in there
+      const open = isDoor && k < 0 && OPEN.includes(c), gate = isDoor && (GATE[k] === c || k < 0 && c === 24), shut = isDoor && !open && !gate; // gate: open on the vestibule (below), its leaf swung in there
       if (shut) { solid(x1, 0, c - .5, x2, 2.24, c + .5); block(K, k > 0 ? x1 : x2 - .2, 0, c - .5, k > 0 ? x1 + .2 : x2, 2.24, c + .5); }
       // an open door's frame is turned round so its hinge jamb is the north one: the leaf then stands where the hallway, walked from the
       // south as you come in, looks through the opening (hinged on the south, it hid behind that jamb)

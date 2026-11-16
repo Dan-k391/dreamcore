@@ -125,3 +125,7 @@ Every function takes the zone `z` first; "(x, y, zc, ry, o)" below means `z, x, 
 | `skirting` | (pts, o: color) | gloss-painted skirting with a caulk bead along a wall run |
 | `column` | (x, y, zc, ry, o) | round stone column with plinth, drums and capital; plinth stands, shaft is a post |
 | `pier` | (x, y, zc, ry, o: mat, color) | arch pier with plinth course and moulded impost |
+
+### The great baths (`js/zones/baths.js`)
+
+Built in the place file to the kit convention (own frame, front +z, `put()`): `lifeguardChair(z, x, y, zc, ry)` (stainless tube frames, hardwood treads, slatted seat and back, climbable), `wallClock(z, x, y, zc, ry, r)` (enamelled case, polished bezel, canvas dial in the game's lettering), `plaques(z, texts)` (glazed ceramic plaques: depth marks, NO DIVING, the passage sign). Photos: `#-1377.5,1421.5,2.7,-0.2` (chair), `#-1356.5,1416,-1.5708,0.35` lift 4.5 (clock).

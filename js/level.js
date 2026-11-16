@@ -24,6 +24,7 @@ import './zones/sea.js';
 import './zones/laundromat.js';
 import './zones/metro.js';
 import './zones/glasshouse.js';
+import './zones/baths.js';
 const q = new URLSearchParams(location.search); if (q.has('dev') && !q.has('bare')) { await import('./zones/showroom.js'); await import('./zones/yard.js'); } // the material showroom and the prop yard: test builds only
 
 performance.mark('load: places built'); // the load's phases, for a profile or performance.getEntriesByType('mark')
