@@ -1,5 +1,5 @@
 // GPU and CPU cost of a frame, pass by pass, at chosen views (tools/profile.js in the page, through tools/browse.mjs; ?dev&bare):
-//   node tools/profile.mjs [--port 8200] [--only name,name] [--size 1280x720[,2560x1440]] [--frames 30] [--waste] [--load n] [--pre js] [--json out.json]
+//   node tools/profile.mjs [--port 8200] [--views f.json] [--only name,name] [--size 1280x720[,2560x1440]] [--frames 30] [--waste] [--load n] [--pre js] [--json out.json]
 // --pre: JavaScript run in the page once before the views, for an A/B experiment (e.g. --pre "dev.composer.passes[1].enabled = false").
 // Default views: the six heaviest and three typical ones of tools/views.json; --only picks others from it. One page load per size.
 // GPU ms per row come from EXT_disjoint_timer_query_webgl2 (exact, per frame, median over --frames); nested work (shadow redraws,
@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 
 const argv = process.argv.slice(2), arg = (k, d) => { const i = argv.indexOf('--' + k); return i < 0 ? d : argv[i + 1]; };
 const port = arg('port', '8200'), sizes = arg('size', '1280x720').split(','), json = arg('json'), frames = +arg('frames', 30), loads = +arg('load', 0);
-const all = JSON.parse(readFileSync(new URL('./views.json', import.meta.url), 'utf8'));
+const all = JSON.parse(readFileSync(arg('views') || new URL('./views.json', import.meta.url), 'utf8')); // --views f.json: other views ({name, hash, lift, pre}), --only then names them
 const only = (arg('only') || 'night-hall-platform,corridor,arcade,gallery-pool,field,night-hall,hotel-hallway,mall,terrace').split(',');
 const views = only.map(n => all.find(v => v.name === n)); if (views.some(v => !v)) { console.error('unknown view in --only'); process.exit(2); }
 const here = p => fileURLToPath(new URL(p, import.meta.url)), browse = here('./browse.mjs'), page = readFileSync(here('./profile.js'), 'utf8');

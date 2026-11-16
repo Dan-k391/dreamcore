@@ -247,7 +247,7 @@ catch (e) { check('js/seen.js covers what each zone can see (tools/pvs.mjs --che
 // taken through, facing right, in the far zone, with no jump of mood or lamps; the picture with the eye in the plane is the same from both
 // sides, and moving through the plane in 2 cm steps shows no seam. (Visibility treating an opening as shut is the seen check's.)
 if (on('move')) { const q = 'portals: walk and hop through both ways, one picture either side of the plane, the far side clipped at its plane (tools/portals.mjs)';
-  try { execFileSync(process.execPath, [fileURLToPath(new URL('./portals.mjs', import.meta.url)), '--port', base.split(':')[2].slice(0, -1), '--only', '0,1', '--modes', 'walk,hop,same,sweep,clip'], { encoding: 'utf8' }); check(q, true); }
+  try { execFileSync(process.execPath, [fileURLToPath(new URL('./portals.mjs', import.meta.url)), '--port', base.split(':')[2].slice(0, -1), '--only', '0,1', '--modes', 'walk,hop,same,sweep,clip,leak'], { encoding: 'utf8' }); check(q, true); }
   catch (e) { check(q, false, String(e.stdout || e.message).split('\n').filter(l => !l.startsWith('ok')).join('\n').slice(0, 600)); } }
 // Nothing pops in at a doorway: crossing each opening (20 cm steps, standing and mid-jump eyes), every mesh in view is on the camera's layers.
 if (on('solid')) try { execFileSync(process.execPath, [fileURLToPath(new URL('./seams.mjs', import.meta.url)), '--port', base.split(':')[2].slice(0, -1), '--pop', '--fast'], { encoding: 'utf8' }); check('nothing pops in crossing an opening (tools/seams.mjs --pop --fast)', true); }
