@@ -24,6 +24,8 @@ export default {
   j4: ["lX","mT","u4"],
   hT: ["bA","bB","cN","mL","sP","t0","t3","t4","t5"],
   hV: [],
+  hG: [],
+  hL: [],
   mL: ["bB","hT","pV","sP","t0","t3","t4","t5"],
   sP: ["hT","mL","t4"],
   cN: ["bA","bC","hT","mL","pC","pG","pN","pV","t3"],

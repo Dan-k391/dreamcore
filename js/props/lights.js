@@ -263,4 +263,4 @@ function yard(plot) { // the lights plot in the dev yard (js/zones/yard.js): one
   mastLamp(z, X + 10.2, 0, Z + 1.2, 0, { power: 120 });
 }
 
-export { lamp, post, troffer, batten, opalPanel, streetLamp, globeLamp, mastLamp, sconce, stepLight, poolLight, neonSign, yard, cost };
+export { lamp, post, troffer, batten, opalPanel, streetLamp, globeLamp, mastLamp, sconce, stepLight, poolLight, neonSign, volume, yard, cost };

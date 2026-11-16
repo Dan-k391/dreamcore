@@ -27,7 +27,8 @@ const port = arg('port', '8200'), opts = { only: arg('only', ''), modes: arg('mo
 
 async function page(o) {
   const B = await import('/js/build.js'), { renderer: r, camera } = dev, gl = r.getContext();
-  for (const d of B.doors) { d.set(1); d.u = d.to = 1; } // every door open: the walks are of the portals (a shut door is the move area's door check)
+  // only the door under test open (and its copy): an open door across the hallway would let a walk carry on into another room; a shut door is the move area's door check
+  const swing = (e, f) => { for (const d of [e.door, e.to.door]) if (d) { d.set(f); d.u = d.to = f; } };
   const W = gl.drawingBufferWidth, H = gl.drawingBufferHeight, px = new Uint8Array(W * H * 4), GW = 64, GH = 36;
   const grab = () => { r.setRenderTarget(null); gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, px); const g = new Float32Array(GW * GH);
     for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const k = (j * W + i) * 4; g[Math.floor(j * GH / H) * GW + Math.floor(i * GW / W)] += .2126 * px[k] + .7152 * px[k + 1] + .0722 * px[k + 2]; }
@@ -36,12 +37,12 @@ async function page(o) {
   const yawNow = () => new dev.THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ').y, wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
   const out = [], only = o.only ? o.only.split(',').map(Number) : null, keysAll = ['KeyW', 'KeyS', 'ShiftLeft', 'Space'];
   for (const [i, e] of B.ends.entries()) { if (only && !only.includes(i)) continue;
-    const name = `${i}:${e.zone.id}>${e.to.zone.id}`;
+    const name = `${i}:${e.zone.id}>${e.to.zone.id}`; swing(e, 1);
     for (const m of o.modes.filter(m => !['same', 'sweep', 'clip'].includes(m))) {
-      const dt = m === 'hop' ? .05 : 1 / 60, sp = m === 'run' ? 6 : m === 'hop' ? 7.2 : 2.85, a = m === 'diag' ? .2 : 0, L = 2.5;
+      const dt = m === 'hop' ? .05 : 1 / 60, sp = m === 'run' ? 6 : m === 'hop' ? 7.2 : 2.85, a = m === 'diag' ? .2 : 0, L = 2; // L: the run-up and run-out, inside the hallway's 2.4 m (2.5 began on the facing door's plane, in its shut leaf, and ran out through it)
       const dir = [-e.n.x * Math.cos(a) + e.r.x * Math.sin(a), -e.n.z * Math.cos(a) + e.r.z * Math.sin(a)], sx = e.p.x - dir[0] * L, sz = e.p.z - dir[1] * L, yaw = Math.atan2(-dir[0], -dir[1]);
       const walk = hook => { // hook(k): called with the state the frame before picture k left, just before stepping to it
-        dev.reset(sx, sz, yaw, 0); const z0 = dev.state().zone;
+        swing(e, 1); dev.reset(sx, sz, yaw, 0); const z0 = dev.state().zone; // the leaf as it began: the first walk may have moved it, and the replay must see what it saw
         [ 'KeyW', ...(m === 'run' ? ['ShiftLeft'] : []), ...(m === 'hop' ? ['Space'] : [])].forEach(k => dev.key(k, true));
         dev.vel.set(dir[0] * sp, dir[1] * sp); if (m === 'hop') { dev.step(1, dt); dev.vel.set(dir[0] * sp, dir[1] * sp); } // airborne at 7.2: the air keeps it
         const pics = [grab()], poses = [null], xs = []; let bend = null, cross = -1, backed = false, slid = false, last = [camera.position.x, camera.position.z], top = 0;
@@ -93,6 +94,7 @@ async function page(o) {
       camera.fov = 72; camera.updateProjectionMatrix();
       const at = st.find(q => Math.abs(q[0]) < .011)[1], near = Math.max(...st.filter(q => Math.abs(q[0]) > .011 && Math.abs(q[0]) < .1).map(q => q[1]));
       out.push({ name, m: 'sweep', at: +at.toFixed(2), near: +near.toFixed(2), ok: at <= near * 1.1 + .3 }); }
+    swing(e, 0);
   }
   return out;
 }

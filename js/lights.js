@@ -34,9 +34,9 @@ function weights(x, z, zone) {
 }
 function relight(pos, zone, fade, wts) { // fade: how far to move brightness this call (1 = snap); wts: weights() there, else the zone alone (the bakes)
   const gw = {}; for (const [z, v] of wts || [[zone, 1]]) gw[z.grp] = (gw[z.grp] || 0) + v; // a fixture's group gives up its 8 m handicap as you near it
-  // a shut door's far side is lit for only within 3 m of it, so its lamps are settled before the leaf opens
+  // a shut door's far side is lit for only within 3 m of its opening (not of its wall's plane: every door along it would count), so its lamps are settled before the leaf opens
   // in play (wts given), a fixture in front of a portal's far end is also as near as it is from your place taken through that portal
-  const via = wts ? ends.filter(e => { const d = side(e, pos.x, pos.z); return d >= 0 && d < (live(e) ? 30 : 3); }).map(e => { const [x, z] = carry(e, pos.x, pos.z); return [e.to, V(x, pos.y + e.to.p.y - e.p.y, z)]; }) : [];
+  const via = wts ? ends.filter(e => { const d = side(e, pos.x, pos.z); return d >= 0 && (live(e) ? d < 30 : Math.hypot(d, Math.max(0, Math.abs(across(e, pos.x, pos.z)) - e.w / 2)) < 3); }).map(e => { const [x, z] = carry(e, pos.x, pos.z); return [e.to, V(x, pos.y + e.to.p.y - e.p.y, z)]; }) : [];
   const dist = e => { let d = e.p.distanceTo(pos); for (const [f, q] of via) if (side(f, e.p.x, e.p.z) > 0) d = Math.min(d, e.p.distanceTo(q)); return d; };
   const want = emitters.map(e => [dist(e) + 8 * (1 - Math.min(1, gw[e.zone.grp] || 0)) - (e.light ? 2 : 0), e]).sort((a, b) => a[0] - b[0]).slice(0, lights.length).map(a => a[1]);
   for (const l of lights) {
