@@ -23,7 +23,7 @@ import { writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const argv = process.argv.slice(2), arg = (k, d) => { const i = argv.indexOf('--' + k); return i < 0 ? d : argv[i + 1]; };
-const port = arg('port', '8200'), opts = { only: arg('only', ''), modes: arg('modes', 'walk,run,hop,diag,back,same,sweep,clip,leak').split(',') };
+const port = arg('port', '8200'), opts = { only: arg('only', ''), modes: arg('modes', 'walk,run,hop,diag,back,same,sweep,clip,leak,deep').split(',') };
 
 async function page(o) {
   const B = await import('/js/build.js'), { renderer: r, camera } = dev, gl = r.getContext();
@@ -102,13 +102,19 @@ async function page(o) {
       out.push({ name, m: 'sweep', at: +at.toFixed(2), near: +near.toFixed(2), ok: at <= near * 1.1 + .3 }); }
     swing(e, 0);
   }
+  if (o.modes.includes('deep')) { // recursion: the gallery's two doors open, seen from across the hallway, its far door shows the hallway, your own door, the gallery again...
+    const P = await import('/js/portals.js'), g = B.ends.filter(e => e.zone.id === 'hT' && e.to.zone.id === 'hG'); g.forEach(e => swing(e, 1));
+    dev.reset(4.9, 27.6, Math.PI / 2, 0); dev.step(20); dev.view(4.9, 1.62, 27.6, Math.PI / 2, 0); const { levels, ends: cut } = P.stats, L = P.LIM;
+    const small = cut.every(([x1, y1, x2, y2]) => Math.min(x2 - x1, y2 - y1) < L.minpx + 1); // ended for size (+1: rounding to whole pixels), not by the cap
+    g.forEach(e => swing(e, 0)); out.push({ name: 'gallery', m: 'deep', levels, cut: cut.length, small, ok: levels >= 3 && cut.length > 0 && small });
+  }
   return out;
 }
 const browse = fileURLToPath(new URL('./browse.mjs', import.meta.url));
 const res = JSON.parse(execFileSync(process.execPath, [browse, '--url', `http://127.0.0.1:${port}/?dev#3.8,30,0,0`, '--size', '640x360', '--wait', '900000', '--eval', `(${page})(${JSON.stringify(opts)})`], { encoding: 'utf8', maxBuffer: 1 << 26 }));
 if (res.errors?.length) console.log('page errors:', res.errors.slice(0, 3));
 const rows = res.result || [];
-for (const q of rows) console.log(`${q.ok ? 'ok  ' : 'FAIL'} ${q.name.padEnd(12)} ${q.m.padEnd(5)} ` + (q.m === 'same' ? `mean ${q.mean} (a 2 cm move: ${q.move2cm})` : q.m === 'sweep' ? `the 2 cm step across the plane ${q.at} vs the steps within 10 cm ${q.near}` : q.m === 'leak' ? `${q.n} doors behind the eye opened change the picture through it by ${q.worst}` : q.m === 'clip' ? `a card behind the far plane changes it ${q.behind} (in front: ${q.front})`
+for (const q of rows) console.log(`${q.ok ? 'ok  ' : 'FAIL'} ${q.name.padEnd(12)} ${q.m.padEnd(5)} ` + (q.m === 'deep' ? `${q.levels} levels drawn, ${q.cut} ended by the fill${q.small ? ' (each smaller than the cut-off)' : ' (ONE ENDED LARGER THAN THE CUT-OFF)'}` : q.m === 'same' ? `mean ${q.mean} (a 2 cm move: ${q.move2cm})` : q.m === 'sweep' ? `the 2 cm step across the plane ${q.at} vs the steps within 10 cm ${q.near}` : q.m === 'leak' ? `${q.n} doors behind the eye opened change the picture through it by ${q.worst}` : q.m === 'clip' ? `a card behind the far plane changes it ${q.behind} (in front: ${q.front})`
   : `end off by ${q.err} m${q.slid ? ` (slid along a solid${q.bend !== null ? `, first pushed off its line ${q.bend} m from the plane` : ''})` : q.bend !== null ? `, PUSHED OFF ITS LINE STRADDLING THE PLANE (${q.bend} m)` : ''}, facing ${q.face}, zone ${q.zoneOk ? 'ok' : 'WRONG'}, top ${q.top} m/s, state jump on crossing ${q.jump} vs frames before ${q.pre} (the picture's own change ${q.around})${q.crossed ? '' : ', NEVER CROSSED'}`));
 if (arg('json')) writeFileSync(arg('json'), JSON.stringify(rows, null, 1));
 const bad = rows.filter(q => !q.ok).length; console.log(`${rows.length - bad} passed, ${bad} failed`); process.exit(bad || res.errors?.length ? 1 : 0);

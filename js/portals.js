@@ -13,13 +13,15 @@
 //     is hidden in the far draw and this side's leaf meshes drawn again over the picture, depth tested against it, so the part of the
 //     leaf past the plane is lit by the lamps on the side it is seen from (the far copy, behind which there is no room, would get no light
 //     on its face toward the plane: black), and it is the same leaf in every frame up to the plane.
-//  4. inside that picture, openings seen through it are drawn the same way, DEPTH levels deep; past that an opening is a dark fill.
+//  4. inside that picture, openings seen through it are drawn the same way, recursively, each scissored and culled to its rectangle (clipped
+//     to its parent's); one under LIM.minpx px across, or past LIM.depth levels, ends in a flat fill of its far zone's distance colour.
 import * as THREE from 'three';
 import { renderer, scene, camera, clip } from './core.js';
 import { ends, side, across, live } from './build.js';
 import { ponds } from './water.js';
 
-const DEPTH = 2, D = 1, REACH = 80; // levels drawn through openings; the pocket's depth (any works: the test is at the plane); no portal farther (a zone drawn from everywhere, the dev yard, would draw its far sides behind every wall)
+const LIM = { depth: 8, minpx: 6, fill: 1 }, // levels at most (each costs what its far zone submits in its cone: 0.05 to 0.8 Mtri; past 8 the gallery loop's openings are 13 px across at 2560x1440); the narrow side in px under which an opening ends; the end fill's brightness (endFill)
+  D = 1, REACH = 80; // the pocket's depth (any works: the test is at the plane); no portal farther from the eye at the top level (a zone drawn from everywhere, the dev yard, would draw its far sides behind every wall)
 const gl = renderer.getContext(), st = renderer.state, sb = st.buffers.stencil, draw = renderer.render.bind(renderer);
 const U = { uC: { value: new THREE.Vector3() }, uN: { value: new THREE.Vector3() }, uR: { value: new THREE.Vector3() }, uS: { value: new THREE.Vector2() }, uP: { value: new THREE.Matrix4() }, uMode: { value: 0 }, uFill: { value: new THREE.Color() } };
 const pocketMat = o => new THREE.ShaderMaterial({ uniforms: U, side: THREE.BackSide, colorWrite: false, depthWrite: false, depthFunc: THREE.LessEqualDepth, stencilWrite: true, stencilFunc: THREE.EqualStencilFunc,
@@ -39,8 +41,18 @@ const TAKEN = 0x80, take = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THR
   stencilFunc: THREE.LessStencilFunc, stencilFuncMask: 0x7f, stencilWriteMask: 0xff, stencilZPass: THREE.ReplaceStencilOp, stencilFail: THREE.KeepStencilOp, stencilZFail: THREE.KeepStencilOp,
   vertexShader: 'void main() { gl_Position = vec4(position.xy, 0., 1.); }', fragmentShader: 'void main() { gl_FragColor = vec4(0.); }' }));
 take.frustumCulled = false; take.matrixAutoUpdate = false; const taking = new THREE.Scene(); taking.add(take);
-const cams = Array.from({ length: DEPTH }, () => new THREE.PerspectiveCamera()), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _v = new THREE.Vector4(), _p = new THREE.Vector3(), _at = new THREE.Vector3(), Y = new THREE.Vector3(0, 1, 0);
-const stats = { drawn: 0, levels: 0 }; // what the last main-camera frame drew through portals (tools/portals.mjs, tools/profile.mjs)
+const cams = Array.from({ length: 64 }, () => new THREE.PerspectiveCamera()), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _v = new THREE.Vector4(), _p = new THREE.Vector3(), _at = new THREE.Vector3(), Y = new THREE.Vector3(0, 1, 0);
+// The far draw culled to its opening: three builds its view frustum from projection * view once per render(), right after scene.onBeforeRender
+// (the shadow cameras' frusta come later and from their own matrices): while crop is set, that one call takes the crop first, so only what
+// can show inside the opening's screen rectangle is submitted (a level costs what its rectangle holds, not what the whole far zone does)
+let crop = null; const setFrustum = THREE.Frustum.prototype.setFromProjectionMatrix, _cm = new THREE.Matrix4();
+// Its near plane becomes the far end's plane (the clip): what lies between the eye taken through and the far end is clipped away anyway, and
+// for a hallway end that was everything of the hallway's neighbours in the cone (0.83 Mtri a level for a 27 x 60 px opening, against 0.05)
+THREE.Frustum.prototype.setFromProjectionMatrix = function (m, cs) { if (!crop) return setFrustum.call(this, m, cs);
+  setFrustum.call(this, _cm.multiplyMatrices(crop, m), cs); crop = null; this.planes[5].copy(clip); return this; };
+const cropOf = (r, M) => M.set(2 / (r[2] - r[0]), 0, 0, -(r[0] + r[2]) / (r[2] - r[0]), 0, 2 / (r[3] - r[1]), 0, -(r[1] + r[3]) / (r[3] - r[1]), 0, 0, 1, 0, 0, 0, 0, 1);
+const crops = Array.from({ length: 64 }, () => new THREE.Matrix4());
+const stats = { drawn: 0, levels: 0, ends: [] }; // what the last main-camera frame drew through portals (ends: each opening ended by the fill, its pixel rectangle [x1, y1, x2, y2]) (tools/portals.mjs, tools/profile.mjs)
 
 let ref = -1, fn = gl.EQUAL, off = false; // while a far side is drawn, every material tests the stencil for this level, whatever its own settings say (a door drawn again over a picture and those inside it: LEQUAL)
 const setMaterial = st.setMaterial.bind(st);
@@ -64,6 +76,14 @@ function scissor(rt, r) { // r in NDC, widened a pixel; null: off
     rt.scissor.set(x, y, Math.min(W, Math.ceil((r[2] * .5 + .5) * W) + 1) - x, Math.min(H, Math.ceil((r[3] * .5 + .5) * H) + 1) - y); }
   rt.scissorTest = !!r; renderer.setRenderTarget(rt);
 }
+// The last level: the opening filled flat with the far zone's fog colour times LIM.fill, measured as the mean of what the levels past it
+// draw there (the gallery loop from the hallway and from inside at each end, 1280x720: sRGB red 53, 51, 38 drawn past it against 50 filled; fog to the power 1.5 for their hue); in the AO pass's normals
+// (an override material) the opening plane's normal, facing the eye, so the AO sees a far wall there, not a colour read as a normal
+const _n = new THREE.Vector3();
+function endFill(e, cam) {
+  if (scene.overrideMaterial) { _n.copy(e.n).transformDirection(cam.matrixWorldInverse); U.uFill.value.setRGB(_n.x * .5 + .5, _n.y * .5 + .5, _n.z * .5 + .5); }
+  else U.uFill.value.setRGB(...e.to.zone.fog.toArray().slice(0, 3).map(c => c ** 1.5)).multiplyScalar(LIM.fill);
+}
 function drawPocket(e, mat, cam, level) {
   pm.material = mat; mat.stencilRef = level; pm.matrix.compose(e.p, _q.setFromAxisAngle(Y, e.ry), _s.set(e.w, e.h, D)); pm.matrixWorldNeedsUpdate = true;
   U.uC.value.copy(e.p); U.uN.value.copy(e.n); U.uR.value.copy(e.r); U.uS.value.set(e.w, e.h); U.uP.value.copy(cam.projectionMatrix);
@@ -72,23 +92,23 @@ function drawPocket(e, mat, cam, level) {
 // level: the stencil value of the picture cam draws into; lim: its rectangle; out: the end it looks out of (never drawn from its own camera)
 function pass(cam, level, lim, rt, out) {
   const at = _at.setFromMatrixPosition(cam.matrixWorld), list = [], near = []; // near: a door whose opening is off screen but whose leaf, swung through its plane, may be on it (by you, facing away): drawn face by face all the same // not _p: rectOf() writes the corners there, and every end after the first was tested against one
-  for (const e of ends) if (e !== out && live(e) && (side(e, at.x, at.z) > 1e-3 || side(e, at.x, at.z) > -1e-3 && Math.abs(across(e, at.x, at.z)) < e.w / 2) /* on its plane (to a millimetre: float32 matrices) only from inside its opening; another opening in the same wall is edge-on */ && (cam.layers.mask & e.bit) && e.p.distanceToSquared(at) < REACH * REACH) { const r = rectOf(e, cam, lim); if (r) list.push([e.p.distanceToSquared(at), e, r]); else if (e.door && e.to.door && Math.abs(side(e, at.x, at.z)) < e.w) near.push([0, e]); }
-  list.sort((a, b) => a[0] - b[0]); // nearest first: a nearer opening overlapping a farther one keeps its pixels
+  for (const e of ends) if (e !== out && live(e) && (side(e, at.x, at.z) > 1e-3 || side(e, at.x, at.z) > -1e-3 && Math.abs(across(e, at.x, at.z)) < e.w / 2) /* on its plane (to a millimetre: float32 matrices) only from inside its opening; another opening in the same wall is edge-on */ && (cam.layers.mask & e.bit) && (level || e.p.distanceToSquared(at) < REACH * REACH)) { const r = rectOf(e, cam, lim); if (r) list.push([e.p.distanceToSquared(at), e, r]); else if (e.door && e.to.door && Math.abs(side(e, at.x, at.z)) < e.w) near.push([0, e]); }
+  list.sort((a, b) => a[0] - b[0]); const cut = new Set(); // nearest first: a nearer opening overlapping a farther one keeps its pixels
   for (const [, e, r] of list) {
     scissor(rt, r);
-    if (level >= DEPTH) { U.uMode.value = 0; U.uFill.value.setRGB(...e.to.zone.fog.toArray().slice(0, 3)).multiplyScalar(.15); drawPocket(e, fill, cam, level); continue; }
+    if (level >= LIM.depth || level && Math.min((r[2] - r[0]) * rt.width, (r[3] - r[1]) * rt.height) < 2 * LIM.minpx) { cut.add(e); if (!scene.overrideMaterial) stats.ends.push(r.map((q, i) => Math.round((q * .5 + .5) * (i % 2 ? rt.height : rt.width)))); U.uMode.value = 0; endFill(e, cam); drawPocket(e, fill, cam, level); continue; }
     U.uMode.value = 0; drawPocket(e, mark, cam, level); U.uMode.value = 1; drawPocket(e, reset, cam, level + 1);
     const v = cams[level]; v.projectionMatrix.copy(cam.projectionMatrix); v.projectionMatrixInverse.copy(cam.projectionMatrixInverse); v.near = cam.near; v.far = cam.far;
     v.matrixWorld.multiplyMatrices(e.M, cam.matrixWorld); v.matrixWorld.decompose(v.position, v.quaternion, v.scale); v.updateMatrixWorld(true); v.userData.mask = e.to.mask;
     const was = clip.clone(); clip.normal.copy(e.to.n); clip.constant = -e.to.n.dot(e.to.p) + 1e-3; // keep what lies in front of the far end
     const fc = e.to.door?.meshes || []; for (const m of fc) m.visible = false; // the far copy of the door in this opening: drawn by this side's (below)
-    ref = level + 1; draw(scene, v); ref = -1; if (!scene.overrideMaterial) stats.drawn++; stats.levels = Math.max(stats.levels, level + 1);
+    ref = level + 1; crop = cropOf(r, crops[level]); draw(scene, v); crop = null; ref = -1; if (!scene.overrideMaterial) stats.drawn++; stats.levels = Math.max(stats.levels, level + 1);
     pass(v, level + 1, r, rt, e.to);
     for (const m of fc) m.visible = true; clip.copy(was); scissor(rt, r);
     take.material.stencilRef = TAKEN | level; draw(taking, cam);
   }
-  const ds = [...list.filter(([, e]) => e.door && e.to.door), ...near];
-  if (ds.length && level < DEPTH) { // the leaf in each opening just drawn through, over the pictures (3. above)
+  const ds = [...list.filter(([, e]) => e.door && e.to.door && !cut.has(e)), ...near];
+  if (ds.length) { // the leaf in each opening just drawn through, over the pictures (3. above)
     lamps ??= (() => { const a = []; scene.traverse(o => o.isLight && a.push(o)); return a; })(); // all of them, so its programs are the scene's
     one.fog = scene.fog; one.environment = scene.environment; one.overrideMaterial = scene.overrideMaterial;
     const sm = renderer.shadowMap, nu = sm.needsUpdate; sm.needsUpdate = false; scissor(rt, level ? lim : null);
@@ -116,11 +136,11 @@ renderer.render = (s, c) => {
   const tg = renderer.getRenderTarget(); if (!tg.stencilBuffer && tg.depthTexture?.format !== THREE.DepthStencilFormat) return; // no stencil, no clip: a far side would cover the whole picture (a test's capture target); none is drawn
   if (!warm) { warm = true; for (const m of [reset, fill, mark]) { pm.material = m; renderer.compile(pocket, c); } renderer.compile(taking, c); }
   const rt = renderer.getRenderTarget(), auto = renderer.autoClear, upd = scene.matrixWorldAutoUpdate, on = ponds.map(w => w.visible);
-  if (!scene.overrideMaterial) stats.drawn = stats.levels = 0;
+  if (!scene.overrideMaterial) { stats.drawn = stats.levels = 0; stats.ends = []; }
   renderer.autoClear = false; scene.matrixWorldAutoUpdate = false; for (const w of ponds) w.visible = false; // shortcut: no pool is drawn through a portal (its pictures are of the main view)
   try { pass(c, 0, [-1, -1, 1, 1], rt, null); }
   finally { ref = -1; sb.setMask(0xff); renderer.autoClear = auto; scene.matrixWorldAutoUpdate = upd; ponds.forEach((w, i) => w.visible = on[i]); scissor(rt, null); }
 };
 let warm = false; // the pocket's three programs, compiled on the first scene draw with its target bound (a program's output colour space is the target's): none on first sight of a portal
 
-export { stats, DEPTH, rectOf };
+export { stats, LIM, rectOf };
