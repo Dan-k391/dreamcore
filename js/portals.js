@@ -159,7 +159,7 @@ renderer.render = (s, c) => {
   draw(s, c);
   if (s !== scene || c !== camera || !ends.length || !renderer.getRenderTarget()) return;
   const tg = renderer.getRenderTarget(); if (!tg.stencilBuffer && tg.depthTexture?.format !== THREE.DepthStencilFormat) return; // no stencil, no clip: a far side would cover the whole picture (a test's capture target); none is drawn
-  if (!warm.has(s.overrideMaterial)) { warm.add(s.overrideMaterial); const t = tg.clone(); t.setSize(1, 1); renderer.setRenderTarget(t); // drawn, not only compiled: ANGLE makes a program's variant for the target's formats on its first draw (2-3 ms on first sight of a portal), so once into a 1 px twin of each pass's target
+  if (!warm.has(s.overrideMaterial)) { warm.add(s.overrideMaterial); const t = tg.clone(); t.setSize(1, 1); if (t.depthTexture) { t.depthTexture = new THREE.DepthTexture(1, 1, tg.depthTexture.type); t.depthTexture.format = tg.depthTexture.format; } renderer.setRenderTarget(t); // its own 1 px depth: a clone shares the original's full-size one, which left the twin incomplete (every warm-up draw a GL error, and no warm-up) // drawn, not only compiled: ANGLE makes a program's variant for the target's formats on its first draw (2-3 ms on first sight of a portal), so once into a 1 px twin of each pass's target
     try { for (const m of [reset, fill, mark]) { pm.material = m; draw(pocket, c); } draw(taking, c); } finally { renderer.setRenderTarget(tg); t.depthTexture?.dispose(); t.dispose(); } }
   const rt = renderer.getRenderTarget(), auto = renderer.autoClear, upd = scene.matrixWorldAutoUpdate, on = ponds.map(w => w.visible);
   if (!scene.overrideMaterial) { stats.drawn = stats.levels = 0; stats.ends = []; }
