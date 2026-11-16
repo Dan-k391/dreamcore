@@ -226,7 +226,7 @@ if (on('water')) { const f = run(base + '?dev&bare', `(async () => {
     return { count, maxCaptures, maxMean, maxDelta };
   })()`);
   check('shared pool pictures match per-pool captures across qualities and same-clock camera changes', f.result?.count === 27 && f.result.maxMean < .05 && f.result.maxDelta <= 8 && !f.errors.length, JSON.stringify(f));
-  check('at most one mirror/lens pair is rendered per main scene render', f.result?.maxCaptures === 2 && !f.errors.length, JSON.stringify(f.result)); }
+  check('at most one set of pool pictures (mirror, lens, deep) is rendered per main scene render', f.result?.maxCaptures === 3 && !f.errors.length, JSON.stringify(f.result)); }
 
 if (on('water')) { const f = run(base + '?dev&bare', `(async () => (await import('/tools/water-optics.js')).waterOptics(dev))()`);
   check('pool focusing is bounded, balanced, animated, depth-filtered and responds to disturbances', f.result && Object.values(f.result.field).every(Boolean) && !f.errors.length, JSON.stringify(f.result || f));
