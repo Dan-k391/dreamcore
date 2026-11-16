@@ -15,6 +15,11 @@ const pondAt = (x, z) => ponds.find(w => inR(x, z, w.rect.x, w.rect.y, w.rect.z,
 // The drawn water is flat (water.js shades its waves, it doesn't move the surface), so what floats on it heaves by HEAVE at most:
 // enough to bob with the waves, never enough to leave the surface it is seen on or be flung off it.
 const HEAVE = .04, heave = t => Math.max(-HEAVE, Math.min(HEAVE, t.h * 5));
+// the knocks this step left for sound.js (x, y, z, speed, kind: 0 a ball, 1 a pit ball, 2 a ring, 3 the big ball, 4 a ball meeting the water), at most 32
+// until it reads them; and the fastest ball rolling on something. Fixed arrays: nothing made per step.
+const knocks = { n: 0, d: new Float32Array(160) }, rolling = { x: 0, y: 0, z: 0, s: 0 };
+const knock = (x, y, z, s, k) => { if (knocks.n < 32) { const o = knocks.n++ * 5, d = knocks.d; d[o] = x; d[o + 1] = y; d[o + 2] = z; d[o + 3] = s; d[o + 4] = k; } };
+const kindOf = g => g.n > 1 ? 1 : g.float ? 0 : 3;
 const wakes = []; // [pond, x, z, size]: ripples the loose things leave this step, for player.js to hand to ripple()
 let ms = 0; // milliseconds the last frame's steps took
 
@@ -165,7 +170,7 @@ function stepGroup(g, me) {
     const i = 3 * b; o[i] = p[i]; o[i + 1] = p[i + 1]; o[i + 2] = p[i + 2];
     v[i + 1] -= G * h;
     if (g.float) { const w = pondAt(p[i], p[i + 2]), R = w?.rect; g.in[b] = R && inR(p[i], p[i + 2], R.x + r - .01, R.y + r - .01, R.z - r + .01, R.w - r + .01) ? R : null; if (w) { const t = w.twin.sample(p[i], p[i + 2]), s = WY + heave(t), sub = Math.min(1, Math.max(0, (s - p[i + 1] + r) / (2 * r))); // how much of it is under water (the surface heaved as the rings ride it)
-      if (sub > 0) { v[i + 1] += G * sub / g.float * h; const k = Math.min(1, (.6 + sub * 4) * h), kv = Math.min(1, (4 + sub * 60) * h); // it floats, the water drags it along with its flow and holds back its bobbing (near critical: a dive must not launch it)
+      if (sub > 0) { if (v[i + 1] < -1.2 && sub < .3) knock(p[i], s, p[i + 2], -v[i + 1], 4); v[i + 1] += G * sub / g.float * h; const k = Math.min(1, (.6 + sub * 4) * h), kv = Math.min(1, (4 + sub * 60) * h); // it floats, the water drags it along with its flow and holds back its bobbing (near critical: a dive must not launch it)
         v[i] += (t.ux * 1.4 - G * .3 * t.gx - v[i]) * k; v[i + 2] += (t.uz * 1.4 - G * .3 * t.gz - v[i + 2]) * k; v[i + 1] -= v[i + 1] * kv;
         const sp = Math.hypot(v[i], v[i + 2]); if (sp > .08) wakes.push([w, p[i], p[i + 2], Math.min(sp, 2) * .0015 * sub]); } } } // its wake: from moving through the water, not bobbing (a wake raised under a rising ball would lift it further)
     const sp = Math.hypot(v[i], v[i + 1], v[i + 2]), top = g.cap || 7; if (sp > top) { v[i] *= top / sp; v[i + 1] *= top / sp; v[i + 2] *= top / sp; }
@@ -181,13 +186,14 @@ function stepGroup(g, me) {
     if (y - r < fy + .01) { let nx = 0, ny = 1, nz = 0; if (g.slope) { nx = g.floor(x - .1, z) - g.floor(x + .1, z); nz = g.floor(x, z - .1) - g.floor(x, z + .1); ny = .2; const l = Math.hypot(nx, ny, nz); nx /= l; ny /= l; nz /= l; }
       const pen = r - (y - fy) * ny; if (pen > 0) { x += nx * pen; y += ny * pen; z += nz * pen; } hit = 1; }
     const cl = g.cells[Math.min(g.cw - 1, Math.max(0, Math.floor((x - g.x1) / .5))) + g.cw * Math.min(g.ch - 1, Math.max(0, Math.floor((z - g.z1) / .5)))];
-    for (const c of cl) if (y + r > c[4] - .01 && y - r < c[5] + .01 && clear(c, x, y, z, r + .005)) { if (out.y > 0) hit = 1; if (clear(c, x, y, z, r)) { x += out.x; y += out.y; z += out.z; } }
+    for (const c of cl) if (y + r > c[4] - .01 && y - r < c[5] + .01 && clear(c, x, y, z, r + .005)) { if (out.y > 0) hit = 1; if (clear(c, x, y, z, r)) { const l = Math.hypot(out.x, out.y, out.z) || 1, vn = -(v[i] * out.x + v[i + 1] * out.y + v[i + 2] * out.z) / l; if (vn > .7 && out.y <= 0) knock(x, y, z, vn, kindOf(g)); x += out.x; y += out.y; z += out.z; } }
     p[i] = x; p[i + 1] = y; p[i + 2] = z;
     for (let q = 0, m = many ? around(g, x, y, z, 2 * r) : 0; q < m; q++) { const c = found[q]; if (c === b) continue; const j = 3 * c, dx = p[i] - p[j], dy = p[i + 1] - p[j + 1], dz = p[i + 2] - p[j + 2], d2 = dx * dx + dy * dy + dz * dz;
       if (d2 >= 4.2 * r * r || d2 < 1e-12) continue;
       const d = Math.sqrt(d2), e = 2 * r - d;
       if (dy > .5 * d) hit = 1; // resting on it (or just touching)
       if (e <= 0) continue;
+      { const vn = -((v[i] - v[j]) * dx + (v[i + 1] - v[j + 1]) * dy + (v[i + 2] - v[j + 2]) * dz) / d; if (vn > .9) knock(p[i], p[i + 1], p[i + 2], vn, kindOf(g)); }
       if (g.still[c] >= 30 && e > .004 && -(v[i] * dx + v[i + 1] * dy + v[i + 2] * dz) / d * h > .004) wake(g, c); // a hard knock wakes a sleeping ball: deep, and from a ball moving into it; a light one, or a still one a jam (the legs in a full pit) keeps pressed into it, finds it as firm as the floor
       const w = g.still[c] >= 30 ? 1 : .5 + .4 * dy / d, k = e * w / d, kj = e * (1 - w) / d; // the upper ball gives way more, so a pile carries its weight down to the floor in one step
       p[i] += dx * k; p[i + 1] += dy * k; p[i + 2] += dz * k; p[j] -= dx * kj; p[j + 1] -= dy * kj; p[j + 2] -= dz * kj; }
@@ -205,9 +211,10 @@ function stepGroup(g, me) {
     v[i] = (p[i] - o[i]) / h; v[i + 1] = (p[i + 1] - o[i + 1]) / h; v[i + 2] = (p[i + 2] - o[i + 2]) / h;
     const s1 = Math.hypot(v[i], v[i + 1], v[i + 2]), s0 = Math.hypot(ox, oy, oz) + 3; if (s1 > s0) { v[i] *= s0 / s1; v[i + 1] *= s0 / s1; v[i + 2] *= s0 / s1; } // being pushed out of an overlap gains at most 3 m/s a step: a pile squeezed by a falling body would otherwise burst
     if (g.contact[b]) {
-      if (oy < -1.2 && v[i + 1] > oy * -.2) v[i + 1] = -oy * g.bounce; // a fall onto something bounces
+      if (oy < -1.2 && v[i + 1] > oy * -.2) { v[i + 1] = -oy * g.bounce; knock(p[i], p[i + 1], p[i + 2], -oy, kindOf(g)); } // a fall onto something bounces
       const s = Math.hypot(v[i], v[i + 2]), f = s > 1e-6 ? Math.max(0, s - g.grip * h) / s : 0; v[i] *= f; v[i + 2] *= f; // rolling resistance
       if (!f && g.slope) { p[i] = o[i]; p[i + 2] = o[i + 2]; } // and where it holds, it holds the place too: the push out along the slope's normal would otherwise creep it downhill until a steeper bit lets it run
+      if (g.n === 1 && s > rolling.s) { rolling.s = s; rolling.x = p[i]; rolling.y = p[i + 1] - r; rolling.z = p[i + 2]; }
       if (g.q && s > 1e-4) g.q.premultiply(_q.setFromAxisAngle(_a.set(v[i + 2] / s, 0, -v[i] / s), s * h / r)); // rolls without slipping
     } else if (g.q && g.float) { const s = Math.hypot(v[i], v[i + 2]); if (s > 1e-4) g.q.premultiply(_q.setFromAxisAngle(_a.set(v[i + 2] / s, 0, -v[i] / s), s * h / r * .5)); }
     fast = Math.max(fast, v[i] * v[i] + v[i + 1] * v[i + 1] + v[i + 2] * v[i + 2]);
@@ -272,7 +279,7 @@ function stepRing(f, me) {
   f.x += f.vx * h; f.z += f.vz * h; f.yaw += f.wy * h;
   // the pool's sides and anything standing in the water; then the other rings
   for (const c of f.solids) if (f.y + RT > c[4] && f.y - RT < c[5] && clear(c, f.x, null, f.z, RO)) { f.x += out.x; f.z += out.z; const l = Math.hypot(out.x, out.z), nx = out.x / l, nz = out.z / l, vn = f.vx * nx + f.vz * nz;
-    if (vn < 0) { f.vx -= 1.3 * vn * nx; f.vz -= 1.3 * vn * nz; } }
+    if (vn < 0) { if (vn < -.12) knock(f.x - nx * RO, f.y, f.z - nz * RO, -vn * 5, 2); f.vx -= 1.3 * vn * nx; f.vz -= 1.3 * vn * nz; } }
   const R = f.w.rect; f.x = Math.min(R.z - RO, Math.max(R.x + RO, f.x)); f.z = Math.min(R.w - RO, Math.max(R.y + RO, f.z));
   for (const g of floaters) if (g !== f && g.w === f.w) { const ex = f.x - g.x, ez = f.z - g.z, l = Math.hypot(ex, ez);
     if (l < 2 * RO && l > 1e-6) { const nx = ex / l, nz = ez / l, s = (2 * RO - l) / 2, vn = (f.vx - g.vx) * nx + (f.vz - g.vz) * nz;
@@ -310,4 +317,4 @@ function resetLoose() {
   wakes.length = 0;
 }
 
-export { groups, floaters, wakes, stepLoose, drawLoose, resetLoose };
+export { groups, floaters, wakes, stepLoose, drawLoose, resetLoose, knocks, rolling };

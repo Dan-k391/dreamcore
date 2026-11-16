@@ -163,13 +163,28 @@ function maskAt(x, z) { // the layers a camera at (x, z) draws: -1 is all
   for (const q of Object.values(zones)) if (inR(x, z, ...q.box)) { any = true; const k = masks.get(q.id); if (k === undefined) return -1; m |= k; }
   return any ? m : -1;
 }
+// What the feet stand on (sound.js): the top of every slab, step and box, kept by its material's name on a 2 m grid. A curved or tall shape
+// (a hill, a lathe) is left out: its bounding box's top is not a floor. Looked up a few times a second, never per frame.
+const floors = new Map(), FC = 2;
+function addFloor(g, name) {
+  const b = g.boundingBox; if (b.max.y - b.min.y > .6 && g.attributes.position.count > 36) return;
+  const i1 = Math.floor(b.min.x / FC), i2 = Math.floor(b.max.x / FC), k1 = Math.floor(b.min.z / FC), k2 = Math.floor(b.max.z / FC); if ((i2 - i1 + 1) * (k2 - k1 + 1) > 4000) return;
+  const e = [b.min.x, b.min.z, b.max.x, b.max.z, b.max.y, name, (b.max.x - b.min.x) * (b.max.z - b.min.z)];
+  for (let i = i1; i <= i2; i++) for (let k = k1; k <= k2; k++) { const key = i * 65536 + k, l = floors.get(key); l ? l.push(e) : floors.set(key, [e]); }
+}
+function floorAt(x, z, feet) { // the material (or `userData.surface`) of the highest top under (x, z) level with the soles; on a tie the smaller piece (a rug on a floor)
+  let best = null; for (const e of floors.get(Math.floor(x / FC) * 65536 + Math.floor(z / FC)) || [])
+    if (x >= e[0] && x <= e[2] && z >= e[1] && z <= e[3] && e[4] > feet - .15 && e[4] < feet + .06 && (!best || e[4] > best[4] + .005 || e[4] > best[4] - .005 && e[6] < best[6])) best = e;
+  return best ? best[5] : null;
+}
 function merge() { // once every place is built (level.js)
   for (const c of colliders) if (c.length === 4) c.push(-1e4, 1e4); // a bare rectangle is a wall of any height
   rounded.clear();
   zl = Object.values(zones);
   for (const [m, list] of geo) {
     const parts = new Map();
-    for (const g of list) { g.computeBoundingBox(); g.boundingBox.getCenter(_c); const id = m === seaMat ? '' : zoneAt(_c.x, _c.z)?.id || ''; parts.has(id) ? parts.get(id).push(g) : parts.set(id, [g]); }
+    const fl = m.userData.surface || m.userData.lib;
+    for (const g of list) { g.computeBoundingBox(); if (fl) addFloor(g, fl); g.boundingBox.getCenter(_c); const id = m === seaMat ? '' : zoneAt(_c.x, _c.z)?.id || ''; parts.has(id) ? parts.get(id).push(g) : parts.set(id, [g]); }
     for (const [id, part] of parts) {
       const mesh = new THREE.Mesh(mergeGeometries(part), m); mesh.castShadow = !noCast.has(m); mesh.receiveShadow = m !== seaMat; mesh.userData.zone = id;
       if (bits.has(id)) mesh.layers.set(bits.get(id));
@@ -187,4 +202,4 @@ function merge() { // once every place is built (level.js)
   };
 }
 
-export { colliders, emitters, flats, seeThrough, skyOnly, warps, pools, onSun, ladders, rings, loose, add, block, box, solid, round, turned, clear, out, near, flight, passage, slab, room, wall, fixture, tube, lit, put, spot, solidAt, floorH, sea, merge, maskAt, RoundedBoxGeometry };
+export { colliders, emitters, flats, seeThrough, skyOnly, warps, pools, onSun, ladders, rings, loose, add, block, box, solid, round, turned, clear, out, near, flight, passage, slab, room, wall, fixture, tube, lit, put, spot, solidAt, floorH, sea, merge, maskAt, RoundedBoxGeometry , floorAt };

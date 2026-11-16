@@ -1,11 +1,17 @@
 // Sound.
 import { makeMusic, TAU } from './music.js';
+import { makeSound } from './sound.js';
+import { zones, inR } from './core.js';
+import { emitters, floorAt, floorH as floorAt0 } from './build.js';
+import { ponds } from './water.js';
+import { weights } from './lights.js';
+import { knocks, rolling } from './physics.js';
 
-// ---------- audio: each place's generative music (music.js), room tone and footsteps, all synthesised ----------
+// ---------- audio: each place's generative music (music.js) and the effects (sound.js), all synthesised ----------
 let sfx;
 const sound = { level: 1, muted: false, music: 1, gain: null, onchange: null, mus: null, // the master volume (0-1), mute and music level, kept before the sound starts (settings.js)
   set(level, muted, music = this.music) { Object.assign(this, { level, muted, music }); if (this.gain) this.gain.value = muted ? 0 : level; this.mus?.(music); this.onchange?.(); } };
-function graph(ac, { room = true, tap = false } = {}) { // everything but footsteps, the same in an OfflineAudioContext (dev.music)
+function graph(ac, { tap = false } = {}) { // the music and its hall, the same in an OfflineAudioContext (dev.music); the effects are sound.js
   const master = ac.createGain(), verb = ac.createConvolver();
   const bus = (vol, ...to) => { const g = ac.createGain(); g.gain.value = vol; for (const n of to) g.connect(n); return g; };
   const ir = ac.createBuffer(2, ac.sampleRate * 5, ac.sampleRate), noise = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate); // hall reverb impulse, white noise
@@ -13,47 +19,58 @@ function graph(ac, { room = true, tap = false } = {}) { // everything but footst
   for (let d = noise.getChannelData(0), i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
   const wet = bus(.3, master); verb.buffer = ir; verb.connect(wet);
   const music = makeMusic(ac, master, verb, noise, { tap });
-  const lfo = (f, depth, param) => { const o = ac.createOscillator(); o.frequency.value = f; o.connect(bus(depth, param)); o.start(); };
-  // room tone: fluorescent hum (120 Hz: the music is tuned to it), lapping water by the pools, wind in the open
-  const hum = bus(0, master), water = bus(0, master, verb), lap = bus(.5, water), wind = bus(0, master), sway = bus(.7, wind);
-  if (room) {
-    for (const [f, v] of [[120, .5], [240, .2], [360, .08], [1080, .012]]) { const o = ac.createOscillator(); o.frequency.value = f; o.connect(bus(v, hum)); o.start(); }
-    const hiss = (type, f, q, dest) => { const s = ac.createBufferSource(), b = ac.createBiquadFilter(); s.buffer = noise; s.loop = true; b.type = type; b.frequency.value = f; b.Q.value = q; s.connect(b).connect(dest); s.start(); };
-    hiss('bandpass', 420, .7, lap); hiss('highpass', 5000, .5, bus(.04, water)); lfo(.17, .3, lap.gain);
-    hiss('lowpass', 380, .3, sway); lfo(.07, .3, sway.gain);
-  }
   const zone = (z, t = ac.currentTime) => { // room tone, reverb and music all ramp together
-    hum.gain.setTargetAtTime((z.hum || 0) * .07, t, TAU); water.gain.setTargetAtTime((z.water || 0) * .4, t, TAU); wet.gain.setTargetAtTime(z.wet ?? .3, t, TAU); wind.gain.setTargetAtTime((z.air || 0) * .25, t, TAU);
+    wet.gain.setTargetAtTime(z.wet ?? .3, t, TAU);
     music.to(z.music, t); };
   return { master, verb, bus, noise, music, zone };
 }
+// the level as sound.js needs it, gathered once
+let lv;
+const level = () => lv ||= { zones: Object.values(zones), zoneAt: (x, z) => { for (const q of lv.zones) if (inR(x, z, ...q.box)) return q; return null; }, emitters, ponds, floorAt };
+const ear = { x: 0, y: 0, z: 0, fx: 0, fy: 0, fz: -1, ux: 0, uy: 1, uz: 0, wts: null, zone: null, body: null }; // one object, filled each frame
+function hear(cam, wts, zone, body) { const e = cam.matrixWorld.elements, p = cam.position;
+  Object.assign(ear, { x: p.x, y: p.y, z: p.z, fx: -e[8], fy: -e[9], fz: -e[10], ux: e[4], uy: e[5], uz: e[6], wts, zone, body }); return ear; }
 function startAudio(zone) { // zone: where you are when it starts
-  const ac = new AudioContext(), comp = ac.createDynamicsCompressor(), g = graph(ac), { master, verb, bus, noise } = g;
+  const ac = new AudioContext(), comp = ac.createDynamicsCompressor(), g = graph(ac), { master } = g;
   master.connect(comp).connect(ac.destination); sound.gain = master.gain; sound.mus = v => g.music.level(v); sound.set(sound.level, sound.muted);
   setInterval(() => g.music.until(ac.currentTime + 2), 500); // look-ahead scheduler
-  const kinds = { carpet: ['lowpass', 260, .7, .5, .11], tile: ['bandpass', 1300, 1.1, .3, .06], water: ['bandpass', 650, .5, .45, .32] };
+  const eng = makeSound(ac, master, level());
   sfx = {
-    step(kind) { // a short filtered noise burst per footfall
-      const t = ac.currentTime, s = ac.createBufferSource(), b = ac.createBiquadFilter(), g = bus(0, master, verb), [type, f, q, vol, dur] = kinds[kind] || kinds.carpet; // a place's step sound with no entry here sounds like carpet rather than throwing
-      s.buffer = noise; s.playbackRate.value = .7 + Math.random() * .6; b.type = type; b.frequency.value = f * (.85 + Math.random() * .3); b.Q.value = q;
-      g.gain.setValueAtTime(kind === 'water' ? .001 : vol, t); g.gain.exponentialRampToValueAtTime(vol, t + .04); g.gain.exponentialRampToValueAtTime(.001, t + .04 + dur);
-      s.connect(b).connect(g); s.start(t, Math.random()); s.stop(t + dur + .1);
-    },
+    frame(cam, wts, zone, body) { eng.knocks(knocks, rolling); eng.frame(hear(cam, wts, zone, body)); }, // once a game frame (player.js)
+    play: eng.play, loop: eng.loop, // the interface: docs/building.md, "Sound"
     zone: z => g.zone(z),
     mute() { sound.set(sound.level, !sound.muted); },
-    music: g.music,
+    music: g.music, eng, ac,
   };
   g.zone(zone); g.music.until(ac.currentTime + 2);
 }
-// dev: render the sound offline. steps: [[seconds, zone], ...] (the first at 0); room: with room tone; tap: the music's fade law instead of the music
+// dev: render the music offline. steps: [[seconds, zone], ...] (the first at 0); room: with the place's ambience (sound.js) heard from its probe; tap: the music's fade law instead of the music
 async function renderMusic(steps, secs, { room = false, tap = false, sr = 44100, log = false } = {}) {
-  const ac = new OfflineAudioContext(2, Math.round(secs * sr), sr), g = graph(ac, { room, tap }); g.master.connect(ac.destination);
+  const ac = new OfflineAudioContext(2, Math.round(secs * sr), sr), g = graph(ac, { tap }); g.master.connect(ac.destination);
+  const eng = room ? makeSound(ac, g.master, level()) : null, stand = z => eng?.frame(Object.assign(ear, { x: z.probe.x, y: z.probe.y, z: z.probe.z, fx: 0, fy: 0, fz: -1, ux: 0, uy: 1, uz: 0, wts: [[z, 1]], zone: z, body: null }));
+  let here = steps[0][1]; stand(here);
   if (log) g.music.k.log = [];
   const at = new Map(steps.map(([t, z]) => [Math.round(t * 2) / 2, z]));
   g.zone(at.get(0)); g.music.until(2);
-  for (let t = .5; t < secs; t += .5) ac.suspend(t).then(() => { if (at.has(t)) g.zone(at.get(t), t); g.music.until(t + 2); ac.resume(); });
+  for (let t = .5; t < secs; t += .5) ac.suspend(t).then(() => { if (at.has(t)) g.zone(here = at.get(t), t); stand(here); g.music.until(t + 2); ac.resume(); });
   const t0 = performance.now(), buf = await ac.startRendering();
   return { buf, ms: performance.now() - t0, peakNodes: g.music.stat.peak, log: g.music.k.log };
 }
 
-export { sfx, startAudio, sound, renderMusic };
+// dev: render the effects offline (tools/sound.mjs). path: [[t, x, z, yaw], ...] walked in straight lines at the eye's height above the floor;
+// at: [[t, eng => ...]] things to do then (eng: sound.js's engine: play, loop, foot); music: the place's music too. Ticks every 50 ms.
+async function renderSound({ secs, path, at = [], music = false, sr = 44100, y = 1.62 }) {
+  const ac = new OfflineAudioContext(2, Math.round(secs * sr), sr), g = graph(ac); g.master.connect(ac.destination); if (!music) g.music.level(0);
+  const L = level(), eng = makeSound(ac, g.master, L), todo = [...at].sort((a, b) => a[0] - b[0]);
+  let zone = null, lv = 0, steps = 0;
+  const go = t => { let i = 0; while (i < path.length - 2 && path[i + 1][0] <= t) i++; const [t0, x0, z0, a0] = path[i], [t1, x1, z1, a1] = path[Math.min(i + 1, path.length - 1)], k = t1 > t0 ? Math.max(0, Math.min(1, (t - t0) / (t1 - t0))) : 0;
+    const x = x0 + (x1 - x0) * k, z = z0 + (z1 - z0) * k, yaw = a0 + (a1 - a0) * k, here = L.zoneAt(x, z) || zone || L.zones[0];
+    if (here !== zone) { zone = here; g.zone(zone, t); } g.music.until(t + 2);
+    eng.frame(Object.assign(ear, { x, y: floorAt0(x, z) + y, z, fx: -Math.sin(yaw), fy: 0, fz: -Math.cos(yaw), ux: 0, uy: 1, uz: 0, wts: weights(x, z, zone), zone, body: null }));
+    while (todo.length && todo[0][0] <= t + 1e-6) todo.shift()[1](eng, t); };
+  go(0); for (let t = .05; t < secs - .01; t = Math.round((t + .05) * 100) / 100) { const tt = t; ac.suspend(tt).then(() => { go(tt); ac.resume(); }); steps++; }
+  const t0 = performance.now(), buf = await ac.startRendering();
+  return { buf, ms: performance.now() - t0, nodes: eng.nodes.peak, live: eng.nodes.live, frameMs: eng.cost.ms / eng.cost.n };
+}
+
+export { sfx, startAudio, sound, renderMusic, renderSound };

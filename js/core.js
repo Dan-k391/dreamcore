@@ -23,7 +23,7 @@ const H = 2.7, PH = 5, WY = -0.12; // backrooms ceiling, pool hall ceiling, wate
 
 // ---------- zones: each has its own materials, ambient probe, exposure, fog, grade and room tone ----------
 const warm = { grp: 'b', k: 1.2, exp: .36, fog: [.55, .45, .2, .002], tint: [1.02, 1, .96], sat: 1, bloom: .3, shaft: 0, hum: 1, water: 0, wet: .15 };
-const dark = { grp: 'd', k: .6, fog: [.006, .02, .018, .004], tint: [1, 1, .98], sat: 1, shaft: 0, hum: 0, water: 1, band: 1.15, bandCol: [.05, .3, .28] };
+const dark = { step: 'tile', grp: 'd', k: .6, fog: [.006, .02, .018, .004], tint: [1, 1, .98], sat: 1, shaft: 0, hum: 0, water: 1, band: 1.15, bandCol: [.05, .3, .28] };
 const dry = { step: 'tile', hum: 0, water: 0, shaft: 0, sat: 1, tint: [1, 1, 1] };
 // beyond the backrooms and pools. step: footstep sound; sky: which sky and sun it lives under (see skies); wade: a floor below 0 slows you, as water does
 const zones = {}; // id -> zone, in the order the places register them (see level.js)

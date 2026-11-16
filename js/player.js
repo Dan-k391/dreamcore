@@ -75,6 +75,7 @@ let stride = 0, foot = 0, feet = floorH(camera.position.x, camera.position.z), v
 // Loose things and footsteps ignore a flying body. Turning it off somewhere you couldn't stand (inside a solid or a floor, above a ceiling or a
 // roof, or outside every zone) puts you back where it was turned on; anywhere else gravity takes over from where you are.
 let fly = false, fvy = 0, from = null, vWas = 0;
+const bod = {}; // the body's state for the sound, one object filled each frame
 const cue = document.body.appendChild(document.createElement('div')); cue.hidden = true; cue.textContent = 'noclip';
 cue.style.cssText = 'position:fixed;left:16px;top:14px;font-size:11px;letter-spacing:.3em;color:#f2e4c4;opacity:.6;pointer-events:none';
 const inside = (x, z, f) => colliders.some(c => near(c, x, z, R - .002) && blocks(c, f) && clear(c, x, null, z, R - .002));
@@ -152,7 +153,8 @@ const frame = dt => { // one game frame of dt seconds: the loop below passes the
   air = fly || feet > ground + .001;
   // a jump pressed up to 0.1 s before landing, or up to 0.1 s after walking off an edge, still jumps
   coy = air ? coy - dt : .1; buf = k('Space') && !spaceWas ? .1 : buf - dt; spaceWas = k('Space');
-  if ((buf > 0 || k('Space')) && coy > 0 && !grip && !fly && vy <= 0) { wet = pool && feet < WY; vy = pool && feet < -.5 ? 2.8 : wet ? 4.3 : JUMP; coy = buf = 0; } // deep water weighs a jump down (a dry pit only slows the walk: you can jump out of it)
+  const jumped = (buf > 0 || k('Space')) && coy > 0 && !grip && !fly && vy <= 0;
+  if (jumped) { wet = pool && feet < WY; vy = pool && feet < -.5 ? 2.8 : wet ? 4.3 : JUMP; coy = buf = 0; } // deep water weighs a jump down (a dry pit only slows the walk: you can jump out of it)
   const splash = !fly && pool && was > WY && feet <= WY; // the moment the feet break the surface
   if (splash) drop = .35;
   // the eye: a step up or down is eased over about 0.07 s instead of popping, a landing dips it by about 1 cm per m/s of fall, and
@@ -163,7 +165,7 @@ const frame = dt => { // one game frame of dt seconds: the loop below passes the
   if (!air) stride += Math.PI * sp * dt / (.55 + .25 * sp);
   p.y = feet + 1.62 + eye.lift + lag + dip - Math.cos(2 * stride) * .008 * Math.min(1.4, sp / 2.85);
   const f = Math.floor(stride / Math.PI); // one footfall per bob, one on landing, one on entering water
-  if (sfx && ((f !== foot && !air && sp > .5) || landed || splash)) sfx.step(pool ? ground < 0 ? 'water' : 'tile' : zone.step || 'carpet');
+  Object.assign(bod, { feet, sp, step: f !== foot && !air && sp > .5, foot: f & 1, run: sp > 4.2, landed, hit, jumped, splash, fall: vy, deep, grip, fly, air }); // for the footsteps (sound.js)
   foot = f;
 
   const here = Object.values(zones).find(z => inR(p.x, p.z, ...z.box));
@@ -171,7 +173,8 @@ const frame = dt => { // one game frame of dt seconds: the loop below passes the
   const wts = weights(p.x, p.z, zone);
   if (warp) relight(p, zone, 1, wts); // arrived somewhere else: the lamps come at once
   relight(p, zone, warp ? 1 : dt * 3, wts);
-  for (const w of ponds) w.visible = wts.some(([z]) => w.seen.includes(z.id)); // drawn from near a doorway of a zone that sees it, not only once through
+  for (const w of ponds) w.visible = wts.some(([z]) => w.seen.includes(z.id));
+  sfx?.frame(camera, wts, zone, bod); // what you hear from here: sound.js // drawn from near a doorway of a zone that sees it, not only once through
   const wake = pool && ground < 0 && !air ? Math.min(Math.hypot(p.x - ox, p.z - oz) / dt, 4) * .006 : 0; // wading leaves a wake, by how far the body really moved (pressed against a wall it would heap the water on one spot); `drop` is a pending splash
   // 60 Hz: the loose things, then the waves, with the ripples both leave
   simT += dt; const steps = Math.min(4, Math.floor(simT * 60 + 1e-6)); simT = steps === 4 ? 0 : simT - steps / 60; // as many as the frame's time holds; a long stall is dropped, not caught up
