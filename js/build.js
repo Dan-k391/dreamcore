@@ -216,6 +216,11 @@ function merge() { // once every place is built (level.js)
       scene.add(mesh); if (m === seaMat) sea = mesh;
     }
   }
+  // rings and floating balls stay in their pool: on its zone's layer, or they are drawn from every place whose view they fall in (the
+  // pool hall's rings drew from the great baths, 2 km off, through every wall between)
+  const own = (m, x, z) => { const id = zoneAt(x, z)?.id; if (bits.has(id)) m.layers.set(bits.get(id)); };
+  for (const m of rings) own(m, m.position.x, m.position.z);
+  for (const g of loose) if (g.float && !g.mesh.isInstancedMesh) own(g.mesh, (g.region[0] + g.region[2]) / 2, (g.region[1] + g.region[3]) / 2);
   for (const d of doors) for (const m of d.meshes) { const id = (d.zone ?? zoneAt(d.x, d.z))?.id; m.userData.zone = id || ''; if (bits.has(id)) m.layers.set(bits.get(id)); }
   camera.layers.enableAll(); // until the first frame sets it: everything compiles and bakes as before
   // three culls shadow casters by the viewing camera's layers, not the shadow camera's: a map redrawn while you stand in one zone

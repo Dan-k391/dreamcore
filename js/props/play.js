@@ -384,4 +384,4 @@ function yard(plot) { // the play plot in the dev yard (js/zones/yard.js)
   round(x + 3.1, Z + 7.1, .25, 0, .5); solidAt(x + 4.7, 0, Z + 7.2, 0, 0, .13, 0, 1.1, .26, 1.1);
 }
 
-export { swingSet, slide, roundabout, springRider, beachBall, swimRing, foamCube, foamWedge, foamCylinder, foamArch, pitBall, laneRope, gardenChair, cost, yard };
+export { swingSet, slide, roundabout, springRider, beachBall, swimRing, ringParts, foamCube, foamWedge, foamCylinder, foamArch, pitBall, laneRope, gardenChair, cost, yard };

@@ -111,6 +111,8 @@ async function page(o) {
       const t0 = performance.now(), idx = new Map(opaque.map((m, i) => [i + 1, m])), res = 64, rt = new THREE.WebGLCubeRenderTarget(res), cube = new THREE.CubeCamera(camera.near, camera.far, rt), buf = new Uint8Array(res * res * 4);
       for (const c of cube.children) c.layers.enableAll();
       paint(m => opaque.indexOf(m) + 1);
+      const shut = B.ends.map(e => { const m = new THREE.Mesh(new THREE.PlaneGeometry(e.w, e.h).translate(0, e.h / 2, 0), new THREE.MeshBasicMaterial({ color: 0, side: THREE.DoubleSide })); // a portal's opening drawn as nothing, as pvs.mjs does: in play it shows the far end, never what stands behind its plane
+        m.position.copy(e.p); m.rotation.y = e.ry; scene.add(m); m.updateMatrixWorld(); return m; });
       const pops = new Map(); let n = 0;
       for (const v of views) { sky(zoneAt(v.x, v.z));
         for (const y of v.ys) { n++;
@@ -120,7 +122,7 @@ async function page(o) {
           for (let f = 0; f < 6; f++) { r.readRenderTargetPixels(rt, 0, 0, res, res, buf, f); for (let i = 0; i < buf.length; i += 4) { const k = buf[i] | buf[i + 1] << 8 | buf[i + 2] << 16; if (k) { const m = idx.get(k); if (m && !(m.layers.mask & mask)) miss.add(m.userData.zone || '?'); } } }
           if (miss.size) { const key = where(v); const p = pops.get(key) || { at: where(v), n: 0, eg: [], zones: new Set() }; p.n++; miss.forEach(z => p.zones.add(z)); if (p.eg.length < 3) p.eg.push(`${v.x.toFixed(2)},${y.toFixed(2)},${v.z.toFixed(2)} in ${zoneAt(v.x, v.z)} misses ${[...miss]}`); pops.set(key, p); }
         } }
-      rt.dispose();
+      rt.dispose(); for (const m of shut) { scene.remove(m); m.geometry.dispose(); m.material.dispose(); }
       out.pop = { eyes: n, secs: +((performance.now() - t0) / 1000).toFixed(1), found: [...pops.values()].map(p => ({ ...p, zones: [...p.zones] })) };
     }
     if (o.fight) {

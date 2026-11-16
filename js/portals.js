@@ -16,7 +16,7 @@
 //  4. inside that picture, openings seen through it are drawn the same way, DEPTH levels deep; past that an opening is a dark fill.
 import * as THREE from 'three';
 import { renderer, scene, camera, clip } from './core.js';
-import { ends, side, live } from './build.js';
+import { ends, side, across, live } from './build.js';
 import { ponds } from './water.js';
 
 const DEPTH = 2, D = 1, REACH = 80; // levels drawn through openings; the pocket's depth (any works: the test is at the plane); no portal farther (a zone drawn from everywhere, the dev yard, would draw its far sides behind every wall)
@@ -33,7 +33,7 @@ const pocketMat = o => new THREE.ShaderMaterial({ uniforms: U, side: THREE.BackS
       gl_FragColor = vec4(uFill, 1.); }` });
 const mark = pocketMat({ stencilZPass: THREE.IncrementStencilOp }), reset = pocketMat({ depthWrite: true, depthFunc: THREE.AlwaysDepth }), fill = pocketMat({ colorWrite: true, depthWrite: true });
 const pocket = new THREE.Scene(), pm = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1).translate(0, .5, -.5), mark); pm.frustumCulled = false; pm.matrixAutoUpdate = false; pocket.add(pm);
-const cams = Array.from({ length: DEPTH }, () => new THREE.PerspectiveCamera()), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _v = new THREE.Vector4(), _p = new THREE.Vector3(), Y = new THREE.Vector3(0, 1, 0);
+const cams = Array.from({ length: DEPTH }, () => new THREE.PerspectiveCamera()), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _v = new THREE.Vector4(), _p = new THREE.Vector3(), _at = new THREE.Vector3(), Y = new THREE.Vector3(0, 1, 0);
 const stats = { drawn: 0, levels: 0 }; // what the last main-camera frame drew through portals (tools/portals.mjs, tools/profile.mjs)
 
 let ref = -1, fn = gl.EQUAL, off = false; // while a far side is drawn, every material tests the stencil for this level, whatever its own settings say (a door drawn again over a picture and those inside it: LEQUAL)
@@ -62,8 +62,8 @@ function drawPocket(e, mat, cam, level) {
 }
 // level: the stencil value of the picture cam draws into; lim: its rectangle; out: the end it looks out of (never drawn from its own camera)
 function pass(cam, level, lim, rt, out) {
-  const at = _p.setFromMatrixPosition(cam.matrixWorld), list = [];
-  for (const e of ends) if (e !== out && live(e) && side(e, at.x, at.z) >= 0 && (cam.layers.mask & e.bit) && e.p.distanceToSquared(at) < REACH * REACH) { const r = rectOf(e, cam, lim); if (r) list.push([e.p.distanceToSquared(at), e, r]); }
+  const at = _at.setFromMatrixPosition(cam.matrixWorld), list = []; // not _p: rectOf() writes the corners there, and every end after the first was tested against one
+  for (const e of ends) if (e !== out && live(e) && (side(e, at.x, at.z) > 1e-3 || side(e, at.x, at.z) > -1e-3 && Math.abs(across(e, at.x, at.z)) < e.w / 2) /* on its plane (to a millimetre: float32 matrices) only from inside its opening; another opening in the same wall is edge-on */ && (cam.layers.mask & e.bit) && e.p.distanceToSquared(at) < REACH * REACH) { const r = rectOf(e, cam, lim); if (r) list.push([e.p.distanceToSquared(at), e, r]); }
   list.sort((a, b) => a[0] - b[0]); // nearest first: a nearer opening overlapping a farther one keeps its pixels
   for (const [, e, r] of list) {
     scissor(rt, r);
@@ -103,6 +103,7 @@ const one = new THREE.Scene(), rc = new THREE.PerspectiveCamera(); one.matrixWor
 renderer.render = (s, c) => {
   draw(s, c);
   if (s !== scene || c !== camera || !ends.length || !renderer.getRenderTarget()) return;
+  const tg = renderer.getRenderTarget(); if (!tg.stencilBuffer && tg.depthTexture?.format !== THREE.DepthStencilFormat) return; // no stencil, no clip: a far side would cover the whole picture (a test's capture target); none is drawn
   if (!warm) { warm = true; for (const m of [reset, fill, mark]) { pm.material = m; renderer.compile(pocket, c); } }
   const rt = renderer.getRenderTarget(), auto = renderer.autoClear, upd = scene.matrixWorldAutoUpdate, on = ponds.map(w => w.visible);
   if (!scene.overrideMaterial) stats.drawn = stats.levels = 0;

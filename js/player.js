@@ -1,7 +1,7 @@
 // The player: controls, collision and the frame step.
 import * as THREE from 'three';
 import { renderer, camera, uTime, V, WY, zones, inR } from './core.js';
-import { colliders, emitters, warps, ladders, doors, ends, side, across, carry, spin, behind, reveal, floorH, clear, out, near } from './build.js';
+import { colliders, emitters, warps, ladders, doors, ends, side, across, carry, spin, behind, reveal, floorH as bedH, pools, clear, out, near } from './build.js';
 import { setSky, sun } from './sky.js';
 import { ponds, ripple, resetWater } from './water.js';
 import { relight, zone0, lights, weights } from './lights.js';
@@ -47,6 +47,8 @@ let zone = zone0; // the zone you are in
 // The body: an upright cylinder of radius R from the soles (feet) up 1.75 m. A solid blocks it sideways where it overlaps the body
 // above step height (so low things are stepped onto and high things walked under; the top 5 cm of the head ducks), its top is
 // ground wherever it is under the middle RS of the body, and its underside stops a jump.
+// Deep water holds you up: over a pool floor deeper than FLOAT the feet tread water there, the eye 18 cm above the surface (the great baths' deep end)
+const FLOAT = WY + .18 - 1.6, floorH = (x, z) => { const f = bedH(x, z); return f < FLOAT && pools.some(q => inR(x, z, q[0], q[1], q[2], q[3])) ? FLOAT : f; };
 const R = .3, RS = .22, STEP = .35, TALL = 1.75;
 // The jump: rising pulls less than falling, so it has weight; the take-off speed keeps the peak where today's ledges and seals expect it
 // (0.84 m, 4.3 m/s against 11). In the air nothing drags: the keys only add speed along a direction you're moving slower than AIR_CAP

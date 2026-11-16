@@ -171,7 +171,7 @@ const ponds = pools.map(([x1, z1, x2, z2, floor, zid, seen, scatter]) => {
     heights[i] = solid.some(c => x > c[0] && x < c[2] && z > c[1] && z < c[3]) ? WY : Math.min(WY, floorH(x, z));
   }
   const ground = new THREE.DataTexture(heights, gw, gh, THREE.RedFormat, THREE.FloatType); ground.needsUpdate = true;
-  const planCam = new THREE.OrthographicCamera((x1 - x2) / 2, (x2 - x1) / 2, (z2 - z1) / 2, (z1 - z2) / 2, .001, 1.6); // looking straight down from the surface
+  const planCam = new THREE.OrthographicCamera((x1 - x2) / 2, (x2 - x1) / 2, (z2 - z1) / 2, (z1 - z2) / 2, .001, Math.max(1.6, WY - floor + .5)); // looking straight down from the surface, to below its deepest floor
   planCam.position.set((x1 + x2) / 2, WY, (z1 + z2) / 2); planCam.up.set(0, 0, -1); planCam.lookAt((x1 + x2) / 2, WY - 1, (z1 + z2) / 2);
   const U = { uCaus: zones[zid].tileU.uCaus, uCausDir: zones[zid].tileU.uCausDir, tMirror: { value: mirrorRT.texture }, tPlan: { value: planRT.texture }, tGround: { value: ground }, tUnder: { value: under.texture }, tUnderZ: { value: under.depthTexture }, uLens: { value: lens.camera.projectionMatrix }, tNormalMap0: { value: wn0 }, tNormalMap1: { value: wn1 },
               tSim: { value: sim[0].texture }, uPond: { value: rect }, uPx: { value: px }, uFloor: { value: floor }, uScatter: { value: V(...scatter) }, uMain: { value: 0 }, uTest, uTime };

@@ -3,7 +3,7 @@
 // fits through their shared edge) crossed both ways, 2 m each side, at 10 cm (--fast 20 cm); unless fast, every zone's long centre
 // line (10 cm, 50 cm past 40 m). Each view: { w, x, z, yaw, s, ys } with ys the eye heights there (1.6 m and mid-jump 2.5 m) not in a solid.
 export function walkList(B, zl, o) {
-  const blocked = (x, z, y) => B.colliders.some(c => x > c[0] && x < c[2] && z > c[1] && z < c[3] && y > c[4] && y < c[5]);
+  const blocked = (x, z, y) => B.colliders.some(c => x > c[0] - .05 && x < c[2] + .05 && z > c[1] - .05 && z < c[3] + .05 && y > c[4] && y < c[5]); // an eye on a solid's face (as close as the near plane) sees through it, and no head gets there
   const hid = (x, z) => B.ends.some(e => B.side(e, x, z) < 0 && B.side(e, x, z) > -1.5 && Math.abs(B.across(e, x, z)) < e.w / 2 + .3);
   // body: a body fits there (never behind a portal plane in line with its opening: crossing takes it through)
   const body = (x, z) => { const f = B.floorH(x, z); return !hid(x, z) && !B.colliders.some(c => x > c[0] - .05 && x < c[2] + .05 && z > c[1] - .05 && z < c[3] + .05 && c[4] < f + 1.7 && c[5] > f + .35); };
