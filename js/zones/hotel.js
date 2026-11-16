@@ -12,7 +12,7 @@ import { skirting } from '../props/structure.js';
 // A door leaf standing open in a frame placed by door(z, x, 0, zc, ry): hinged on the frame's -x jamb, swung `by` radians toward the frame's front.
 // The shut leaves' own materials (door() in props/metalwork.js); K the dark keyway, Br the viewer.
 function openLeaf(z, x, zc, ry, by, K, Br, y = 0) {
-  const Lf = M(z, 'paintedSteel', { color: 0x4b2418, dirt: .35, dirtCol: [.5, .45, .38], wear: .3, roughness: .6 }), St = M(z, 'brushedSteel');
+  const Lf = M(z, 'veneer', { swap: 1 }), St = M(z, 'brushedSteel');
   const at = g => put(g.rotateY(-by).translate(-.5095, 0, -.0295), x, y, zc, ry); // the leaf is built hinge at 0, along +x, its push face at -z
   const lt = .045, mz = -.0295, cx = .9625;
   add(Lf, at(new RoundedBoxGeometry(1.026, 2.228, lt, 2, .004).translate(.5095, 1.12, mz)));
@@ -70,8 +70,8 @@ const gates = {}; // the hallway's two openable doors onto the vestibule, by wal
       if (shut) { solid(x1, 0, c - .5, x2, 2.24, c + .5); block(K, k > 0 ? x1 : x2 - .2, 0, c - .5, k > 0 ? x1 + .2 : x2, 2.24, c + .5); }
       // an open door's frame is turned round so its hinge jamb is the north one: the leaf then stands where the hallway, walked from the
       // south as you come in, looks through the opening (hinged on the south, it hid behind that jamb)
-      if (gate) gates[k] = door(z, f - k * .05, 0, c, -ry, { openable: true, color: 0x4b2418, frame: 0xd8ccb4 }); // turned round (hinged north); double-acting, it swings away from whoever opens it, its copy in the vestibule (below) with it
-      else door(z, f - k * .05, 0, c, open ? -ry : ry, shut ? { color: 0x4b2418, frame: 0xd8ccb4 } : { leaf: false, frame: 0xd8ccb4 });
+      if (gate) gates[k] = door(z, f - k * .05, 0, c, -ry, { openable: true, leafMat: M(z, 'veneer', { swap: 1 }), frame: 0xd8ccb4 }); // turned round (hinged north); double-acting, it swings away from whoever opens it, its copy in the vestibule (below) with it
+      else door(z, f - k * .05, 0, c, open ? -ry : ry, shut ? { leafMat: M(z, 'veneer', { swap: 1 }), frame: 0xd8ccb4 } : { leaf: false, frame: 0xd8ccb4 });
       if (open) { // the leaf on the frame's knuckles, swung into the passage along its north side; the wall's back lined dark (the warm light from beyond is the passage's: zones/passages.js)
         openLeaf(z, f - k * .05, c, -ry, LEAF, K, Br);
         for (const [a1, a2, y1] of [[c - .7, c - .5, 0], [c + .5, c + .7, 0], [c - .5, c + .5, 2.24]]) block(voidMat, x2, y1, a1, x2 + .02, 2.4, a2);
@@ -120,12 +120,19 @@ defZone('hV', { music: 'hotel', ...dry, step: 'carpet', grp: 'm', k: .8, exp: .3
   box(W, X1 - T, Y, Z2, X2 + T, Y + h, Z2 + T); box(W, X2, Y, Z1, X2 + T, Y + h, Z2);
   // each opening's one door stands in the hallway's frame, which is the portal's plane; here its copy at the linked place, deep in the
   // reveal (one leaf in both spaces, docs/building.md, Portals), and a plain frame cased round the opening's room face
-  const G = { openable: true, color: 0x4b2418, frame: 0xd8ccb4 };
+  const G = { openable: true, leafMat: M(z, 'veneer', { swap: 1 }), frame: 0xd8ccb4 };
   const [wA] = portal([2.55, 0, 34.8, Math.PI / 2], [AX, Y, Z1 - DV, 0], 1, 2.24, gates[1]); // the hallway's west door 34.8 is the south door
   wA.to.door = door(z, ...via(wA, 2.55, 0, 34.8, -Math.PI / 2), { ...G, copy: gates[1] });
   const [eA] = portal([5.05, 0, 38.4, -Math.PI / 2], [X1 - DV, Y, BZ, Math.PI / 2], 1, 2.24, gates[-1]); // and its east door 38.4 the west door
   eA.to.door = door(z, ...via(eA, 5.05, 0, 38.4, Math.PI / 2), { ...G, copy: gates[-1] });
   door(z, AX, Y, Z1 - .05, Math.PI, { leaf: false, pivot: true, frame: 0xd8ccb4 }); door(z, X1 - .05, Y, BZ, -Math.PI / 2, { leaf: false, pivot: true, frame: 0xd8ccb4 });
+  // a slim surface downlight in the middle of each reveal's soffit (2 mm below it: the leaf's top clears it by 4), a brass ring round an opal
+  // lens, washing the leaf and the reveal so the doorway reads lit from the room and from the hallway through it
+  for (const [x, zc] of [[AX, Z1 - DV / 2], [X1 - DV / 2, BZ]]) {
+    add(Br, new THREE.LatheGeometry([[.036, 0], [.046, 0], [.047, -.0012], [.046, -.002], [.036, -.002]].map(([r, y]) => new THREE.Vector2(r, y)), 32).translate(x, Y + 2.24, zc));
+    add(M(null, 'opalPanel'), new THREE.CircleGeometry(.0365, 32).rotateX(Math.PI / 2).translate(x, Y + 2.24 - .0015, zc), true);
+    lit(z, x, Y + 2.2, zc, 14, [x, Y, zc], 1.25, 6, 0xffcf98);
+  }
   // A run of moulding `prof` ([out, up] in metres) along a wall face from a to b ([x, z]), the room on its left; mitred at an inside corner (m0, m1)
   const run = (mat, prof, a, b, y, m0, m1) => {
     const dx = b[0] - a[0], dz = b[1] - a[1], L = Math.hypot(dx, dz), d = new THREE.Vector3(dx / L, 0, dz / L), o = new THREE.Vector3(d.z, 0, -d.x);

@@ -60,6 +60,24 @@ set('hardwood', 1.2, 1024, 1024, .26, .3, `
   h = -.9 * (1. - jh) + .035 * g.x - .05 * g.y - .03 * scr + across / 150. * (bh.z - .5) * .5 + .12 * (fy - .5) * (fy - .5) * 4.;
   r = cellGloss(.18, bh, .3) + .16 * lane + .16 * scr + .08 * g.y - .04 * fl + .3 * (1. - jm); t = 1.;`, WD);
 
+set('veneer', 2.4, 2048, 1024, .3, .3, `
+  // A door's face: plain-sliced walnut veneer under a satin lacquer, stained dark. Leaves 300 mm wide across v, full length along u (the
+  // grain, 2.4 m: no end joint on a door), book-matched in pairs (the second leaf the first turned over: its figure mirrored about the
+  // joint), each pair from its own flitch: cathedral arches rising up the leaf, straighter grain toward its edges.
+  float li = floor(uv.y * 8.), fy = fract(uv.y * 8.), pair = floor(li * .5), bk = mod(li, 2.); vec4 bh = hr(vec2(pair, 5.), 2);
+  float px = uv.x * 2400., across = (fy - .5) * 300. * (bk > .5 ? -1. : 1.) - 150.; // mm along, and across the pair (0 at its joint: the turned leaf mirrors the first about it)
+  float y0 = (bh.y - .5) * 60., z = 14. + 26. * bh.w + 5. * sin(px / 700. + bh.x * 6.) + px * (.012 + .012 * bh.x);
+  float d = length(vec2(across - y0, z)) + 1.2 * (gn(vec2(px / 80., across / 5.), vec2(4096.), 4) - .5);
+  float w = 3.2 + 2. * bh.x, ph = d / w + 1.8 * gn(vec2(d / (w * 6.), bh.y * 50.), vec2(4096.), 5);
+  vec4 g = wd_rings(ph, w, vec2(px + 900. * bh.z, across), vec2(4096.), pair, 6);
+  vec3 col = mix(vec3(.24, .125, .062), vec3(.075, .036, .018), g.x) * (1. - .3 * g.y); // the stain: warm brown earlywood, near-black latewood
+  col *= (.92 + .16 * gn(vec2(px / 300., across / 40.), vec2(4096.), 9)) * (bk > .5 ? .96 : 1.) * (.94 + .12 * bh.z); // the turned leaf takes the light a shade darker
+  float fig = ss(.55, .8, gn(vec2(px / 14., across / 60.), vec2(4096.), 11)); col *= 1. + .1 * fig; // a faint ripple across the grain
+  float scr = wd_scr(uv, 3., .5, 23), e = min(fy, 1. - fy) * 300.;
+  c = col * (1. - .35 * (1. - ss(0., .5, e))) * (1. + .1 * scr); // the leaf joints: a hairline
+  h = .02 * g.x - .05 * g.y - .02 * scr - .05 * (1. - ss(0., .5, e));
+  r = .32 + .1 * g.y + .14 * scr - .04 * fig; m = 0.; t = 1.;`, WD);
+
 set('benchWood', 1, 1024, 1024, .4, .3, `
   // six boards 150 mm wide in v 0-.9 (js/props/garden.js cuts each piece of timber from one), each sawn from its own log: on a third
   // the pith lies just under the face (flat-sawn: cathedral arches), on the rest off to one side (rift: near-straight lines). Rings
@@ -175,6 +193,7 @@ set('palmLeaf', .5, 512, 512, .45, .2, `
 
 // materials: name, texture set, shader options (see mat.js)
 mat('hardwood', 'hardwood', { detail: .08, macro: .05, fine: .002, dirt: .3, wear: .3, edgeCol: [.62, .45, .3] });
+mat('veneer', 'veneer', { detail: .04, macro: .04, fine: .0015, dirt: .2, wear: .3, edgeCol: [.5, .32, .19] });
 mat('benchWood', 'benchWood', { detail: .08, macro: .06, fine: .002, dirt: .3, wear: .4, edgeCol: [.46, .41, .34] });
 mat('weatheredWood', 'weatheredWood', { detail: .2, macro: .08, fine: .003, dirt: .5 });
 mat('palmTrunk', 'palmTrunk', { detail: .2, macro: .1, fine: .003 });

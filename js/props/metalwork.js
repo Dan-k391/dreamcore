@@ -113,7 +113,7 @@ const turnTo = (g, dir) => g.applyQuaternion(new THREE.Quaternion().setFromUnitV
 function door(z, x, y, zc, ry = 0, o = {}) {
   const Wc = o.w ?? 1, dbl = o.double ?? Wc > 1.3, K = parts(o.leaf === false ? 'frame' : dbl ? 'doubleDoor' : 'door'), Hc = 2.24, FU = .1, FD = .075, open = o.openable ? 0 : o.open ?? 0, piv = !!(o.openable || o.pivot);
   const F = M(z, 'paintedSteel', { color: o.frame ?? 0xe9e5dc, dirt: .35, dirtCol: [.5, .45, .38], wear: .3 });
-  const Lf = M(z, 'paintedSteel', { color: o.color ?? 0x3a6d98, dirt: .35, dirtCol: [.5, .45, .38], wear: .3 });
+  const Lf = o.leafMat ?? M(z, 'paintedSteel', { color: o.color ?? 0x3a6d98, dirt: .35, dirtCol: [.5, .45, .38], wear: .3 });
   const St = M(z, 'brushedSteel'), Al = M(z, 'anodised', { color: 0xc8c8c4, roughness: .42 }), Rb = M(z, 'rubber', { color: 0x2a2826 });
   // frame profile (u outward from the opening, v through the wall): the stop stands proud on +z, the leaf closes into the rebate.
   // The opening cut for it is o.w x 2.24; the frame stands SH proud of that cut all round, so its faces never lie in the wall's
@@ -142,6 +142,17 @@ function door(z, x, y, zc, ry = 0, o = {}) {
     for (let k = N; k >= 0; k--) { const a = -k / N * 1.25; arc.push([c[0] + .0105 * Math.cos(a), -(c[1] + .0105 * Math.sin(a))]); }
     K.p(St, prism(rshape(arc, .0004), .07).rotateX(-Math.PI / 2).translate(0, 1.015, 0)); }
   for (const yy of [1.0, 1.1]) K.p(St, screw(.003, false).rotateZ(Math.PI / 2).translate(Wc / 2 + SO - .0015, yy, SZ)); }
+  if (piv && o.leaf !== false) { // the pivot door has no stop: a brush seal in a slim carrier runs round the jambs' and head's soffits, closing the 4 mm
+    // round the leaf (so the shut door is sealed in its frame, not a slab in a hole), broken for the strike and the top pivot's plate
+    const Ca = M(z, 'anodised', { color: 0x6b5a48, roughness: .5 }), seal = (cx, cy, w, h, ax) => { // ax: the soffit's inward direction ('x' a jamb, 'y' the head)
+      const g = ax === 'x' ? [rbox(.0015, h, .009, .0005), rbox(.002, h, .005, .0008)] : [rbox(w, .0015, .009, .0005), rbox(w, .002, .005, .0008)];
+      const sx = ax === 'x' ? Math.sign(cx) : 0, sy = ax === 'y' ? 1 : 0;
+      K.p(Ca, g[0].translate(cx - sx * .00075, cy - sy * .00075, 0)); K.p(Rb, g[1].translate(cx - sx * .0025, cy - sy * .0025, 0)); };
+    const J = Wc / 2 - SH, top = Hc - SH, PX = -Wc / 2 + SH + .004 + .045 / 2; // PX: the pivot axis (AX below)
+    for (const [a, b] of [[.01, .975], [1.125, top - .006]]) seal(J, (a + b) / 2, 0, b - a, 'x');
+    seal(-J, (.04 + top - .02) / 2, 0, top - .06, 'x');
+    seal((PX + .06 + J - .006) / 2, top, J - .006 - PX - .06, 0, 'y');
+  }
   const hy = [.25, 1.15, 1.98];
   // the leaf, about its own hinge axis at the origin; set in the frame afterwards
   const hinge = (ax, az) => { // a butt hinge's knuckle: five knuckles with hairline joints, a pin and two finials
@@ -203,9 +214,17 @@ function door(z, x, y, zc, ry = 0, o = {}) {
     const sx = mirror ? -1 : 1, at = a => { const c = V3(x0 + LW / 2 - AX, 0, -AZ).applyAxisAngle(V3(0, 1, 0), a).add(V3(AX, 0, AZ)); return spot(x, zc, ry, sx * c.x, c.z); };
     const k = turned(...at(open), LW / 2, LT / 2, ry + sx * open, y + .03, y + 2.23); // the leaf is solid where it stands
     if (D) { // openable: the leaf (about its hinge axis) and the arm's links are meshes of their own, moved by D.set
-      const mesh = (m, gs) => { const q = new THREE.Mesh(merge(gs.map(g => mirror ? flip(g) : g)), m); q.castShadow = q.receiveShadow = true; q.matrixAutoUpdate = false; D.meshes.push(q); scene.add(q); return q; };
+      const mesh = (m, gs, face = 0) => { const q = new THREE.Mesh(merge(gs.map(g => mirror ? flip(g) : g)), m); q.castShadow = q.receiveShadow = true; q.matrixAutoUpdate = false; q.userData.face = face; D.meshes.push(q); scene.add(q); return q; };
+      // the leaf's triangles in three meshes by the face they belong to (face: 1 the +z face and what stands on it, -1 the -z, 0 its edges), so a
+      // door in a portal can light each face from the copy on the side it faces (js/portals.js); no triangle in two, so a face is drawn once
+      const faces = g => { const p = g.attributes.position, n = g.attributes.normal, t = [[], [], []];
+        for (let i = 0; i < p.count; i += 3) { const cz = (p.getZ(i) + p.getZ(i + 1) + p.getZ(i + 2)) / 3, nz = n.getZ(i) + n.getZ(i + 1) + n.getZ(i + 2);
+          t[Math.abs(cz) > LT / 2 - .001 ? (cz > 0 ? 0 : 1) : nz > 1.5 ? 0 : nz < -1.5 ? 1 : 2].push(i); }
+        return t.map(ix => { if (!ix.length) return null; const o = new THREE.BufferGeometry();
+          for (const [k, a] of Object.entries(g.attributes)) { const w = a.itemSize, A = new a.array.constructor(ix.length * 3 * w); ix.forEach((i, j) => A.set(a.array.subarray(i * w, (i + 3) * w), j * 3 * w)); o.setAttribute(k, new THREE.BufferAttribute(A, w)); }
+          return o; }); };
       const by = new Map(); for (const [m, g, own] of leaf) { const n = g.index ? g.toNonIndexed() : g; if (!own) boxUV(n); n.translate(-AX, 0, -AZ); by.has(m) ? by.get(m).push(n) : by.set(m, [n]); }
-      const lm = [...by].map(([m, gs]) => mesh(m, gs)), am = piv ? null : mesh(Al, arm(0).map(([, g]) => boxUV(g.index ? g.toNonIndexed() : g)));
+      const lm = [...by].flatMap(([m, gs]) => { const g = merge(gs); return faces(g).flatMap((f, i) => f ? [mesh(m, [f], [1, -1, 0][i])] : []); }), am = piv ? null : mesh(Al, arm(0).map(([, g]) => boxUV(g.index ? g.toNonIndexed() : g)));
       const base = new THREE.Matrix4().makeRotationY(ry).setPosition(x, y, zc), hinge = base.clone().multiply(new THREE.Matrix4().makeTranslation(sx * AX, 0, AZ)), R = new THREE.Matrix4();
       D.leaves.push(a => {
         R.makeRotationY(sx * a); for (const q of lm) { q.matrix.multiplyMatrices(hinge, R); q.matrixWorld.copy(q.matrix); }

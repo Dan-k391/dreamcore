@@ -36,9 +36,9 @@ const pocket = new THREE.Scene(), pm = new THREE.Mesh(new THREE.BoxGeometry(1, 1
 const cams = Array.from({ length: DEPTH }, () => new THREE.PerspectiveCamera()), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _v = new THREE.Vector4(), _p = new THREE.Vector3(), Y = new THREE.Vector3(0, 1, 0);
 const stats = { drawn: 0, levels: 0 }; // what the last main-camera frame drew through portals (tools/portals.mjs, tools/profile.mjs)
 
-let ref = -1, fn = gl.EQUAL; // while a far side is drawn, every material tests the stencil for this level, whatever its own settings say (a door drawn again over a picture and those inside it: LEQUAL)
+let ref = -1, fn = gl.EQUAL, off = false; // while a far side is drawn, every material tests the stencil for this level, whatever its own settings say (a door drawn again over a picture and those inside it: LEQUAL)
 const setMaterial = st.setMaterial.bind(st);
-st.setMaterial = (m, cw) => { setMaterial(m, cw); if (ref >= 0) { sb.setTest(true); sb.setMask(0); sb.setFunc(fn, ref, 0xff); sb.setOp(gl.KEEP, gl.KEEP, gl.KEEP); } };
+st.setMaterial = (m, cw) => { setMaterial(m, cw); if (ref >= 0) { sb.setTest(true); sb.setMask(0); sb.setFunc(fn, ref, 0xff); sb.setOp(gl.KEEP, gl.KEEP, gl.KEEP); } if (off) st.setPolygonOffset(true, -1, -4); }; // off: the far copy's faces win over this side's copy of them, drawn first at the same depth
 
 function rectOf(e, cam, lim) { // the opening's screen rectangle in NDC [x1, y1, x2, y2], inside lim; null if none
   let x1 = 1, y1 = 1, x2 = -1, y2 = -1;
@@ -77,15 +77,26 @@ function pass(cam, level, lim, rt, out) {
     pass(v, level + 1, r, rt, e.to);
     for (const m of fc) m.visible = true; clip.copy(was); scissor(rt, r);
   }
-  const ds = list.map(([, e]) => e.door).filter(Boolean);
-  if (ds.length && level < DEPTH) { // this side's leaf in each opening just drawn through, whole, over the pictures (3. above)
+  const ds = list.filter(([, e]) => e.door && e.to.door);
+  if (ds.length && level < DEPTH) { // the leaf in each opening just drawn through, over the pictures (3. above)
     lamps ??= (() => { const a = []; scene.traverse(o => o.isLight && a.push(o)); return a; })(); // all of them, so its programs are the scene's
-    one.children = [...lamps, ...ds.flatMap(d => d.meshes)]; one.fog = scene.fog; one.environment = scene.environment; one.overrideMaterial = scene.overrideMaterial;
-    rc.projectionMatrix.copy(cam.projectionMatrix); rc.projectionMatrixInverse.copy(cam.projectionMatrixInverse); rc.near = cam.near; rc.far = cam.far;
-    rc.matrixWorld.copy(cam.matrixWorld); rc.matrixWorld.decompose(rc.position, rc.quaternion, rc.scale); rc.updateMatrixWorld(true);
+    one.fog = scene.fog; one.environment = scene.environment; one.overrideMaterial = scene.overrideMaterial;
     const sm = renderer.shadowMap, nu = sm.needsUpdate; sm.needsUpdate = false; scissor(rt, level ? lim : null);
-    ref = level; fn = gl.LEQUAL; try { draw(one, rc); } finally { ref = -1; fn = gl.EQUAL; sm.needsUpdate = nu; one.children = []; }
+    ref = level; fn = gl.LEQUAL;
+    try { for (const [, e] of ds) for (const [d, M, far] of [[e.door, null, false], [e.to.door, e.M, true]]) { // this side's copy whole; then the far copy's faces toward the far room, from the eye taken through
+      one.children = [...lamps, ...(far ? d.meshes.filter(m => faces(m, e.to, d)) : d.meshes)];
+      rc.projectionMatrix.copy(cam.projectionMatrix); rc.projectionMatrixInverse.copy(cam.projectionMatrixInverse); rc.near = cam.near; rc.far = cam.far;
+      rc.matrixWorld.copy(cam.matrixWorld); if (M) rc.matrixWorld.premultiply(M); rc.matrixWorld.decompose(rc.position, rc.quaternion, rc.scale); rc.updateMatrixWorld(true);
+      off = far; draw(one, rc); off = false; } }
+    finally { ref = -1; fn = gl.EQUAL; off = false; sm.needsUpdate = nu; one.children = []; }
   }
+}
+// Which of a copy's leaf meshes (props/metalwork.js: userData.face) face the room in front of end f, whatever side the eye is on: a face by its
+// normal (it never turns past square, so its sign holds); the edges by where the leaf stands, on f's side of the plane (shut: the original's).
+const _z = new THREE.Vector3();
+function faces(m, f, d) {
+  if (m.userData.face) return _z.setFromMatrixColumn(m.matrixWorld, 2).dot(f.n) * m.userData.face > 0;
+  const c = d.k[0][6], s = side(f, c[0], c[1]); return Math.abs(s) > 1e-3 ? s > 0 : !d.of;
 }
 const one = new THREE.Scene(), rc = new THREE.PerspectiveCamera(); one.matrixWorldAutoUpdate = false; rc.layers.enableAll(); let lamps = null; // the doors' own draw: their meshes and the scene's lamps
 // The hook: right after the scene is drawn from the main camera (any pass: colour, or the AO pass's normals with its override material).
