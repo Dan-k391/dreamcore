@@ -4,8 +4,8 @@ import { scene, uTime, V, WY, sunDir } from './core.js';
 import { maxA, grime, wn0, sets, LIB, libTex, detailTex } from './tex.js';
 
 // ---------- materials ----------
-// Budget: 16 texture units. 9 lamp shadows + 1 sun shadow leave 6: a library material uses 4 (its two maps, the shared detail, env; 5 with the fixture atlas),
-// pool tiles 5 (plus the ripple sim; 6 with the fixture atlas). Nothing may use more than 6.
+// Budget: 16 texture units. 9 lamp shadows + 1 sun shadow leave 6: a library material uses 4 (its two maps, the shared detail, env; 5 with the fixture atlas,
+// which also holds the indoor zones' ambient grids), pool tiles 5 (plus the ripple sim; 6 with the atlas). Nothing may use more than 6.
 const S = o => new THREE.MeshStandardMaterial(o);
 const dirt = { aoMap: grime, aoMapIntensity: .7 };
 
@@ -77,8 +77,24 @@ const libMain = `
 // FT texels a side, FA to a row, once at load; loose things are left out of it, so a ball is lit but casts no fixture shadow).
 const FT = 128, FA = 8;
 const fixPars = `
+  #if defined(NL) || defined(AG)
+    uniform sampler2D tFix;
+  #endif
+  #ifdef AG
+    // the zone's ambient grid (lights.js ambientGrid): per cell, how open each of the six axis directions is within 2 m (1: open,
+    // the probe's own light; less in corners, under tables, in alcoves). Two RGB tiles a layer (+x+y+z, -x-y-z), filtered in x and z by
+    // the hardware, in y here. uAG0: origin (a cell centre), 1 / cell. uAG1: cells x, y, z, tiles a row. uAG2: the grid's first texel, 1 / atlas size.
+    uniform vec4 uAG0, uAG1, uAG2;
+    vec3 agTap(float t, vec2 c) { return texture2D(tFix, (uAG2.xy + vec2(mod(t, uAG1.w), floor(t / uAG1.w)) * uAG1.xz + c + .5) * uAG2.zw).rgb; }
+    float agOpen(vec3 p, vec3 n) {
+      vec3 g = (p + n * .3 - uAG0.xyz) * uAG0.w, c = clamp(g, vec3(0.), uAG1.xyz - 1.); // .3 m off the surface: the cells beside it, not in it
+      float k = floor(c.y), f = c.y - k, k1 = min(k + 1., uAG1.y - 1.);
+      vec3 P = mix(agTap(2. * k, c.xz), agTap(2. * k1, c.xz), f), N = mix(agTap(2. * k + 1., c.xz), agTap(2. * k1 + 1., c.xz), f);
+      float a = dot(n * n, mix(N, P, step(0., n)));
+      return mix(a, 1., clamp(length(g - c) - 1., 0., 1.)); } // past the grid's edge: the plain capture
+  #endif
   #ifdef NL
-    uniform vec4 uLamp[NL]; uniform vec3 uLampCol; uniform float uFixBase; uniform sampler2D tFix;
+    uniform vec4 uLamp[NL]; uniform vec3 uLampCol; uniform float uFixBase;
     float fixVis(float tile, vec3 d, float dist) { // how much of the fixture reaches here: its distance map, 2x2 filtered
       vec3 n = d / (abs(d.x) + abs(d.y) + abs(d.z)); vec2 o = n.y >= 0. ? n.xz : (1. - abs(n.zx)) * vec2(n.x >= 0. ? 1. : -1., n.z >= 0. ? 1. : -1.);
       vec2 p = (o * .5 + .5) * ${FT}. - .5, f = fract(p); ivec2 i0 = ivec2(floor(p)), org = ivec2(int(mod(tile, ${FA}.)), int(tile / ${FA}.)) * ${FT};
@@ -108,7 +124,10 @@ function envBox(s, u) {
   s.fragmentShader = `varying vec3 vEW; uniform vec3 uEMin, uEMax, uEP;
     vec3 eBox(vec3 d) { if (uEMax.x < uEMin.x) return d; vec3 m = max((uEMax - vEW) / d, (uEMin - vEW) / d); float t = min(min(m.x, m.y), m.z);
       return t > 0. ? vEW + d * t - uEP : d; } // a point outside the box (a shop behind its glass): the plain lookup
-  ${fixPars}` + s.fragmentShader.replace('#include <lights_fragment_begin>', '#include <lights_fragment_begin>' + fixMain).replace('#include <envmap_physical_pars_fragment>', THREE.ShaderChunk.envmap_physical_pars_fragment.replace(
+  ${fixPars}` + s.fragmentShader.replace('#include <lights_fragment_begin>', '#include <lights_fragment_begin>' + fixMain).replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
+    #ifdef AG
+      reflectedLight.indirectDiffuse *= agOpen(vEW, inverseTransformDirection(normal, viewMatrix)); // the room's light reaches a corner less (reflections untouched)
+    #endif`).replace('#include <envmap_physical_pars_fragment>', THREE.ShaderChunk.envmap_physical_pars_fragment.replace(
     'reflectVec = inverseTransformDirection( reflectVec, viewMatrix );', 'reflectVec = eBox( inverseTransformDirection( reflectVec, viewMatrix ) );'));
 }
 function envCompile(s) { envBox(s, this.userData.envU); } // a plain standard material (P): one shared function, so one program per kind as before
