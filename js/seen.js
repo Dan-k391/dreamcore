@@ -35,4 +35,6 @@ export default {
   lX: ["j3","j4","lW","mT","nL","u3","u4"],
   mT: ["j3","j4","lW","lX","nL","u3","u4"],
   gH: ["sK","u2","u5"],
+  pB: ["pE"],
+  pE: ["pB"],
 };
