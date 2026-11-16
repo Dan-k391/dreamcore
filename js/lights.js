@@ -1,8 +1,8 @@
 // The shared lamp pool, relighting as you move, and the ambient bakes.
 import * as THREE from 'three';
 import { renderer, scene, camera, V, zones, inR } from './core.js';
-import { seaMat } from './mat.js';
-import { emitters, colliders, floorH, flats, warps, ends, side, across, carry, live, gap } from './build.js';
+import { seaMat, noCast, FT, FA } from './mat.js';
+import { emitters, loose, rings, colliders, floorH, flats, warps, ends, side, across, carry, live, gap } from './build.js';
 import { setSky } from './sky.js';
 import { ponds, ripple } from './water.js';
 import { libBaked } from './level.js';
@@ -67,6 +67,44 @@ function bake(z, mats = z.mats, k = z.k) {
 // Every program the bakes and the first frames use, compiled up front and in parallel (KHR_parallel_shader_compile) instead of
 // one after another as each is first drawn. For the cube target, as the bakes and the scene pass draw (a half-float target:
 // no tone mapping, linear; for the screen the variants would be ones no draw uses), and with an env map of the bakes' kind.
+// ---------- the fixtures' shadows: each fixture's distance to the nearest surface in every direction, baked once at load ----------
+// into one octahedral atlas (mat.js fixVis reads it); every material of a zone with fixtures computes them (mat.js fixMain).
+const fixZ = Object.values(zones).filter(z => z.fix), nFix = fixZ.reduce((n, z) => n + z.fix.length, 0);
+const fixRT = new THREE.WebGLRenderTarget(FT * FA, FT * Math.max(1, Math.ceil(nFix / FA)), { type: THREE.HalfFloatType, format: THREE.RedFormat, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: false, generateMipmaps: false });
+{ let base = 0; for (const z of fixZ) {
+  const u = { uLamp: { value: z.fix.map(p => new THREE.Vector4(p.x, p.y, p.z, p.w)) }, uLampCol: { value: new THREE.Color(0xffedc0) }, uFixBase: { value: base }, tFix: { value: fixRT.texture } };
+  for (const m of z.mats) if (m.userData.envU) { Object.assign(m.userData.envU, u); m.defines = { ...m.defines, NL: z.fix.length }; }
+  base += z.fix.length; } }
+function bakeFixtures() {
+  const t0 = performance.now(), cube = new THREE.WebGLCubeRenderTarget(128, { type: THREE.HalfFloatType }), cam = new THREE.CubeCamera(.03, 40, cube);
+  const dist = new THREE.ShaderMaterial({ side: THREE.DoubleSide, uniforms: { uP: { value: V(0, 0, 0) } },
+    vertexShader: `varying vec3 vW; void main() { vec4 w = vec4(position, 1.);
+      #ifdef USE_INSTANCING
+        w = instanceMatrix * w;
+      #endif
+      w = modelMatrix * w; vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
+    fragmentShader: 'uniform vec3 uP; varying vec3 vW; void main() { gl_FragColor = vec4(length(vW - uP)); }' });
+  const oct = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({ uniforms: { tC: { value: cube.texture } }, depthTest: false, depthWrite: false,
+    vertexShader: 'varying vec2 vU; void main() { vU = uv; gl_Position = vec4(position.xy, 0., 1.); }',
+    fragmentShader: `uniform samplerCube tC; varying vec2 vU; void main() { vec2 o = vU * 2. - 1.; vec3 n = vec3(o.x, 1. - abs(o.x) - abs(o.y), o.y);
+      if (n.y < 0.) n.xz = (1. - abs(n.zx)) * vec2(n.x >= 0. ? 1. : -1., n.z >= 0. ? 1. : -1.);
+      float d = textureCube(tC, normalize(n)).r; gl_FragColor = vec4(d > 0. ? d : 1e4); }` })), octScene = new THREE.Scene(), octCam = new THREE.Camera();
+  octScene.add(oct); oct.frustumCulled = false;
+  // what casts: what casts the lamps' shadows, less loose things (they move) and glass
+  const hid = []; scene.traverse(o => { if (o.visible && (o.isPoints || o.isSprite || o.isLine || (o.isMesh && (!o.castShadow || [o.material].flat().every(m => noCast.has(m) || m.transparent))))) { hid.push(o); o.visible = false; } });
+  for (const b of [...loose.map(l => l.mesh), ...rings]) if (b.visible) { hid.push(b); b.visible = false; }
+  const sm = renderer.shadowMap.enabled, bg = scene.background, cc = renderer.getClearColor(new THREE.Color()), ca = renderer.getClearAlpha();
+  renderer.shadowMap.enabled = false; scene.background = null; scene.overrideMaterial = dist; renderer.setClearColor(0, 0);
+  let i = 0; for (const z of fixZ) for (const p of z.fix) {
+    dist.uniforms.uP.value.copy(p); cam.position.copy(p); cam.update(renderer, scene);
+    const x = (i % FA) * FT, y = Math.floor(i / FA) * FT; i++;
+    fixRT.viewport.set(x, y, FT, FT); fixRT.scissor.set(x, y, FT, FT); fixRT.scissorTest = true; renderer.setRenderTarget(fixRT); renderer.render(octScene, octCam);
+  }
+  renderer.setRenderTarget(null); scene.overrideMaterial = null; scene.background = bg; renderer.shadowMap.enabled = sm; renderer.setClearColor(cc, ca);
+  for (const o of hid) o.visible = true;
+  cube.dispose(); dist.dispose(); oct.material.dispose(); oct.geometry.dispose();
+  performance.measure('load: fixture shadows', { start: t0 });
+}
 const env0 = pmrem.fromCubemap(cubeRT.texture), shown = [];
 for (const m of [seaMat, ...Object.values(zones).flatMap(z => z.mats)]) m.envMap = env0.texture;
 scene.traverse(o => { shown.push([o, o.visible]); o.visible = true; });
@@ -102,6 +140,7 @@ try { await compiled; } catch (e) { console.warn('compiling ahead failed, compil
 performance.mark('load: scene compiled');
 await libBaked; // the bakes draw with the library's textures
 for (const w of ponds) w.visible = false; // a pool's nested renders would reset the active cube face
+bakeFixtures(); // before the zone bakes, which see the fixtures' light
 bake({ probe: V(-200, 3, -12) }, [seaMat], 1);
 for (let pass = 0; pass < 2; pass++) for (const z of Object.values(zones)) { // second pass picks up the first bounce, including through doorways
   if (z.mats.length) bake(z); // the dark passages have nothing to light
