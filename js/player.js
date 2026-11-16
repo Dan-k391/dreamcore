@@ -1,13 +1,13 @@
 // The player: controls, collision and the frame step.
 import * as THREE from 'three';
 import { renderer, camera, uTime, V, WY, zones, inR } from './core.js';
-import { colliders, emitters, warps, ladders, ends, side, across, carry, spin, behind, reveal, floorH, clear, out, near } from './build.js';
+import { colliders, emitters, warps, ladders, doors, ends, side, across, carry, spin, behind, reveal, floorH, clear, out, near } from './build.js';
 import { setSky, sun } from './sky.js';
 import { ponds, ripple, resetWater } from './water.js';
 import { relight, zone0, lights, weights } from './lights.js';
 import { composer, look, atmos, bloom, film } from './post.js';
 import { sfx, startAudio } from './audio.js';
-import { wakes, stepLoose, drawLoose, resetLoose } from './physics.js';
+import { wakes, stepLoose, drawLoose, resetLoose, reshade } from './physics.js';
 
 // ---------- walking ----------
 const canvas = renderer.domElement, o = document.getElementById('o'), keys = {}, eu = new THREE.Euler(0, 0, 0, 'YXZ');
@@ -41,7 +41,7 @@ addEventListener('mousemove', e => { // mouse look: captured pointer where the b
 });
 addEventListener('keydown', e => { if (paused()) return; keys[e.code] = 1; if (e.code === 'Space') e.preventDefault(); if (e.code === 'KeyM') sfx?.mute(); });
 addEventListener('keyup', e => keys[e.code] = 0);
-document.getElementById('s').textContent = 'click to enter  ·  wasd walk  ·  mouse look  ·  space jump (hold to hop)  ·  shift run  ·  c zoom  ·  m mute  ·  v noclip';
+document.getElementById('s').textContent = 'click to enter  ·  wasd walk  ·  mouse look  ·  space jump (hold to hop)  ·  shift run  ·  c zoom  ·  e open  ·  m mute  ·  v noclip';
 let zone = zone0; // the zone you are in
 
 // The body: an upright cylinder of radius R from the soles (feet) up 1.75 m. A solid blocks it sideways where it overlaps the body
@@ -101,6 +101,31 @@ const place = (x, z, yaw, pitch) => { // teleport: stand at (x, z) facing that w
   camera.position.x = x; camera.position.z = z; camera.rotation.set(pitch, yaw, 0, 'YXZ');
   feet = floorH(x, z); vy = lag = dip = dipV = fvy = 0; vel.set(0, 0); air = grip = fly = false; cue.hidden = true;
 };
+// ---------- doors (props/metalwork.js door() with o.openable): E swings the one you look at, within reach, open or shut ----------
+// The latch is drawn first (the open sound's latch and hinge lead the motion), then the leaf swings over SWING s, eased in and out like a
+// heavy leaf. It is solid all the way: a step that would put it into the body is not taken, so it waits against you and moves on once you
+// step clear. Twins (a connecting pair either side of a portal) move together. The close sound's thud (0.3 s in) lands as the leaf shuts.
+const SWING = .8, LATCH = .1, REACH = 1.6, _f = new THREE.Vector3();
+const ease = u => u * u * (3 - 2 * u);
+function inReach() { // the openable door the eye looks at within reach (to its leaf's middle at handle height), roughly facing it
+  const p = camera.position; camera.getWorldDirection(_f); let best = null, bd = REACH;
+  for (const d of doors) { const c = d.k[0][6], dx = c[0] - p.x, dy = Math.max(d.y + .3, Math.min(d.y + 2, p.y)) - p.y, dz = c[1] - p.z, r = Math.hypot(dx, dz); // across the floor to the leaf's middle; facing it at eye level
+    if (r < bd && (dx * _f.x + dy * _f.y + dz * _f.z) / Math.hypot(r, dy) > .6) { best = d; bd = r; } }
+  return best;
+}
+const inSwing = d => { const p = camera.position, at = [[p.x, p.z, feet], ...ends.filter(e => Math.abs(side(e, p.x, p.z)) < 1).map(e => [...carry(e, p.x, p.z), feet + e.to.p.y - e.p.y])]; // the body here, and taken through a portal it is near
+  return !fly && d.k.some(k => at.some(([x, z, f]) => blocks(k, f) && near(k, x, z, R) && clear(k, x, null, z, R))); };
+let eWas = 0;
+function stepDoors(dt, press) {
+  const d = press && inReach();
+  if (d) for (const q of [d, d.twin].filter(Boolean)) { q.to = 1 - q.to; q.wait = q.to ? LATCH : 0; q.thud = false; q.loud = q === d; if (q.loud && q.to) sfx?.play(`door.${q.kind}.open`, q.k[0][6][0], q.y + 1.05, q.k[0][6][1]); }
+  for (const q of doors) { if (q.u === q.to) continue;
+    if (q.wait > 0) { q.wait -= dt; continue; }
+    const u = Math.max(0, Math.min(1, q.u + (q.to ? dt : -dt) / SWING)), was = q.f; q.set(ease(u));
+    if (inSwing(q)) { q.set(was); continue; } // the body is in its way: it waits
+    q.u = u; const c = q.k[0][6]; reshade(c[0], q.y + 1.1, c[1], 1.3);
+    if (!q.to && !q.thud && q.loud && u * SWING <= .3) { q.thud = true; sfx?.play(`door.${q.kind}.close`, c[0], q.y + 1.05, c[1]); } } // heard from the one pressed (its twin is the same door seen through the portal)
+}
 const eye = { lift: 0 }; // metres added to the eye height; only dev.lift (?dev) changes it
 const frame = dt => { // one game frame of dt seconds: the loop below passes the real time, dev.step() a fixed one
   const p = camera.position, k = c => keys[c] ? 1 : 0, sp = vel.length();
@@ -186,6 +211,7 @@ const frame = dt => { // one game frame of dt seconds: the loop below passes the
   Object.assign(bod, { feet, sp, step: f !== foot && !air && sp > .5, foot: f & 1, run: sp > 4.2, landed, hit, jumped, splash, fall: vy, deep, grip, fly, air }); // for the footsteps (sound.js)
   foot = f;
 
+  stepDoors(dt, k('KeyE') && !eWas); eWas = k('KeyE');
   const here = ends.find(e => reveal(e, p.x, p.z))?.zone || Object.values(zones).find(z => inR(p.x, p.z, ...z.box)); // in a portal's reveal: its zone, whichever box holds it (or weights() would measure from the wrong space)
   if (here && here !== zone) { zone = here; sfx?.zone(zone); setSky(zone.sky || 'day'); }
   const wts = weights(p.x, p.z, zone);

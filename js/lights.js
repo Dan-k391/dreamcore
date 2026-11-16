@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { renderer, scene, camera, V, zones, inR } from './core.js';
 import { seaMat } from './mat.js';
-import { emitters, colliders, floorH, flats, warps, ends, side, across, carry } from './build.js';
+import { emitters, colliders, floorH, flats, warps, ends, side, across, carry, live, gap } from './build.js';
 import { setSky } from './sky.js';
 import { ponds, ripple } from './water.js';
 import { libBaked } from './level.js';
@@ -25,7 +25,7 @@ function weights(x, z, zone) {
   const r = new Map([[zone, 1]]), reach = (from, f, x, z) => { const got = [];
     for (const o of from.openings) { const n = o.p === from ? o.q : o.p, e = o.e?.[o.p === from ? 0 : 1];
       const t = e ? side(e, x, z) < -.5 ? -1e9 : -side(e, x, z) : ((o.ax ? z : x) - o.at) * (o.p === from ? 1 : -1), s = e ? Math.abs(across(e, x, z)) : o.ax ? x : z, a = e ? Math.max(s - e.w / 2, 0) : Math.max(o.lo - s, s - o.hi, 0);
-      const k = Math.min(.99, Math.max(0, .5 + .5 * t / BAND)) * Math.max(0, 1 - a / BAND), w = f * k / (1 - k);
+      const k = Math.min(.99, Math.max(0, .5 + .5 * t / BAND)) * Math.max(0, 1 - a / BAND) * (e ? gap(e) : 1), w = f * k / (1 - k);
       if (w > 0 && n !== zone) { got.push([n, w, ...(e ? carry(e, x, z) : [x, z])]); if (w > (r.get(n) || 0)) r.set(n, w); } } // reached two ways: the larger
     return got; };
   for (const [n, w, nx, nz] of reach(zone, 1, x, z)) reach(n, w, nx, nz);
@@ -34,8 +34,9 @@ function weights(x, z, zone) {
 }
 function relight(pos, zone, fade, wts) { // fade: how far to move brightness this call (1 = snap); wts: weights() there, else the zone alone (the bakes)
   const gw = {}; for (const [z, v] of wts || [[zone, 1]]) gw[z.grp] = (gw[z.grp] || 0) + v; // a fixture's group gives up its 8 m handicap as you near it
+  // a shut door's far side is lit for only within 3 m of it, so its lamps are settled before the leaf opens
   // in play (wts given), a fixture in front of a portal's far end is also as near as it is from your place taken through that portal
-  const via = wts ? ends.filter(e => { const d = side(e, pos.x, pos.z); return d >= 0 && d < 30; }).map(e => { const [x, z] = carry(e, pos.x, pos.z); return [e.to, V(x, pos.y + e.to.p.y - e.p.y, z)]; }) : [];
+  const via = wts ? ends.filter(e => { const d = side(e, pos.x, pos.z); return d >= 0 && d < (live(e) ? 30 : 3); }).map(e => { const [x, z] = carry(e, pos.x, pos.z); return [e.to, V(x, pos.y + e.to.p.y - e.p.y, z)]; }) : [];
   const dist = e => { let d = e.p.distanceTo(pos); for (const [f, q] of via) if (side(f, e.p.x, e.p.z) > 0) d = Math.min(d, e.p.distanceTo(q)); return d; };
   const want = emitters.map(e => [dist(e) + 8 * (1 - Math.min(1, gw[e.zone.grp] || 0)) - (e.light ? 2 : 0), e]).sort((a, b) => a[0] - b[0]).slice(0, lights.length).map(a => a[1]);
   for (const l of lights) {

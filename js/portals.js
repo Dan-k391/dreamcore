@@ -12,7 +12,7 @@
 //  3. inside that picture, openings seen through it are drawn the same way, DEPTH levels deep; past that an opening is a dark fill.
 import * as THREE from 'three';
 import { renderer, scene, camera, clip } from './core.js';
-import { ends, side } from './build.js';
+import { ends, side, live } from './build.js';
 import { ponds } from './water.js';
 
 const DEPTH = 2, D = 1, REACH = 80; // levels drawn through openings; the pocket's depth (any works: the test is at the plane); no portal farther (a zone drawn from everywhere, the dev yard, would draw its far sides behind every wall)
@@ -59,7 +59,7 @@ function drawPocket(e, mat, cam, level) {
 // level: the stencil value of the picture cam draws into; lim: its rectangle; out: the end it looks out of (never drawn from its own camera)
 function pass(cam, level, lim, rt, out) {
   const at = _p.setFromMatrixPosition(cam.matrixWorld), list = [];
-  for (const e of ends) if (e !== out && side(e, at.x, at.z) >= 0 && (cam.layers.mask & e.bit) && e.p.distanceToSquared(at) < REACH * REACH) { const r = rectOf(e, cam, lim); if (r) list.push([e.p.distanceToSquared(at), e, r]); }
+  for (const e of ends) if (e !== out && live(e) && side(e, at.x, at.z) >= 0 && (cam.layers.mask & e.bit) && e.p.distanceToSquared(at) < REACH * REACH) { const r = rectOf(e, cam, lim); if (r) list.push([e.p.distanceToSquared(at), e, r]); }
   list.sort((a, b) => a[0] - b[0]); // nearest first: a nearer opening overlapping a farther one keeps its pixels
   for (const [, e, r] of list) {
     scissor(rt, r);
@@ -77,12 +77,13 @@ function pass(cam, level, lim, rt, out) {
 renderer.render = (s, c) => {
   draw(s, c);
   if (s !== scene || c !== camera || !ends.length || !renderer.getRenderTarget()) return;
+  if (!warm) { warm = true; for (const m of [reset, fill, mark]) { pm.material = m; renderer.compile(pocket, c); } }
   const rt = renderer.getRenderTarget(), auto = renderer.autoClear, upd = scene.matrixWorldAutoUpdate, on = ponds.map(w => w.visible);
   if (!scene.overrideMaterial) stats.drawn = stats.levels = 0;
   renderer.autoClear = false; scene.matrixWorldAutoUpdate = false; for (const w of ponds) w.visible = false; // shortcut: no pool is drawn through a portal (its pictures are of the main view)
   try { pass(c, 0, [-1, -1, 1, 1], rt, null); }
   finally { ref = -1; sb.setMask(0xff); renderer.autoClear = auto; scene.matrixWorldAutoUpdate = upd; ponds.forEach((w, i) => w.visible = on[i]); scissor(rt, null); }
 };
-renderer.compile(pocket, camera);
+let warm = false; // the pocket's three programs, compiled on the first scene draw with its target bound (a program's output colour space is the target's): none on first sight of a portal
 
 export { stats, DEPTH };

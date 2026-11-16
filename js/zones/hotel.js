@@ -52,6 +52,7 @@ const DADO = [[0, -.035], [.011, -.035], [.016, -.028], [.016, -.018], [.012, -.
 const PICTURE = [[0, -.022], [.006, -.022], [.016, -.012], [.02, -.002], [.017, .006], [.012, .008], [.012, .016], [0, .02]];
 
 defZone('hT', { music: 'hotel', ...dry, step: 'carpet', grp: 'm', k: 1, exp: .34, fog: [.3, .2, .12, .004], bloom: .3, wet: .1, hum: .3, box: [2.4, 21.4, 5.2, 51.6], probe: [3.8, 1.5, 36], env: [[2.4, 0, 21.4], [5.2, 2.8, 51.6]] });
+const gates = {}; // the hallway's two openable doors onto the vestibule, by wall (1 west, -1 east)
 { // hotel hallway x[2.6,5] z[21.4,51.6], through a door behind where you start: patterned carpet, damask above dark stained boarding to a
   // dado rail, a picture rail, numbered room doors in their frames, a sconce between each pair, opal panels down the ceiling
   const z = zones.hT, h = 2.8, C = P(z, { map: hotelTex.map, normalMap: hotelTex.normalMap, ...dirt });
@@ -69,7 +70,8 @@ defZone('hT', { music: 'hotel', ...dry, step: 'carpet', grp: 'm', k: 1, exp: .34
       if (shut) { solid(x1, 0, c - .5, x2, 2.24, c + .5); block(K, k > 0 ? x1 : x2 - .2, 0, c - .5, k > 0 ? x1 + .2 : x2, 2.24, c + .5); }
       // an open door's frame is turned round so its hinge jamb is the north one: the leaf then stands where the hallway, walked from the
       // south as you come in, looks through the opening (hinged on the south, it hid behind that jamb)
-      door(z, f - k * .05, 0, c, open ? -ry : ry, shut ? { color: 0x4b2418, frame: 0xd8ccb4 } : { leaf: false, frame: 0xd8ccb4 });
+      if (gate) gates[k] = door(z, f - k * .05, 0, c, -ry, { openable: true, color: 0x4b2418, frame: 0xd8ccb4 }); // turned round: it swings into the hallway, its twin in the vestibule into the vestibule (a connecting pair)
+      else door(z, f - k * .05, 0, c, open ? -ry : ry, shut ? { color: 0x4b2418, frame: 0xd8ccb4 } : { leaf: false, frame: 0xd8ccb4 });
       if (open) { // the leaf on the frame's knuckles, swung into the passage along its north side; the wall's back lined dark (the warm light from beyond is the passage's: zones/passages.js)
         openLeaf(z, f - k * .05, c, -ry, LEAF, K, Br);
         for (const [a1, a2, y1] of [[c - .7, c - .5, 0], [c + .5, c + .7, 0], [c - .5, c + .5, 2.24]]) block(voidMat, x2, y1, a1, x2 + .02, 2.4, a2);
@@ -107,7 +109,7 @@ const Y = -200; // the vestibule's floor: portal-only rooms stand 200 m down, un
 defZone('hV', { music: 'hotel', ...dry, step: 'carpet', grp: 'm', k: .8, exp: .34, fog: [.3, .2, .12, .004], bloom: .3, wet: .05, hum: .2, box: [299.7, 299.7, 304.1, 303.9], probe: [301.9, Y + 1.4, 301.9], env: [[300, Y, 300], [303.8, Y + 2.8, 303.6]] });
 {
   const z = zones.hV, X1 = 300, X2 = 303.8, Z1 = 300, Z2 = 303.6, h = 2.8, T = .3, AX = 302.8, BZ = 301.6; // the room's inside; A: the south door's middle, B: the west door's
-  const Fl = M(z, 'hardwood', { color: 0x6e4630 }), Rg = M(z, 'hotelCarpet', { color: 0x8a5a48 }), W = M(z, 'damask', { color: 0xb88068 }), Pl = M(z, 'plaster', { color: 0xe6d6b8 });
+  const Fl = M(z, 'hardwood', { color: 0x6e4630 }), Rg = M(z, 'hotelCarpet', { color: 0x8a5a48 }), W = M(z, 'damask', { color: 0xd2a888 }), Pl = M(z, 'plaster', { color: 0xe6d6b8 });
   const Wd = M(z, 'hardwood', { color: 0x4e2e20, swap: 1 }), Rl = M(z, 'gelcoat', { color: 0x3e2418, wear: 0, roughness: .3, macro: .05 }), Br = M(z, 'brass', { roughness: .3, dirt: .6 }), K = P(z, { color: 0x050403, roughness: 1 });
   box(Fl, X1 - T, Y - .2, Z1 - T, X2 + T, Y, Z2 + T); flats.push([X1 - T, Z1 - T, X2 + T, Z2 + T, () => Y]); // the floor's height (floorH is 0 where no flat says otherwise) box(Pl, X1 - T, Y + h, Z1 - T, X2 + T, Y + h + .2, Z2 + T);
   block(Rg, 300.55, Y, 301.25, 302.15, Y + .005, 303.05); // the rug, under the bench's front
@@ -115,10 +117,11 @@ defZone('hV', { music: 'hotel', ...dry, step: 'carpet', grp: 'm', k: .8, exp: .3
   box(W, X1 - T, Y, Z1 - T, AX - .5, Y + h, Z1); box(W, AX + .5, Y, Z1 - T, X2 + T, Y + h, Z1); box(W, AX - .5, Y + 2.24, Z1 - T, AX + .5, Y + h, Z1);
   box(W, X1 - T, Y, Z1, X1, Y + h, BZ - .5); box(W, X1 - T, Y, BZ + .5, X1, Y + h, Z2); box(W, X1 - T, Y + 2.24, BZ - .5, X1, Y + h, BZ + .5);
   box(W, X1 - T, Y, Z2, X2 + T, Y + h, Z2 + T); box(W, X2, Y, Z1, X2 + T, Y + h, Z2);
-  door(z, AX, Y, Z1 - .05, 0, { leaf: false, frame: 0xd8ccb4 }); door(z, X1 - .05, Y, BZ, Math.PI / 2, { leaf: false, frame: 0xd8ccb4 });
-  openLeaf(z, AX, Z1 - .05, 0, 1.5, K, Br, Y); openLeaf(z, X1 - .05, BZ, Math.PI / 2, 1.5, K, Br, Y); // both leaves swung in, along the door's west and north sides
-  portal([2.2, 0, 34.8, Math.PI / 2], [AX, Y, Z1 - T, 0]); // the hallway's west door 34.8 (its plane the wall's back face) is the south door's outer face
-  portal([5.4, 0, 38.4, -Math.PI / 2], [X1 - T, Y, BZ, Math.PI / 2]); // and its east door 38.4 the west door's
+  // each opening has a door on both sides, shut to start, opened together on E (a hotel's connecting pair): each leaf swings into its own room
+  const dA = door(z, AX, Y, Z1 - .05, Math.PI, { openable: true, color: 0x4b2418, frame: 0xd8ccb4 }), dB = door(z, X1 - .05, Y, BZ, -Math.PI / 2, { openable: true, color: 0x4b2418, frame: 0xd8ccb4 });
+  dA.twin = gates[1]; gates[1].twin = dA; dB.twin = gates[-1]; gates[-1].twin = dB;
+  portal([2.2, 0, 34.8, Math.PI / 2], [AX, Y, Z1 - T, 0], 1, 2.24, gates[1], dA); // the hallway's west door 34.8 (its plane the wall's back face) is the south door's outer face
+  portal([5.4, 0, 38.4, -Math.PI / 2], [X1 - T, Y, BZ, Math.PI / 2], 1, 2.24, gates[-1], dB); // and its east door 38.4 the west door's
   // A run of moulding `prof` ([out, up] in metres) along a wall face from a to b ([x, z]), the room on its left; mitred at an inside corner (m0, m1)
   const run = (mat, prof, a, b, y, m0, m1) => {
     const dx = b[0] - a[0], dz = b[1] - a[1], L = Math.hypot(dx, dz), d = new THREE.Vector3(dx / L, 0, dz / L), o = new THREE.Vector3(d.z, 0, -d.x);
@@ -139,6 +142,6 @@ defZone('hV', { music: 'hotel', ...dry, step: 'carpet', grp: 'm', k: .8, exp: .3
   }
   // light: two sconces lit over the bench on the north wall, a dim opal panel in the middle of the ceiling
   for (const x of [300.85, 302.95]) sconce(z, x, Y + 1.75, Z2, Math.PI, { power: 26 });
-  opalPanel(z, 301.9, Y + h, 301.8, 0, { w: .6, l: .6, power: 14 });
+  opalPanel(z, 301.9, Y + h, 301.8, 0, { w: .6, l: .6, power: 28 });
   mallBench(z, 301.4, Y, Z2 - .42, Math.PI); pottedPlant(z, X2 - .42, Y, Z2 - .42, -.6);
 }

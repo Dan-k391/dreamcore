@@ -14,7 +14,7 @@ const run = (url, expr, ...opt) => { // -> {result, errors}; browse.mjs exits 1 
 const AREAS = { // area: [check count (a full run warns when it differs), runs alone, what it covers]
   perf: [5, 1, 'checks that measure time: library bake, ready, first sign, openings, physics budgets'],
   seen: [1, 0, 'js/seen.js covers what each zone can see (tools/pvs.mjs --check, the longest single check)'],
-  move: [48, 0, 'walks between places, jumping and hopping, ladders, passage warps, portals, noclip, the flume'],
+  move: [49, 0, 'walks between places, jumping and hopping, ladders, passage warps, portals, doors, noclip, the flume'],
   load: [12, 0, 'page loads, draw-call and shader-compile guards, frame ceilings, the single file, other hosts, production'],
   water: [9, 0, 'pool pictures, optics, mirror reflections, skipped pool pictures'],
   solid: [11, 0, 'what stops you: benches, doors, arches, the flume; coplanar faces; nothing pops at an opening'],
@@ -144,10 +144,11 @@ const solids = [
     dev.step(90); dev.key("KeyW", false); dev.key("ShiftLeft", false); dev.step(30); return { side, s, L: F.L, lat, dy, end: dev.state() }`, r => near(r.side.x, 40.55, .06) && r.side.y > 3.2 && r.s >= r.L - .3 && r.lat < .2 && r.dy < .12 && r.end.x < 33 && near(r.end.y, -1.2, .02) && r.end.zone === 'pN'],
   ['walk under the flume platform along the south deck, between its posts, to the east wall', 'return dev.go(36.5, -1.4, -P / 2, ["KeyW"], 5)', s => near(s.x, 44.7, .05) && near(s.y, 0, .01)],
   ['in the pit the near balls are drawn with the fine shape, none from afar','const Ph = await import("/js/physics.js"), g = Ph.groups[2]; dev.go(-31.6, 34.5, P / 2, ["KeyW"], .9); dev.step(2); const near = g.fine.count; dev.go(-20, 36, P / 2); dev.step(2); return [near, g.fine.count]', ([near, far]) => near > 20 && far === 0],
+  ['a door opens on E: shut it stops you, E opens it, you walk through (the portal behind it), E closes it behind you and it stops you again; standing in its swing it stops against you, not moving you', 'const B = await import("/js/build.js"), d = B.doors[0], E = () => { dev.key("KeyE", true); dev.step(1); dev.key("KeyE", false); dev.step(60); }, r = {}; r.shut = dev.go(4, 34.8, P / 2, ["KeyW"], 1.5).zone; dev.go(4, 34.8, P / 2); E(); r.open = d.f; r.through = dev.go(4, 34.8, P / 2, ["KeyW"], 2.5).zone; dev.go(302.8, 301.8, 0); E(); dev.step(30); r.closed = d.f; r.solid = dev.go(302.8, 301.8, 0, ["KeyW"], 2).zone; dev.go(3.3, 34.8, P / 2); E(); r.swing = [d.f, dev.state().x]; E(); dev.step(60); return r', r => r.shut === 'hT' && r.open === 1 && r.through === 'hV' && r.closed === 0 && r.solid === 'hV' && r.swing[0] > .05 && r.swing[0] < .9 && Math.abs(r.swing[1] - 3.3) < .02],
 ];
 // The area of each solids entry, in order: m move, s solid, l loose, p perf (wall-clock budgets, run alone). Entries of one area share a page, in this order: a
 // ball test leaves the pit and the rings as it found them for the next, so the loose ones stay together.
-const solidArea = 'mmsssssllllpllpsllllmmmmmmllsmsl', AN = { m: 'move', s: 'solid', l: 'loose', p: 'perf' };
+const solidArea = 'mmsssssllllpllpsllllmmmmmmllsmslm', AN = { m: 'move', s: 'solid', l: 'loose', p: 'perf' };
 if (solidArea.length !== solids.length) throw new Error(`solidArea has ${solidArea.length} letters for ${solids.length} entries`);
 const mine = solids.filter((_, k) => AN[solidArea[k]] === A);
 if (mine.length) {
@@ -381,10 +382,10 @@ if (on('look')) { const f = run(base + '?dev&bare', `(async () => { const L = aw
     out.wash[n] = +worst.toFixed(2); }
   // the shares as you walk: a 10 cm lattice flooded from both sides of every opening, carrying the zone you would be in (the box there,
   // else the last), its largest change between neighbours; and both ends of every passage warp (a few points of its strip, and where each lands)
-  const Z = Object.values(dev.zones), { colliders, floorH, warps } = await import('/js/build.js'), S = .1, inb = (x, z, b) => x >= b[0] && x <= b[2] && z >= b[1] && z <= b[3], boxz = (x, z) => Z.find(q => inb(x, z, q.box));
+  const Z = Object.values(dev.zones), { colliders, floorH, warps, ends, side, across } = await import('/js/build.js'), S = .1, inb = (x, z, b) => x >= b[0] && x <= b[2] && z >= b[1] && z <= b[3], boxz = (x, z) => Z.find(q => inb(x, z, q.box));
   const vec = (x, z, zn) => { const m = new Map(); for (const [q, v] of L.weights(x, z, zn)) m.set(q.id, (m.get(q.id) || 0) + v); return m; }, dist = (a, b) => Math.max(...[...new Set([...a.keys(), ...b.keys()])].map(k => Math.abs((a.get(k) || 0) - (b.get(k) || 0))));
   const near = (x, z) => L.openings.some(o => { const [s, t] = o.ax ? [x, z] : [z, x]; return Math.max(o.lo - s, s - o.hi, 0) <= 3 && Math.abs(t - o.at) <= 3; });
-  const fc = new Map(), free = (i, j) => { const k = i + ',' + j, x = i * S, z = j * S; if (!fc.has(k)) { const f = floorH(x, z); fc.set(k, near(x, z) && !colliders.some(c => x > c[0] - .28 && x < c[2] + .28 && z > c[1] - .28 && z < c[3] + .28 && c[4] < f + 1.7 && c[5] > f + .35)); } return fc.get(k); };
+  const fc = new Map(), free = (i, j) => { const k = i + ',' + j, x = i * S, z = j * S; if (!fc.has(k)) { const f = floorH(x, z); fc.set(k, near(x, z) && !ends.some(e => side(e, x, z) < 0 && side(e, x, z) > -1.5 && Math.abs(across(e, x, z)) < e.w / 2 + .3) && !colliders.some(c => x > c[0] - .28 && x < c[2] + .28 && z > c[1] - .28 && z < c[3] + .28 && c[4] < f + 1.7 && c[5] > f + .35)); } return fc.get(k); };
   const seen = new Set(), q = L.openings.flatMap(o => [[o.p, -1], [o.q, 1]].map(([zn, t]) => { const c = (o.lo + o.hi) / 2, [x, z] = o.ax ? [c, o.at + t] : [o.at + t, c]; return [Math.round(x / S), Math.round(z / S), zn]; }));
   out.jump = { d: 0 }; while (q.length) { const [i, j, zn] = q.pop(), key = i + ',' + j + zn.id; if (seen.has(key) || !free(i, j)) continue; seen.add(key); const ma = vec(i * S, j * S, zn), f0 = floorH(i * S, j * S);
     for (const [di, dj] of [[1, 0], [0, 1], [1, 1], [1, -1], [-1, 0], [0, -1], [-1, -1], [-1, 1]]) { const i2 = i + di, j2 = j + dj; if (!free(i2, j2) || Math.abs(floorH(i2 * S, j2 * S) - f0) > .35) continue;

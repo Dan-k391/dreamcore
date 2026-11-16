@@ -24,6 +24,7 @@ const port = arg('port', '8200'), opts = { only: arg('only', ''), modes: arg('mo
 
 async function page(o) {
   const B = await import('/js/build.js'), { renderer: r, camera } = dev, gl = r.getContext();
+  for (const d of B.doors) { d.set(1); d.u = d.to = 1; } // every door open: the walks are of the portals (a shut door is the move area's door check)
   const W = gl.drawingBufferWidth, H = gl.drawingBufferHeight, px = new Uint8Array(W * H * 4), GW = 64, GH = 36;
   const grab = () => { r.setRenderTarget(null); gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, px); const g = new Float32Array(GW * GH);
     for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const k = (j * W + i) * 4; g[Math.floor(j * GH / H) * GW + Math.floor(i * GW / W)] += .2126 * px[k] + .7152 * px[k + 1] + .0722 * px[k + 2]; }

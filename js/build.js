@@ -16,10 +16,12 @@ import { seaMat, noCast, voidMat, aisle } from './mat.js';
 const colliders = [], geo = new Map(), emitters = [];
 const solid = (x1, y1, z1, x2, y2, z2) => colliders.push([x1, z1, x2, z2, y1, y2]);
 const round = (x, z, r, y1, y2) => colliders.push([x - r, z - r, x + r, z + r, y1, y2, r]);
-const turned = (cx, cz, hx, hz, ry, y1, y2) => { // the solid of a box of half-size hx, hz centred at cx, cz and turned by rotateY(ry)
+const turn = (k, cx, cz, hx, hz, ry) => { // (re)set solid k to a box of half-size hx, hz centred at cx, cz and turned by rotateY(ry): a moving leaf moves its solid in place
   const c = Math.cos(ry), s = Math.sin(ry), ex = Math.abs(c) * hx + Math.abs(s) * hz, ez = Math.abs(s) * hx + Math.abs(c) * hz;
-  colliders.push([cx - ex, cz - ez, cx + ex, cz + ez, y1, y2, [cx, cz, c, s, hx, hz]]);
+  k[0] = cx - ex; k[1] = cz - ez; k[2] = cx + ex; k[3] = cz + ez; k[6] = [cx, cz, c, s, hx, hz]; return k;
 };
+const turned = (cx, cz, hx, hz, ry, y1, y2) => { const k = turn([0, 0, 0, 0, y1, y2], cx, cz, hx, hz, ry); colliders.push(k); return k; }; // the solid of a turned box
+const doors = []; // openable doors (props/metalwork.js door() with o.openable): { meshes, set(f), f, to, ... }, swung on E by player.js
 const loose = []; // loose balls, moved by physics.js: { mesh (a Mesh, or an InstancedMesh for many), r, pos [x, y, z per ball], region [x1, z1, x2, z2] they live in,
 // bounce, grip (rolling resistance, m/s²), and if they apply: float (density against water's), spin (it rolls visibly), solid (it stops the body),
 // slope (follows a sloping floor), pour (settle this many steps at load), seen (zone ids it is drawn from), cap (top speed, m/s; 7 if not given) }
@@ -36,8 +38,8 @@ const rings = []; // floating rings: bob on the water (see frame)
 // the other's); zone (its front's zone) and mask (the layers drawn looking out of it) once merge() runs. js/portals.js draws what is seen
 // through; player.js walks and collides through; lights.js blends the mood and ranks the lamps through.
 const ends = [];
-function portal(a, b, w = 1, h = 2.24) {
-  const mk = ([x, y, z, ry]) => ({ p: V(x, y, z), ry, n: V(Math.sin(ry), 0, Math.cos(ry)), r: V(Math.cos(ry), 0, -Math.sin(ry)), w, h }), A = mk(a), B = mk(b);
+function portal(a, b, w = 1, h = 2.24, da = null, db = null) { // da, db: an openable door() shutting each end (twins, opened together)
+  const mk = ([x, y, z, ry]) => ({ p: V(x, y, z), ry, n: V(Math.sin(ry), 0, Math.cos(ry)), r: V(Math.cos(ry), 0, -Math.sin(ry)), w, h }), A = mk(a), B = mk(b); A.door = da; B.door = db;
   for (const [e, f] of [[A, B], [B, A]]) { e.to = f; e.turn = f.ry - e.ry + Math.PI; e.c = Math.cos(e.turn); e.s = Math.sin(e.turn);
     e.M = new THREE.Matrix4().makeTranslation(f.p.x, f.p.y, f.p.z).multiply(new THREE.Matrix4().makeRotationY(e.turn)).multiply(new THREE.Matrix4().makeTranslation(-e.p.x, -e.p.y, -e.p.z)); }
   ends.push(A, B); return [A, B];
@@ -45,17 +47,22 @@ function portal(a, b, w = 1, h = 2.24) {
 const side = (e, x, z) => (x - e.p.x) * e.n.x + (z - e.p.z) * e.n.z, across = (e, x, z) => (x - e.p.x) * e.r.x + (z - e.p.z) * e.r.z; // metres in front of its plane; along it from its middle
 const carry = (e, x, z) => { const dx = x - e.p.x, dz = z - e.p.z; return [e.to.p.x + e.c * dx + e.s * dz, e.to.p.z - e.s * dx + e.c * dz]; }; // a point taken through e
 const spin = (e, x, z) => [e.c * x + e.s * z, -e.s * x + e.c * z]; // a direction taken through e
+const live = e => !e.door || e.door.f > 0, gap = e => e.door ? Math.min(1, e.door.f * 4) : 1; // a portal behind a shut leaf is not drawn, lit for or heard through; its share of the mood grows as the leaf opens
 const reveal = (e, x, z, back = 0) => { const d = side(e, x, z); return d >= -back && d < 1 && Math.abs(across(e, x, z)) < e.w / 2; }; // in the 1 m strip in front of e's opening (its reveal, whichever zone's box holds it)
 const behind = (e, c) => Math.max(side(e, c[0], c[1]), side(e, c[2], c[1]), side(e, c[0], c[3]), side(e, c[2], c[3])) < 1e-3; // a solid's rectangle wholly at or behind e's plane
 function add(mat, g, ownUV = false) { // ownUV: keep the geometry's own UVs (a library material's `uv` option says how many metres one unit is)
   g = g.index ? g.toNonIndexed() : g;
+  if (!ownUV) boxUV(g);
+  geo.has(mat) ? geo.get(mat).push(g) : geo.set(mat, [g]);
+}
+function boxUV(g) { // world-space UVs by the face's main axis (a moving part takes them from its own space)
   const p = g.attributes.position, n = g.attributes.normal, uv = g.attributes.uv;
-  if (!ownUV) for (let i = 0; i < p.count; i++) {
+  for (let i = 0; i < p.count; i++) {
     if (Math.abs(n.getY(i)) > .5) uv.setXY(i, p.getX(i), p.getZ(i));
     else if (Math.abs(n.getX(i)) > .5) uv.setXY(i, p.getZ(i), p.getY(i));
     else uv.setXY(i, p.getX(i), p.getY(i));
   }
-  geo.has(mat) ? geo.get(mat).push(g) : geo.set(mat, [g]);
+  return g;
 }
 // three's rounded box: the places ask for about 3800 of only about 550 kinds, so each kind is built once (its corner maths is a
 // sizeable share of the load) and handed out as a copy; works with `new`, as the places call it.
@@ -208,6 +215,7 @@ function merge() { // once every place is built (level.js)
       scene.add(mesh); if (m === seaMat) sea = mesh;
     }
   }
+  for (const d of doors) for (const m of d.meshes) { const id = zoneAt(d.x, d.z)?.id; m.userData.zone = id || ''; if (bits.has(id)) m.layers.set(bits.get(id)); }
   camera.layers.enableAll(); // until the first frame sets it: everything compiles and bakes as before
   // three culls shadow casters by the viewing camera's layers, not the shadow camera's: a map redrawn while you stand in one zone
   // would lack every wall that zone cannot see, and its light would pour through them once you walk round (the backrooms' sun wedge).
@@ -223,4 +231,4 @@ function merge() { // once every place is built (level.js)
   };
 }
 
-export { ends, portal, side, across, carry, spin, behind, reveal, colliders, emitters, flats, seeThrough, skyOnly, warps, pools, onSun, ladders, rings, loose, add, block, box, solid, round, turned, clear, out, near, flight, passage, slab, room, wall, fixture, tube, lit, put, spot, solidAt, floorH, sea, merge, maskAt, RoundedBoxGeometry, floorAt };
+export { doors, turn, boxUV, live, gap, ends, portal, side, across, carry, spin, behind, reveal, colliders, emitters, flats, seeThrough, skyOnly, warps, pools, onSun, ladders, rings, loose, add, block, box, solid, round, turned, clear, out, near, flight, passage, slab, room, wall, fixture, tube, lit, put, spot, solidAt, floorH, sea, merge, maskAt, RoundedBoxGeometry, floorAt };

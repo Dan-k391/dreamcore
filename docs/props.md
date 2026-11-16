@@ -66,7 +66,7 @@ Every function takes the zone `z` first; "(x, y, zc, ry, o)" below means `z, x, 
 
 | Function | Arguments | Builds |
 |---|---|---|
-| `door` | (x, y, zc, ry, o: open, leaf, frame, color) | door in a frame with handle, hinges, closer and kick plate; `leaf: false` is the frame alone |
+| `door` | (x, y, zc, ry, o: open, leaf, frame, color, openable, swing, kind) | door in a frame with handle, hinges, closer and kick plate; `leaf: false` is the frame alone; `openable: true` returns a door that starts shut and swings `swing` rad (1.75) to its -z side on E, solid all the way, its closer arm following, sounding `kind` ('metal' or 'wood'); `d.twin = other` opens two together |
 | `doorway` | (mat, leaf, x, y, z, ry, open) | old call: a `door` tinted like the two materials |
 | `poolLadder` | (x, y, zc, ry, o) | stainless pool ladder with ribbed treads, rails clamped, bumpers on the wall; registers itself in `ladders` (its zone, the way up and the deck height y), so it climbs from any side of any pool, and on a dry block too (tools/test.mjs climbs every registered one) |
 | `ladder` | (x, zc, mat) | old call: a `poolLadder` on a pool's east edge |

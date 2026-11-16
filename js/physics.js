@@ -5,7 +5,7 @@
 // Rings float on the CPU's copy of the waves (water.js), so they rise, tilt and drift with what the GPU draws without a readback.
 import * as THREE from 'three';
 import { renderer, camera, uTime, WY, inR } from './core.js';
-import { colliders, flats, loose, rings, clear, out } from './build.js';
+import { colliders, flats, loose, rings, doors, clear, out } from './build.js';
 import { ponds } from './water.js';
 import { lights } from './lights.js';
 import { sun } from './sky.js';
@@ -248,7 +248,7 @@ function fine(g) {
 }
 // Settle a freshly poured group before anyone sees it (the pit, at load): step it with no one near until it sleeps, at most `max` steps.
 function settle(g, max) { const nobody = { x: 1e9, z: 1e9 }; const cap = g.cap; g.cap = .8; for (let i = 0; i < max && g.awake; i++) stepGroup(g, nobody); g.cap = cap; while (g.bq >= 0) bury(g); draw(g, 1); g.moved = 0; } // gently: no ball is thrown out
-looseRoot.children = [...groups.flatMap(g => g.fine ? [g.mesh, g.fine] : [g.mesh]), ...rings]; // not their parent: only the list the loose pass walks
+looseRoot.children = [...groups.flatMap(g => g.fine ? [g.mesh, g.fine] : [g.mesh]), ...rings, ...doors.flatMap(d => d.meshes)]; // a door's leaf too: it moves // not their parent: only the list the loose pass walks
 for (const g of groups) { g.awake = g.n; if (g.pour) settle(g, g.pour); else g.awake = 0, g.still.fill(30); draw(g, 1); }
 
 // ---------- rings: float on the waves, pushed by the body, the water's flow and each other; bounce softly off the pool's sides ----------
@@ -317,4 +317,4 @@ function resetLoose() {
   wakes.length = 0;
 }
 
-export { groups, floaters, wakes, stepLoose, drawLoose, resetLoose, knocks, rolling };
+export { reshade, groups, floaters, wakes, stepLoose, drawLoose, resetLoose, knocks, rolling };
