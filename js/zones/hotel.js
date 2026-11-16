@@ -214,6 +214,12 @@ function galleryBench(z, x, y, zc, ry) {
   solidAt(x, y, zc, ry, 0, .2325, 0, L, .465, D);
 }
 
+// The pilasters' mouldings ([out, up], metres): an attic base (torus, scotia, torus on a fillet) and a capital (astragal, neck, ovolo, abacus)
+const arc = (cu, cv, r, a0, a1, n = 6) => Array.from({ length: n + 1 }, (_, i) => { const a = a0 + (a1 - a0) * i / n; return [cu + r * Math.cos(a), cv + r * Math.sin(a)]; });
+const BASE = [[0, 0], ...arc(.016, .022, .022, -Math.PI / 2, Math.PI / 2), [.018, .046], ...arc(.018, .058, .012, -Math.PI / 2, -Math.PI, 4).map(([u, v]) => [u + .012 * 0, v]),
+  ...arc(.012, .068, .01, -Math.PI / 2, Math.PI / 2, 5), [.004, .078], [.004, .09], [0, .09]];
+const CAP = [[0, 0], [.004, 0], [.004, .1], ...arc(.004, .116, .016, -Math.PI / 2, Math.PI / 2), [.006, .132], [.006, .17], [.012, .17], ...arc(.012, .2, .03, -Math.PI / 2, 0, 6),
+  [.05, .2], [.054, .204], [.054, .236], [.05, .24], [.044, .24], [.044, .3], [0, .3]];
 // The gallery: the hallway's west door 27.6 opens on the east end of a narrow barrel-vaulted gallery fifteen metres long, and its far door
 // leads out of the east door 27.6, straight across the hallway from where you went in. Limestone floor and a long green runner, ochre
 // plaster walls broken by limestone pilasters into four bays, a plaster vault on a coved cornice; a frosted globe on a long rod in each bay,
@@ -233,9 +239,17 @@ defZone('hG', { music: 'hotel', ...dry, step: 'stone', grp: 'm', k: .8, exp: .34
   { const p = v.attributes.position, uv = v.attributes.uv; for (let i = 0; i < p.count; i++) uv.setXY(i, p.getX(i), RV * Math.atan2(p.getY(i) - Y - HS, p.getZ(i) - GZ)); }
   add(Vt, v, true);
   run(Pl, COVE, [X2 + .02, Z1], [X1 - .02, Z1], Y + HS, 0, 0); run(Pl, COVE, [X1 - .02, Z2], [X2 + .02, Z2], Y + HS, 0, 0);
-  for (const px of PX) for (const k of [1, -1]) { // the pilasters: plinth, shaft, astragal and capital up into the cornice, each buried a centimetre in the one below
-    const S = (w, y1, y2, d) => box(St, px - w, Y + y1, k > 0 ? Z1 - .05 : Z2 - d, px + w, Y + y2, k > 0 ? Z1 + d : Z2 + .05);
-    S(.25, 0, .28, .1); S(.2, .27, 2.625, .07); S(.215, 2.615, 2.665, .085); S(.24, 2.655, 2.8, .1);
+  for (const px of PX) for (const k of [1, -1]) { // the pilasters: a plinth, a moulded base, a fluted shaft standing off the wall on a
+    // shadow line, a moulded capital up into the cornice (each moulding wrapped round the shaft, mitred at its arrises)
+    const wz = k > 0 ? Z1 : Z2, S = (w, y1, y2, d) => box(St, px - w, Y + y1, k > 0 ? Z1 - .05 : Z2 - d, px + w, Y + y2, k > 0 ? Z1 + d : Z2 + .05);
+    S(.25, 0, .2, .1); solidAt(px, Y, wz, 0, 0, 1.4, 0, .5, 2.8, .2); // plinth; the whole pilaster solid to the plinth's depth
+    const plan = new THREE.Shape(), P2 = (x, o) => new THREE.Vector2(x, -k * o), pts = [P2(-.185, -.01), P2(-.185, .012), P2(-.2, .012), P2(-.2, .066), P2(-.196, .07)];
+    for (const fx of [-.15, -.05, .05, .15]) { pts.push(P2(fx - .025, .07)); for (let i = 1; i < 8; i++) { const t = Math.PI * i / 8; pts.push(P2(fx - .025 * Math.cos(t), .07 - .012 * Math.sin(t))); } pts.push(P2(fx + .025, .07)); } // the flutes
+    pts.push(P2(.196, .07), P2(.2, .066), P2(.2, .012), P2(.185, .012), P2(.185, -.01)); plan.setFromPoints(pts);
+    add(St, new THREE.ExtrudeGeometry(plan, { depth: 2.42, bevelEnabled: false }).rotateX(-Math.PI / 2).translate(px, Y + .19, wz));
+    const ring = (prof, y, w, d) => { const c = [[px + k * w, wz], [px + k * w, wz + k * d], [px - k * w, wz + k * d], [px - k * w, wz]]; // round the shaft, the room on the left
+      for (let i = 0; i < 3; i++) run(St, prof, c[i], c[i + 1], Y + y, i > 0, i < 2, -1); };
+    ring(BASE, .2, .2, .07); ring(CAP, 2.5, .2, .07);
   }
   const sk = pts => skirting(z, pts.map(([x, q]) => [x, Y, q]), { color: 0x4a3426 }), p0 = PX[0], p1 = PX[1], p2 = PX[2]; // room on the left of each run
   sk([[X2, GZ - .61], [X2, Z1], [p2 + .23, Z1]]); sk([[p2 - .23, Z1], [p1 + .23, Z1]]); sk([[p1 - .23, Z1], [p0 + .23, Z1]]); sk([[p0 - .23, Z1], [X1, Z1], [X1, GZ - .61]]);
@@ -251,15 +265,15 @@ defZone('hG', { music: 'hotel', ...dry, step: 'stone', grp: 'm', k: .8, exp: .34
 }
 
 // The lift lobby: the hallway's west doors 38.4 and 31.2 open on the north and south doors of one small octagonal lobby, so crossing it
-// you come out of the other door facing back up the hallway, turned round without turning. Deep green lacquered walls, a terrazzo floor with a
+// you come out of the other door facing back up the hallway, turned round without turning. Deep green lacquered panelling inlaid with brass, a terrazzo floor with a
 // brass compass, a travertine centre and a dark green border, a plaster cornice and a round opal laylight; on the east and west faces a pair of brass lift doors
 // that never open, a floor dial over each with its needle past the top floor, and a call station with one button lit.
 const LC = [360, 301], RI = 1.93;
 defZone('hL', { music: 'hotel', ...dry, step: 'tile', grp: 'm', k: .9, exp: .34, fog: [.3, .2, .12, .004], bloom: .32, wet: .4, hum: .12, box: [LC[0] - 2.7, LC[1] - 2.7, LC[0] + 2.7, LC[1] + 2.7], probe: [LC[0], Y + 1.5, LC[1]], env: [[LC[0] - RI, Y, LC[1] - RI], [LC[0] + RI, Y + 3.3, LC[1] + RI]] });
 {
   const z = zones.hL, [CX, CZ] = LC, H = 3.3, T = .7, DV = .65, D = .3, FW = 2 * RI * Math.tan(Math.PI / 8), RC = RI / Math.cos(Math.PI / 8), MT = Math.tan(Math.PI / 8);
-  const Mb = M(z, 'gelcoat', { color: 0x2f5c46, uv: [1, 1], roughness: .24, wear: 0, macro: 0 }), Sk = M(z, 'gelcoat', { color: 0x10221a, roughness: .25, wear: .2 }), Mk = M(z, 'terrazzo', { color: 0x2e4a3c }), Mc = M(z, 'travertine', { color: 0xe6d6b8 });
-  const Fl = M(z, 'terrazzo', { color: 0xd8c4a0 }), Pl = M(z, 'plaster', { color: 0xe8dcc2 }), Br = M(z, 'brass', { roughness: .28, dirt: .5 }), Bp = M(z, 'brass', { roughness: .2, dirt: .25, wear: 0 });
+  const Mb = M(z, 'lacquer', { color: 0x2a5e46, uv: [1, 1] }), Sk = M(z, 'gelcoat', { color: 0x10221a, roughness: .25, wear: .2 }), Mk = M(z, 'terrazzo', { color: 0x2e4a3c }), Mc = M(z, 'travertine', { color: 0xe6d6b8 });
+  const Fl = M(z, 'terrazzo', { color: 0xd8c4a0 }), Pl = M(z, 'plaster', { color: 0xe8dcc2 }), Br = M(z, 'brass', { roughness: .28, dirt: .5 }), Bp = M(z, 'brass', { color: 0x8c6a44, roughness: .36, dirt: .15, wear: 0 });
   const Al = M(z, 'anodised', { color: 0x8c8a84, roughness: .4 }), K = P(z, { color: 0x050403, roughness: 1 }), num = lettering(z, ['1', '2', '3', '4', '5']);
   box(Fl, CX - 2.7, Y - .2, CZ - 2.7, CX + 2.7, Y, CZ + 2.7); flats.push([CX - 2.7, CZ - 2.7, CX + 2.7, CZ + 2.7, () => Y]);
   box(Pl, CX - 2.7, Y + H, CZ - 2.7, CX + 2.7, Y + H + .2, CZ + 2.7);
@@ -271,6 +285,14 @@ defZone('hL', { music: 'hotel', ...dry, step: 'tile', grp: 'm', k: .9, exp: .34,
     const kind = k % 2 ? 0 : k % 4 ? 2 : 1, hw = kind === 2 ? .55 : .5, oh = kind === 2 ? 2.25 : 2.24, jw = FW / 2 - hw; // 1: a door to the hallway, 2: a lift
     const a = corner(k), b = corner(k + 1), at = s => [ox + (b[0] - a[0]) / FW * s, oz + (b[1] - a[1]) / FW * s]; // a point s along the face from its middle
     run(Pl, COVE, a, b, Y + H, 1, 1, MT); run(Br, STRIP, a, b, Y + 2.85, 1, 1, MT);
+    // the panelling's brass inlay, 12 mm strips standing 1.5 mm proud: a dado line at 0.95 m and, on a plain face, a frame round a
+    // tall upper and a low lower panel; a brass bead down each corner
+    const IN = (x1, y1, x2, y2) => A(Br, new THREE.BoxGeometry(x2 - x1, y2 - y1, .003).translate((x1 + x2) / 2, (y1 + y2) / 2, 0));
+    const fx = FW / 2 - .17, ex = kind ? hw + (kind === 2 ? .065 : .09) : -FW / 2; // ex: the strip stops at the door's frame or the lift's architrave
+    A(Br, new THREE.CylinderGeometry(.007, .007, H - .12, 12).translate(FW / 2, (H - .12) / 2 + .1, 0));
+    if (kind) for (const s of [-1, 1]) IN(s > 0 ? ex : -FW / 2 + .01, .944, s > 0 ? FW / 2 - .01 : -ex, .956);
+    if (!kind) { IN(-FW / 2 + .01, .944, FW / 2 - .01, .956);
+      for (const [y1, y2] of [[.22, .8], [1.1, 2.62]]) { IN(-fx, y1, fx, y1 + .012); IN(-fx, y2 - .012, fx, y2); IN(-fx, y1 + .012, -fx + .012, y2 - .012); IN(fx - .012, y1 + .012, fx, y2 - .012); } }
     if (!kind) { wall(0, FW, 0, H, -T, 0); run(Sk, SKIRT, a, b, Y - .002, 1, 1, MT); continue; }
     for (const s of [-1, 1]) wall(s * (hw + jw / 2), jw, 0, H, -T, 0);
     wall(0, 2 * hw + .02, oh, H, -T, 0); run(Sk, SKIRT, a, at(-.61), Y - .002, 1, 0, MT); run(Sk, SKIRT, at(.61), b, Y - .002, 0, 1, MT);
@@ -282,7 +304,7 @@ defZone('hL', { music: 'hotel', ...dry, step: 'tile', grp: 'm', k: .9, exp: .34,
     for (let i = 0; i < 3; i++) A(K, new THREE.PlaneGeometry(2 * hw - .02, .004).rotateX(-Math.PI / 2).translate(0, .0057, -D + .03 + i * .012)); // its grooves (dark lines 1.5 mm over its face)
     A(K, new THREE.BoxGeometry(.01, oh, .002).translate(0, oh / 2, -D + .0012)); // dark behind the meeting of the leaves
     for (const s of [-1, 1]) { const lx = s * (hw / 2 + .001), lw = hw - .002, fz = -D + .032; // the two leaves, an inlaid brass frame and rail on each
-      A(Bp, new RoundedBoxGeometry(lw, oh - .012, .03, 2, .004).translate(lx, oh / 2, -D + .017), true);
+      A(Bp, new RoundedBoxGeometry(lw, oh - .012, .03, 2, .004).translate(lx, oh / 2, -D + .017)); // world UVs: its own 0..1 stretched the brass four times up the leaf, in streaks
       const i1 = lx - lw / 2 + .06, i2 = lx + lw / 2 - .06, y1 = .12, y2 = oh - .12;
       for (const ix of [i1, i2]) A(Br, new THREE.BoxGeometry(.012, y2 - y1, .004).translate(ix, (y1 + y2) / 2, fz));
       for (const iy of [y1 + .006, 1.0, y2 - .006]) A(Br, new THREE.BoxGeometry(i2 - i1 - .012, .012, .004).translate((i1 + i2) / 2, iy, fz));

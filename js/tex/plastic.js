@@ -14,6 +14,16 @@ set('gelcoat', 1, 512, 512, .07, 0, `
   t = 1. - .2 * chalk - .08 * scr;
   h = .05 * (big - .5) * 2. + .012 * (peel - .5) * 2. + .008 * fb - .015 * scr - .02 * crk - .006 * chalk;
   r = .03 + .012 * peel + .006 * mv + .16 * chalk * (.7 + .3 * fb) + .12 * scr + .03 * crk;`);
+// Lacquered panelling (a hotel's lift lobby, a bar's back wall): many sprayed and rubbed-down coats over a close-grained panel, a deep
+// even gloss. Only a fine orange peel in the last coat, the panel's grain faintly telegraphing through it (up the panel, along v), and
+// the polish a shade duller here and there; no chalk, no blotches in the colour.
+set('lacquer', 1, 512, 512, .09, 0, `
+  float peel = gn(uv * 140., vec2(140), 4) * .6 + gn(uv * 230., vec2(230), 6) * .4; // the last coat's orange peel, 4-7 mm
+  float grain = gn(vec2(uv.x * 160., uv.y * 4.), vec2(160., 4.), 7); // close grain under the coats, running up the panel
+  float dull = ss(.55, .8, fbm(uv * 3., vec2(3), 4, 9)), mv = multi(uv, 41);
+  c = vec3(.86) * (1. + .015 * mv + .02 * (grain - .5)); t = 1.;
+  h = .006 * (peel - .5) * 2. + .004 * (grain - .5) * 2.;
+  r = .07 + .012 * peel + .04 * dull;`);
 // Hard moulded plastic (play equipment): rotomoulded polyethylene, semi-gloss, gentle sink marks and pinholes, paler and chalkier
 // where the sun has had it, polished by hands where it is gripped, and whitened along scratches where the plastic was stressed.
 set('hardPlastic', 1, 512, 512, .36, 0, `
@@ -102,6 +112,7 @@ set('glass', 1, 512, 512, .06, 0, `
 
 // materials: name, texture set, shader options (see mat.js)
 mat('gelcoat', 'gelcoat', { color: 0x3aa6c8, detail: .05, macro: .12, wear: .25, edgeCol: [.75, .82, .84] });
+mat('lacquer', 'lacquer', { detail: .02, macro: .02, grime: .05, wear: 0 });
 mat('hardPlastic', 'hardPlastic', { color: 0xe8b820, detail: .3, macro: .1, wear: .3, edgeCol: [.85, .85, .82] });
 mat('pvc', 'pvc', { color: 0xff8fb0, detail: .06, macro: .08 });
 mat('powderCoat', 'powderCoat', { color: 0xb83228, detail: .08, macro: .04, grime: .12, wear: .2, edgeCol: [.6, .6, .58] });
