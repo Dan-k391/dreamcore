@@ -251,7 +251,7 @@ if (agRows) { const t0 = performance.now(), t = new THREE.DataTexture(await agDa
 bake({ probe: V(-200, 3, -12) }, [seaMat], 1);
 for (let pass = 0; pass < 2; pass++) for (const z of Object.values(zones)) { // second pass picks up the first bounce, including through doorways
   if (z.mats.length) bake(z); // the dark passages have nothing to light
-  if (pass) for (const w of ponds) if (w.zone === z) w.drawPlan();
+  if (pass && z.mats.length) for (const w of ponds) w.drawPlan(z); // each pool's plan, the part in this room
 }
 env0.dispose(); performance.mark('load: zones baked'); // every material has its bake's now
 const zone0 = Object.values(zones).find(z => inR(camera.position.x, camera.position.z, ...z.box)) || zones.bA;

@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { Reflector } from 'three/addons/objects/Reflector.js';
 import { Refractor } from 'three/addons/objects/Refractor.js';
 import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
-import { renderer, scene, camera, uTime, V, quadVS, WY, zones } from './core.js';
+import { renderer, scene, camera, uTime, V, quadVS, WY, zones, inR } from './core.js';
 import { wn0, wn1 } from './tex.js';
 import { causticsGLSL } from './mat.js';
 import { colliders, pools, floorH, seeThrough } from './build.js';
@@ -210,13 +210,15 @@ const ponds = pools.map(([x1, z1, x2, z2, floor, zid, seen, scatter]) => {
   const w = new THREE.Mesh(g, new THREE.ShaderMaterial({ uniforms: U, vertexShader: waterVS, fragmentShader: waterFS, transparent: true }));
   Object.assign(w, { lens, mirror, seen, rect, floor, q: { pending: [], last: null }, sheet: S, tileU: zones[zid].tileU, zone: zones[zid], twin: S.twin });
   S.ponds.push(w);
-  w.drawPlan = () => { // once, while the zone's lamps are lit for its bake; caustics off, since the plan is a still and they move. Into this pool's part of the sheet's plan
-    const caus = w.tileU.uCaus.value, target = renderer.getRenderTarget(), R = S.rect, k = S.ppm, u0 = Math.round((x1 - R.x) * k), v0 = Math.round((R.w - z2) * k);
-    planRT.viewport.set(u0, v0, Math.round((x2 - R.x) * k) - u0, Math.round((R.w - z1) * k) - v0); planRT.scissor.copy(planRT.viewport); planRT.scissorTest = true;
-    w.tileU.uCaus.value = 0; sky.visible = false; renderer.setRenderTarget(planRT); renderer.render(scene, planCam);
+  w.drawPlan = z => { // once per zone, while that zone's lamps are lit for its bake: the part of this pool that lies in its room, into this pool's part of the sheet's plan
+    const c1 = Math.max(x1, z.box[0]), d1 = Math.max(z1, z.box[1]), c2 = Math.min(x2, z.box[2]), d2 = Math.min(z2, z.box[3]); if (c1 >= c2 || d1 >= d2) return; // so where a pool runs on into the next room (a channel into a pool hall) it is drawn under that room's lamps, as the live view shows it
+    const tu = Object.values(zones).filter(q => q.tileU), caus = tu.map(q => q.tileU.uCaus.value), target = renderer.getRenderTarget(), R = S.rect, k = S.ppm, u = x => Math.round((x - R.x) * k), v = z => Math.round((R.w - z) * k);
+    planRT.viewport.set(u(x1), v(z2), u(x2) - u(x1), v(z1) - v(z2)); planRT.scissor.set(u(c1), v(d2), u(c2) - u(c1), v(d1) - v(d2)); planRT.scissorTest = true;
+    for (const q of tu) q.tileU.uCaus.value = 0; sky.visible = false; renderer.setRenderTarget(planRT); renderer.render(scene, planCam); // caustics off, since the plan is a still and they move
     planRT.viewport.set(0, 0, planRT.width, planRT.height); planRT.scissor.copy(planRT.viewport); planRT.scissorTest = false;
-    w.tileU.uCaus.value = caus; sky.visible = true; renderer.setRenderTarget(target);
+    tu.forEach((q, i) => q.tileU.uCaus.value = caus[i]); sky.visible = true; renderer.setRenderTarget(target);
   };
+  for (let x = x1 + .05; x < x2; x += .1) for (let z = z1 + .05; z < z2; z += .1) console.assert(Object.values(zones).some(q => q.mats.length && inR(x, z, ...q.box)), 'a pool reaches past every room: its plan has a hole there', x, z); // drawPlan's parts cover it
   w.tileU.uSim.value = sim[0].texture; w.tileU.uPond.value = S.rect; w.tileU.uPx.value = px;
   w.rotation.x = -Math.PI / 2; w.position.set((x1 + x2) / 2, WY, (z1 + z2) / 2); scene.add(w);
   const proxy = new THREE.Mesh(new THREE.BoxGeometry(x2 - x1 + 3, z2 - z1 + 3, 3.05).translate(0, 0, 1.475), proxyMat); // in the water's frame: z is up

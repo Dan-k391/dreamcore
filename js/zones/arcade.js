@@ -13,7 +13,7 @@ poolMats(zones.pC);
 { // flooded arcade x[9.4,21] z[-14,-10]: arched niches, ankle-deep water running on into the night hall's pool
   const C = zones.pC.tile, arches = [10.9, 13.7, 16.5, 19.3].map(c => ['arch', c, 1.8, 2.5]);
   box(C, 9.4, -.5, -14.8, 20.6, -.3, -9.2); box(C, 9.4, 3.6, -14.8, 20.6, 3.9, -9.2); // everything stops at 20.6, where the night hall's wall begins: shared faces flicker
-  box(C, 20.6, -.6, -14, 24, -.3, -10); // the channel's floor through the night hall's deck, as wide as its gap in the deck; its end is the riser down to the pool's first step (-.6)
+  // the channel's floor on from 20.6 to the steps is built by nighthall.js: it lies in that room, so it takes that room's light and reflections
   slab(C, 'x', -14.4, .4, 9.4, 20.6, -.5, 3.6, arches); box(C, 9.4, -.5, -14.8, 20.6, 3.6, -14.4);
   slab(C, 'x', -10, .4, 9.4, 20.6, -.5, 3.6, arches); box(C, 9.4, -.5, -9.6, 20.6, 3.6, -9.2);
   // two recessed 600 troffers; power .34 of the old 60 because the kit scales it by (height / 2.7)^2, so the light is unchanged

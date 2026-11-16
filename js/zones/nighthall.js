@@ -16,6 +16,7 @@ poolMats(zones.pN);
 { // night hall x[21,45] z[-24,0], 7m tall: dark pool x[24,42] z[-21,-3], glowing pill windows and portholes, a water slide
   const T = zones.pN.tile, z = zones.pN;
   box(T, 20.6, -1.4, -24.4, 24, 0, -14); box(T, 20.6, -1.4, -10, 24, 0, .4); box(T, 42, -1.4, -24.4, 45.4, 0, .4); box(T, 24, -1.4, -24.4, 42, 0, -21); box(T, 24, -1.4, -3, 42, 0, .4); // deck
+  box(T, 20.6, -.6, -14, 24, -.3, -10); // the arcade's channel floor through the deck to the first step's riser: this room's tile, lit and reflecting as this room, so the water over the join reads as one (in the arcade's tile the floor turned at x 24)
   box(T, 24, -1.4, -21, 42, -1.2, -3); box(T, 24, -1.2, -14, 24.5, -.6, -10); box(T, 24.5, -1.2, -14, 25, -.9, -10); // basin, steps down from the channel
   box(T, 20.6, 7, -24.4, 45.4, 7.3, .4); // ceiling
   box(T, 20.6, 0, -24.4, 21, 7, -14); box(T, 20.6, 0, -10, 21, 7, .4); box(T, 20.6, 3.6, -14, 21, 7, -10); // west wall, opening to the arcade
