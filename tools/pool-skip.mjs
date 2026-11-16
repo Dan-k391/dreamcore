@@ -23,6 +23,11 @@ async function page(o) {
     if (w.kind === 'door' && (sees.has(w.a) || sees.has(w.b))) {
       const at = s => w.ax ? [w.c, w.at + s] : [w.at + s, w.c], d = w.ax ? [0, 1] : [1, 0];
       for (const k of [1, -1]) paths.push({ name: `${w.a}|${w.b} ${k > 0 ? '>' : '<'}`, at: at(-3 * k), yaw: face(d[0] * k, d[1] * k), keys: k > 0 ? ['KeyW', 'ShiftLeft'] : ['KeyW', 'ShiftLeft', 'Space'], n: 70 });
+      for (const k of [1, -1]) if (own.has(k > 0 ? w.b : w.a)) { // zoom held, then released (the view widens within a frames); the aspect widened the same way
+        const z = i => i >= 8 && i < 40, ay = face(d[0] * k, d[1] * k);
+        paths.push({ name: `${w.a}|${w.b} zoom`, at: at(-3 * k), yaw: ay, keys: [], n: 70, zoom: z });
+        paths.push({ name: `${w.a}|${w.b} zoom off-axis`, at: at(-1.5 * k), yaw: ay + .6, keys: [], n: 70, zoom: z });
+        paths.push({ name: `${w.a}|${w.b} aspect`, at: at(-1.5 * k), yaw: ay + .6, keys: [], n: 50, aspect: i => i >= 8 && i < 30 ? .6 : 1 }); }
       for (const k of [1, -1]) if (own.has(k > 0 ? w.b : w.a)) { // outside a pool room's opening, facing away, then turning
         paths.push({ name: `${w.a}|${w.b} spin`, at: at(-1.5 * k), yaw: face(-d[0] * k, -d[1] * k), keys: [], n: 60, turn: () => .12 });
         paths.push({ name: `${w.a}|${w.b} flick`, at: at(-1.5 * k), yaw: face(-d[0] * k, -d[1] * k), keys: [], n: 20, turn: i => i === 8 ? Math.PI : 0 });
@@ -36,10 +41,11 @@ async function page(o) {
   const poison = () => { const c = r.getClearColor(new dev.THREE.Color()), al = r.getClearAlpha(); r.setClearColor(magenta, 1);
     for (const t of pair) { const s = t.scissorTest; t.scissorTest = false; r.setRenderTarget(t); r.clear(); t.scissorTest = s; } r.setRenderTarget(null); r.setClearColor(c, al); };
   let captures = 0; const draw = r.render; r.render = function (s, c) { if (s === dev.scene && c !== camera) captures++; return draw.call(this, s, c); };
-  let frames = 0, skipped = 0; const bad = [];
+  const aspect0 = camera.aspect; let frames = 0, skipped = 0; const bad = [];
   try { for (const p of paths) {
     dev.reset(p.at[0], p.at[1], p.yaw); for (const k of p.keys) dev.key(k, true); poison();
     for (let i = 0; i < p.n; i++) {
+      if (p.zoom) dev.key('KeyC', p.zoom(i)); if (p.aspect) { camera.aspect = aspect0 * p.aspect(i); camera.updateProjectionMatrix(); }
       if (p.turn) camera.rotateOnWorldAxis(UP, p.turn(i));
       captures = 0; dev.step(1); gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, a); const c = captures; // the game's frame
       waterViews.cull = false; captures = 0; composer.render(0); gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, b); waterViews.cull = true; // the same, every picture whole
@@ -48,7 +54,7 @@ async function page(o) {
       if (m > 2) { const q = bad.find(q => q.name === p.name) || bad[bad.push({ name: p.name, frames: [], max: 0, px: 0 }) - 1]; q.frames.push(i + (c < captures ? '*' : '')); q.max = Math.max(q.max, m); q.px = Math.max(q.px, n); }
       poison(); await new Promise(g => requestAnimationFrame(g));
     }
-    for (const k of p.keys) dev.key(k, false);
+    for (const k of p.keys) dev.key(k, false); dev.key('KeyC', false); camera.aspect = aspect0; camera.updateProjectionMatrix();
   } } finally { r.render = draw; waterViews.cull = true; }
   return { paths: paths.length, frames, skipped, bad, secs: +((performance.now() - t0) / 1000).toFixed(1) };
 }

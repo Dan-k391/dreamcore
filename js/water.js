@@ -49,13 +49,13 @@ const wideCam = new THREE.PerspectiveCamera(), gl = renderer.getContext(), P = n
 // while the eye has moved under 15 cm since (a run at 60 fps: 10 cm a frame). The proxy is that large because an edge near the eye (a lintel mid-jump) sweeps a wide band of
 // a far room for a few cm of movement: with 1 m it reported hidden while the far end of the pool hall showed under a lintel. Nothing is
 // trusted while the eye is within 40 cm of a solid (the body is 30 cm round): jumping into a door head opens metres of a far room per cm. A result
-// covers only what was on screen: unless the whole proxy was, the view must not have turned or widened since. Anything else is
+// covers only what was on screen: unless the whole proxy was, the view must not have turned, zoomed or changed shape since (even narrower: an edge sliver under a pixel moves with the projection). Anything else is
 // unknown, which counts as seen. Rendered in one task (dev.step(n), tools/shots.mjs) no result is ever ready, so nothing is skipped.
 const hidden = (w, c) => {
   const e = w.q.last;
   if (!waterViews.cull || !e?.hidden || e.epoch !== epoch || frameNo - e.frame > 4 || P.setFromMatrixPosition(c.matrixWorld).distanceTo(e.pos) > .15) return false;
   const p = c.projectionMatrix.elements;
-  return (e.inside || (e.quat.angleTo(c.quaternion) < 1e-5 && p[0] >= e.p0 && p[5] >= e.p5))
+  return (e.inside || (e.quat.angleTo(c.quaternion) < 1e-5 && p[0] === e.p0 && p[5] === e.p5))
     && !colliders.some(k => Math.hypot(Math.max(k[0] - P.x, 0, P.x - k[2]), Math.max(k[4] - P.y, 0, P.y - k[5]), Math.max(k[1] - P.z, 0, P.z - k[3])) < .4);
 };
 const project = (lo, hi, c, r) => { // widen r (u0, v0, u1, v1 in the wide pictures) by the box lo..hi seen from c; false if any of it lies behind the eye

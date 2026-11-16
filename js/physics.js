@@ -19,7 +19,7 @@ const wakes = []; // [pond, x, z, size]: ripples the loose things leave this ste
 let ms = 0; // milliseconds the last frame's steps took
 
 // ---------- shadows: the shadow maps are drawn only when asked; a body that has moved a centimetre asks the lights that reach it ----------
-// It asks with shadow.loose, not needsUpdate: such a map is redrawn from its cache, a copy (colour and depth) of the map with the
+// A lamp asks with shadow.loose, not needsUpdate (the sun does ask with needsUpdate: no cache for its big map): such a map is redrawn from its cache, a copy (colour and depth) of the map with the
 // loose things left out, taken whenever the map is drawn in full. Where a loose thing was when the map was last drawn and where it is
 // now, the cache is copied back; then the loose things are drawn over it. The depth test keeps the nearest caster whatever the order,
 // and a loose thing that did not move draws what is already there, so this is the full redraw to the bit, at the loose things' cost.
@@ -27,7 +27,7 @@ const _p = new THREE.Vector3();
 function reshade(x, y, z, r) {
   for (const l of lights) if (l.intensity > 0 && l.position.distanceTo(_p.set(x, y, z)) < l.distance + r) { l.shadow.loose = true; renderer.shadowMap.needsUpdate = true; }
   if (sun.intensity > 0) { const c = sun.shadow.camera; _p.set(x, y, z).applyMatrix4(c.matrixWorldInverse);
-    if (_p.x > c.left - r && _p.x < c.right + r && _p.y > c.bottom - r && _p.y < c.top + r) { sun.shadow.loose = true; renderer.shadowMap.needsUpdate = true; } }
+    if (_p.x > c.left - r && _p.x < c.right + r && _p.y > c.bottom - r && _p.y < c.top + r) { sun.shadow.needsUpdate = renderer.shadowMap.needsUpdate = true; } } // the sun has no cache (64 MB, saves 0.04 ms): a full redraw
 }
 const SM = renderer.shadowMap, drawShadows = SM.render, gl = renderer.getContext(), looseRoot = new THREE.Object3D(), cache = new Map(), noClear = () => {};
 const _s = new THREE.Sphere(), _m = new THREE.Matrix4(), _v = new THREE.Vector4();
@@ -53,6 +53,7 @@ const pose = o => [o.visible, o.count, o.instanceMatrix?.version, ...o.matrixWor
 SM.render = function (ls, scene, cam) {
   if (!SM.enabled || !SM.needsUpdate) return;
   const target = renderer.getRenderTarget(), face = renderer.getActiveCubeFace(), level = renderer.getActiveMipmapLevel(); // the blits rebind: put back what three was drawing to
+  if (sun.shadow.needsUpdate && ls.includes(sun)) { drawShadows.call(SM, [sun], scene, cam); SM.needsUpdate = true; } // the sun in full, loose things and all, as before the cache
   const all = ls.filter(l => l.shadow.needsUpdate || l.shadow.loose), full = all.filter(l => l.shadow.needsUpdate || !cache.has(l.shadow)), kids = looseRoot.children;
   if (full.length) { // in full: everything but the loose things, kept
     const shown = kids.map(m => m.visible); kids.forEach(m => m.visible = false);
