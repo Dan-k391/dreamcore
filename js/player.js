@@ -39,9 +39,10 @@ addEventListener('mousemove', e => { // mouse look: captured pointer where the b
   const m = free ? 60 : 250, cl = v => Math.max(-m, Math.min(m, v)); // drop the one-event jumps browsers report on re-entry or under capture
   turn(cl(e.movementX) * .0022 * Math.min(72, camera.fov) / 72, cl(e.movementY) * .0022 * Math.min(72, camera.fov) / 72); // slower while zoomed in, the same while running widens the view
 });
-addEventListener('keydown', e => { if (paused()) return; keys[e.code] = 1; if (e.code === 'Space') e.preventDefault(); if (e.code === 'KeyM') sfx?.mute(); });
+addEventListener('keydown', e => { if (paused()) return; keys[e.code] = 1; if (e.code === 'Space' || e.ctrlKey && /^Key[WASDEC]$/.test(e.code)) e.preventDefault(); if (e.code === 'KeyM') sfx?.mute(); });
 addEventListener('keyup', e => keys[e.code] = 0);
-document.getElementById('s').textContent = 'click to enter  ·  wasd walk  ·  mouse look  ·  space jump (hold to hop)  ·  shift run  ·  c zoom  ·  e open  ·  m mute  ·  v noclip';
+addEventListener('beforeunload', e => { if (keys.ControlLeft || keys.ControlRight) e.preventDefault(); }); // crouching forward is Ctrl+W, which a page cannot stop: the browser asks before it closes the tab
+document.getElementById('s').textContent = 'click to enter  ·  wasd walk  ·  mouse look  ·  space jump (hold to hop)  ·  shift run  ·  ctrl crouch  ·  c zoom  ·  e open  ·  m mute  ·  v noclip';
 let zone = zone0; // the zone you are in
 
 // The body: an upright cylinder of radius R from the soles (feet) up 1.75 m. A solid blocks it sideways where it overlaps the body
@@ -84,7 +85,7 @@ console.assert(floorH(0, -12) === -1.2 && floorH(0, -6.2) === -.3 && floorH(15, 
   && (q => collide(q) && q.z > 1.29)(V(5, 0, .6)) && Object.values(zones).every(z => inR(z.probe.x, z.probe.z, ...z.box)) && emitters.every(e => inR(e.p.x, e.p.z, ...e.zone.box)), 'level self-check failed');
 
 const vel = new THREE.Vector2(), UP = new THREE.Vector3(0, 1, 0);
-let stride = 0, foot = 0, feet = floorH(camera.position.x, camera.position.z), vy = 0, air = false, grip = false, drop = 0, simT = 0, hitP = 0, splashP = false, fallP = 0, coy = 0, buf = 0, wet = false, spaceWas = 0, lag = 0, dip = 0, dipV = 0; // feet: height of the player's soles; coy, buf: jump grace times; lag, dip: the eye's easing and landing dip
+let stride = 0, foot = 0, feet = floorH(camera.position.x, camera.position.z), vy = 0, air = false, grip = false, drop = 0, simT = 0, hitP = 0, splashP = false, fallP = 0, coy = 0, buf = 0, wet = false, spaceWas = 0, lag = 0, dip = 0, dipV = 0, duck = 0; // feet: height of the player's soles; coy, buf: jump grace times; lag, dip: the eye's easing and landing dip
 // Noclip (V, the owner's cheat): no gravity, solids, water, ladders or passages; you fly where you look, Space up, X down, 12 m/s (30 running).
 // Loose things and footsteps ignore a flying body. Turning it off somewhere you couldn't stand (inside a solid or a floor, above a ceiling or a
 // roof, or outside every zone) puts you back where it was turned on; anywhere else gravity takes over from where you are.
@@ -101,7 +102,7 @@ const setFly = on => { const p = camera.position;
 };
 const place = (x, z, yaw, pitch) => { // teleport: stand at (x, z) facing that way, at rest
   camera.position.x = x; camera.position.z = z; camera.rotation.set(pitch, yaw, 0, 'YXZ');
-  feet = floorH(x, z); camera.position.y = feet + 1.62 + eye.lift; vy = lag = dip = dipV = fvy = 0; vel.set(0, 0); air = grip = fly = false; cue.hidden = true; // the eye height too: the lamps are chosen from it before a frame runs (a room 200 m down got ground level's)
+  feet = floorH(x, z); camera.position.y = feet + 1.62 + eye.lift; vy = lag = dip = dipV = fvy = duck = 0; vel.set(0, 0); air = grip = fly = false; cue.hidden = true; // the eye height too: the lamps are chosen from it before a frame runs (a room 200 m down got ground level's)
 };
 // ---------- doors (props/metalwork.js door() with o.openable): E swings the one you look at, within reach, open or shut ----------
 // The latch is drawn first (the open sound's latch and hinge lead the motion), then the leaf swings over SWING s, eased in and out like a
@@ -145,7 +146,8 @@ const frame = dt => { // one game frame of dt seconds: the loop below passes the
   const cl01 = v => Math.max(0, Math.min(1, v)), fov = k('KeyC') ? 22 : 72 + 4 * cl01((sp - 2.85) / 3.15) + 3 * cl01((sp - 6) / (TOP - 6)); // hold C to zoom in; running widens the view up to 4 degrees, hop speed 3 more
   if (Math.abs(camera.fov - fov) > .05) { camera.fov += (fov - camera.fov) * Math.min(1, dt * (fov < 70 || camera.fov < 70 ? 12 : 3)); camera.updateProjectionMatrix(); }
   const pool = !!zone.tile, deep = (pool || zone.wade) && feet < -.5; // only the pool rooms have water below 0; elsewhere a low floor is just a low floor
-  const speed = (k('ShiftLeft') ? 6 : 2.85) * (deep ? .55 : 1); // wading is slower
+  const low = !fly && !grip && (k('ControlLeft') | k('ControlRight')); // hold Ctrl to crouch
+  const speed = (low ? 1.4 : k('ShiftLeft') ? 6 : 2.85) * (deep ? .55 : 1); // wading is slower
   camera.rotateOnWorldAxis(UP, (k('ArrowLeft') - k('ArrowRight')) * dt * 2.2);
   const yaw = eu.setFromQuaternion(camera.quaternion).y, sn = Math.sin(yaw), cs = Math.cos(yaw), ix = k('KeyD') - k('KeyA'), iy = (k('KeyW') | k('ArrowUp')) - (k('KeyS') | k('ArrowDown'));
   // vel is in the world, so turning in the air doesn't swing the jump round; diagonals are no faster; quick to start (90% in 0.23 s), quicker to stop
@@ -217,7 +219,9 @@ const frame = dt => { // one game frame of dt seconds: the loop below passes the
   if (landed && hit > 2.2) dipV -= Math.min(hit, 13) * (vy > 0 ? .1 : .2); // the same dip for the same drop as under the old gravity (×0.3 at 11); half on a hop, so a chain doesn't thump
   for (let t = dt; t > 1e-6; t -= 1 / 60) { const h = Math.min(t, 1 / 60); dipV += (-150 * dip - 24.5 * dipV) * h; dip += dipV * h; } // critically damped
   if (!air) stride += Math.PI * sp * dt / (.55 + .25 * sp);
-  p.y = feet + 1.62 + eye.lift + lag + dip - Math.cos(2 * stride) * .008 * Math.min(1.4, sp / 2.85);
+  // crouching brings the eye down 0.6 m, in a pool no nearer the water than a swimmer's (18 cm). shortcut: the body stays 1.75 m tall for solids, so nothing is ducked under; shrink it, and re-check the level's seal, when a place needs crawling
+  duck += ((low ? Math.max(0, Math.min(.6, pools.some(q => inR(p.x, p.z, q[0], q[1], q[2], q[3])) ? feet + 1.62 - WY - .18 : .6)) : 0) - duck) * Math.min(1, dt * 10);
+  p.y = feet + 1.62 + eye.lift - duck + lag + dip - Math.cos(2 * stride) * .008 * Math.min(1.4, sp / 2.85);
   const f = Math.floor(stride / Math.PI); // one footfall per bob, one on landing, one on entering water
   Object.assign(bod, { feet, sp, step: f !== foot && !air && sp > .5, foot: f & 1, run: sp > 4.2, landed, hit, jumped, splash, fall: vy, deep, grip, fly, air }); // for the footsteps (sound.js)
   foot = f;

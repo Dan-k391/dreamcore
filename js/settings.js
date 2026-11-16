@@ -36,7 +36,7 @@ addEventListener('keydown', e => {
   if (e.code !== 'KeyP') return;
   if (o.style.display !== 'none') o.click();
   else if (document.pointerLockElement) document.exitPointerLock();
-  else { o.style.display = ''; for (const c of ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE', 'KeyC', 'ShiftLeft', 'ShiftRight', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']) dispatchEvent(new KeyboardEvent('keyup', { code: c })); } // let go of held keys, as Esc does
+  else { o.style.display = ''; for (const c of ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE', 'KeyC', 'ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']) dispatchEvent(new KeyboardEvent('keyup', { code: c })); } // let go of held keys, as Esc does
 });
 
 // ---------- fps: real frame intervals from requestAnimationFrame, the number 4 times a second, the last ~8 s of frame times as a line ----------
