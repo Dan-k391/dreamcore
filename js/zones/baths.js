@@ -152,7 +152,9 @@ const Glow = M(null, 'opalPanel');
   for (const s of [8.4, 13.2, 18.8, 23.6]) for (const x of [11.5, 28.5]) lit(z, X0 + x, H - .1, Z0 + s, 380, [X0 + x, 0, Z0 + s], .95, 26, 0xffd6a4);
   lit(z, X0 + 40.5, H - .1, Z0 + 16, 90, [X0 + 43.5, GY, Z0 + 16], 1.3, 16, 0xffd29c);
   const aN = ang(40, 32), aS = ang(40, 0);
-  for (let i = 0; i < 18; i++) { const a = aN + (aS - aN) * (i + .5) / 18; fixture(z, X0 + CX + (R - .56) * Math.sin(a), H - .12, Z0 + 16 + (R - .56) * Math.cos(a), 3.4); } // in the cove
+  const cp = a => [X0 + CX + (R - .52) * Math.sin(a), Z0 + 16 + (R - .52) * Math.cos(a)]; // the cove's strip, just off the fascia's back, out of sight behind it
+  for (let i = 0; i < 18; i++) { const [x0, z0] = cp(aN + (aS - aN) * i / 18), [x1, z1] = cp(aN + (aS - aN) * (i + 1) / 18);
+    fixture(z, (x0 + x1) / 2, H - .19, (z0 + z1) / 2, 2.8, [(x1 - x0) / 2, 0, (z1 - z0) / 2]); } // 18 lines end to end round the arc: one even wash down the wall
   for (const x of [16, 22, 28]) { poolLight(z, X0 + x, -.62, Z0 + 9, 0, { power: 7 }); poolLight(z, X0 + x, -.62, Z0 + 23, PI, { power: 7 }); }
 }
 
