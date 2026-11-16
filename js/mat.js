@@ -88,10 +88,11 @@ const fixPars = `
     vec3 agTap(float t, vec2 c) { return texture2D(tFix, (uAG2.xy + vec2(mod(t, uAG1.w), floor(t / uAG1.w)) * uAG1.xz + c + .5) * uAG2.zw).rgb; }
     float agOpen(vec3 p, vec3 n) {
       vec3 g = (p + n * .3 - uAG0.xyz) * uAG0.w, c = clamp(g, vec3(0.), uAG1.xyz - 1.); // .3 m off the surface: the cells beside it, not in it
-      float k = floor(c.y), f = c.y - k, k1 = min(k + 1., uAG1.y - 1.);
-      vec3 P = mix(agTap(2. * k, c.xz), agTap(2. * k1, c.xz), f), N = mix(agTap(2. * k + 1., c.xz), agTap(2. * k1 + 1., c.xz), f);
-      float a = dot(n * n, mix(N, P, step(0., n)));
-      return mix(a, 1., clamp(length(g - c) - 1., 0., 1.)); } // past the grid's edge: the plain capture
+      float e = length(g - c); if (e > 2.) return 1.; float k = floor(c.y), f = c.y - k, k1 = min(k + 1., uAG1.y - 1.); // well past the edge: plain, no reads
+      vec3 n2 = n * n, sP = step(0., n); float wP = dot(n2, sP), a = 0.; // a wall, floor or ceiling faces one side only: skip the other side's two reads
+      if (wP > 1e-3) a += dot(n2 * sP, mix(agTap(2. * k, c.xz), agTap(2. * k1, c.xz), f));
+      if (wP < .999) a += dot(n2 * (1. - sP), mix(agTap(2. * k + 1., c.xz), agTap(2. * k1 + 1., c.xz), f));
+      return mix(a, 1., clamp(e - 1., 0., 1.)); } // past the grid's edge: the plain capture
   #endif
   #ifdef NL
     uniform vec4 uLamp[NL], uFixT[NL]; uniform vec3 uLampCol; uniform float uFixBase;
