@@ -8,9 +8,9 @@ import { V, WY, zones, defZone } from '../core.js';
 import { M, P, poolMats } from '../mat.js';
 import { flats, pools, rings, loose, add, block, box, solid, round, turned, put, solidAt, flight, lit, fixture, portal, RoundedBoxGeometry } from '../build.js';
 import { poolLadder, railing, drain, door } from '../props/metalwork.js';
-import { poolLight, opalPanel } from '../props/lights.js';
+import { poolLight, opalPanel, sconce } from '../props/lights.js';
 import { mallBench } from '../props/garden.js';
-import { swimRing, beachBall } from '../props/play.js';
+import { swimRing, ringParts, beachBall } from '../props/play.js';
 
 const PI = Math.PI, X0 = -1400, Z0 = 1400, H = 9.6; // the hall's south-west inside corner; its ceiling
 // The curved east wall: an arc through (40, 0), (45, 16), (40, 32) (local x, z) about (CX, 16); the gallery runs inside it from radius RI
@@ -22,7 +22,7 @@ const poolFloor = (x, z) => {
   if (x < SC[0]) { const r = Math.hypot(x - SC[0], z - SC[1]); if (r > SR) return 0; for (const [r0, y] of STEP) if (r > r0) return y; return -1.2; }
   return x < 22 ? -1.2 : x < 26 ? -1.2 - .23 * (x - 22) : -2.12;
 };
-defZone('pB', { music: 'pool', amb: { water: 1, drips: .7, verb: [0, .25, 1] }, step: 'tile', grp: 'r', k: .5, exp: .3, fog: [.2, .15, .1, .0006], tint: [1.02, 1, .97], sat: 1.04, bloom: .32, shaft: 0, hum: 0, water: 1, wet: .8,
+defZone('pB', { music: 'pool', amb: { water: 1, drips: .7, verb: [0, .25, 1] }, step: 'tile', grp: 'r', k: .3, exp: .32, fog: [.2, .15, .1, .0006], tint: [1.02, 1, .97], sat: 1.04, bloom: .32, shaft: 0, hum: 0, water: 1, wet: .8,
         box: [X0 - .4, Z0 - .4, X0 + 45.6, Z0 + 32.4], probe: [X0 + 20, 3, Z0 + 16], env: [[X0 - .4, -2.2, Z0 - .4], [X0 + 45, H, Z0 + 32.4]], band: -99, bandCol: [1, 1, 1], shimmer: .3, caus: .5 });
 defZone('pE', { music: 'pool', amb: { water: .35, drips: .2, verb: [0, .7, .3] }, step: 'tile', grp: 'r', k: .7, exp: .32, fog: [.3, .22, .14, .003], tint: [1.02, 1, .96], sat: 1, bloom: .3, shaft: 0, hum: 0, water: .3, wet: .4,
         box: [X0 - 9.7, Z0 + 14.5, X0 - .4, Z0 + 24.3], probe: [X0 - 8.2, 1.5, Z0 + 19], env: [[X0 - 9.4, 0, Z0 + 14.8], [X0 - .4, 3.2, Z0 + 24]] });
@@ -108,15 +108,19 @@ const Glow = M(null, 'opalPanel');
     for (const e of [-1, 1]) { K(Al, 3, H - .004, s + e * .25 - (e > 0 ? .02 : 0), 37, H - .0015, s + e * .25 + (e > 0 ? 0 : .02)); }
   }
   // the light line where the ceiling meets the curved wall: a 30 cm slot of opal round the arc
-  add(Glow, lathe([[R - .3, H - .002], [R, H - .002]], CX, 16, aN, aS - aN)); // a profile running outward faces down
+  // the cove: a tiled fascia hung 60 cm off the wall, 42 cm deep, its lip a rounded teal nosing; the strip on its back faces the wall
+  const cv = (prof, m = T) => add(m, lathe(prof, CX, 16, aN, aS - aN), true), F = R - .6;
+  cv([[F, H], [F, H - .38]]); cv([[F + .05, H - .38], [F + .05, H]]); // its face (into the hall) and back
+  cv([[F, H - .38], [F - .008, H - .395], [F + .004, H - .42], [F + .025, H - .425], [F + .046, H - .42], [F + .058, H - .395], [F + .05, H - .38]].reverse(), Bd); // the lip
+  add(Glow, lathe([[F + .052, H - .3], [F + .052, H - .08]], CX, 16, aN, aS - aN)); // climbing: faces out, at the wall
 }
 
 { // ---------- the gallery along the curved wall, and the stair up to it along the south wall ----------
   const pts = [...arcPts(RI, 1.6, 32, 64), ...arcPts(R, 32, 1.6, 64)];
   add(T, flat(pts, GY)); add(T, flat(pts, GY - .4, false));
   const a1 = ang(arcX(RI, 32), 32), a2 = ang(arcX(RI, 1.6), 1.6);
-  add(T, lathe([[RI, GY], [RI, GY - .4]], CX, 16, a1, a2 - a1), true); // its fascia
-  add(Bd, lathe([[RI - .002, GY - .12], [RI - .002, GY - .17]], CX, 16, a1, a2 - a1), true); // the frieze carried along it
+  add(Bd, lathe([[RI, GY], [RI, GY - .4]], CX, 16, a1, a2 - a1), true); // its fascia, teal
+  add(Mo, lathe([[RI - .002, GY - .12], [RI - .002, GY - .17]], CX, 16, a1, a2 - a1), true); // the frieze carried along it
   for (let i = 0; i < 24; i++) { const a = a1 + (a2 - a1) * (i + .5) / 24, c = (R + RI) / 2, h = c * Math.sin((a2 - a1) / 48) + .1;
     turned(X0 + CX + c * Math.sin(a), Z0 + 16 + c * Math.cos(a), (R - RI) / 2, h, a - PI / 2, GY - .4, GY); }
   B(T, 36.2, GY - .4, 0, 40.6, GY, 1.6); // the landing at the stair's head (its far end runs on behind the curved wall)
@@ -136,20 +140,20 @@ const Glow = M(null, 'opalPanel');
   const r = 7.5 / (2 * PI); // 7.5 m round: a whole number of the mosaic's 0.5 m sheets, so no seam
   const cove = Array.from({ length: 11 }, (_, i) => { const t = 1.3 * i / 10; return [r + .554 * (1 - Math.cos(t)), H - .55 + .574 * Math.sin(t)]; });
   for (const x of [9, 17, 25, 33]) for (const zc of [4.4, 27.6]) {
-    add(T, lathe([[1.32, 0], [1.32, .24], [1.31, .272], [1.29, .292], [1.26, .3], [r, .3]], x, zc, 0, 2 * PI, 96, 8), true);
+    add(Bd, lathe([[1.32, 0], [1.32, .24], [1.31, .272], [1.29, .292], [1.26, .3], [r, .3]], x, zc, 0, 2 * PI, 96, 8), true);
     add(Mo, lathe([[r, .3], [r, H - .55]], x, zc, 0, 2 * PI, 120, 7.5), true);
-    add(Mo, lathe(cove, x, zc, 0, 2 * PI, 120, 7.5), true);
+    add(Bd, lathe(cove, x, zc, 0, 2 * PI, 120, 7.5), true);
     for (const y of [2.4, H - .62]) add(Bd, lathe([[r + .002, y], [r + .002, y + .05]], x, zc, 0, 2 * PI, 120, 7.5), true);
     round(X0 + x, Z0 + zc, 1.32, 0, .3); round(X0 + x, Z0 + zc, r, 0, H);
   }
 }
 
 { // ---------- light: eight shadow lamps under the four slots, one over the gallery; the curved wall washed from its light line ----------
-  for (const s of [8.4, 13.2, 18.8, 23.6]) for (const x of [11.5, 28.5]) lit(z, X0 + x, H - .1, Z0 + s, 290, [X0 + x, 0, Z0 + s], 1.35, 26, 0xffd6a4);
+  for (const s of [8.4, 13.2, 18.8, 23.6]) for (const x of [11.5, 28.5]) lit(z, X0 + x, H - .1, Z0 + s, 380, [X0 + x, 0, Z0 + s], .95, 26, 0xffd6a4);
   lit(z, X0 + 40.5, H - .1, Z0 + 16, 90, [X0 + 43.5, GY, Z0 + 16], 1.3, 16, 0xffd29c);
   const aN = ang(40, 32), aS = ang(40, 0);
-  for (let i = 0; i < 8; i++) { const a = aN + (aS - aN) * (i + .5) / 8; fixture(z, X0 + CX + (R - 1.6) * Math.sin(a), H - .6, Z0 + 16 + (R - 1.6) * Math.cos(a), 5); }
-  for (const x of [16, 22, 28]) { poolLight(z, X0 + x, -.62, Z0 + 9, 0, { power: 4 }); poolLight(z, X0 + x, -.62, Z0 + 23, PI, { power: 4 }); }
+  for (let i = 0; i < 18; i++) { const a = aN + (aS - aN) * (i + .5) / 18; fixture(z, X0 + CX + (R - .56) * Math.sin(a), H - .12, Z0 + 16 + (R - .56) * Math.cos(a), 3.4); } // in the cove
+  for (const x of [16, 22, 28]) { poolLight(z, X0 + x, -.62, Z0 + 9, 0, { power: 7 }); poolLight(z, X0 + x, -.62, Z0 + 23, PI, { power: 7 }); }
 }
 
 { // ---------- the pool's fittings ----------
@@ -246,3 +250,56 @@ function wallClock(zz, x, y, zc, ry = 0, rd = .55) {
   mallBench(z, X0 + 13, 0, Z0 + .55, 0); mallBench(z, X0 + 21, 0, Z0 + .55, 0); mallBench(z, X0 + 13, 0, Z0 + 31.45, PI); // against the walls behind the columns
   for (const a of [PI / 2 - .2, PI / 2 + .2]) mallBench(z, X0 + CX + 27.3 * Math.sin(a), GY, Z0 + 16 + 27.3 * Math.cos(a), a + PI); // on the gallery, facing the water
 }
+
+// ---------- the deck's fittings: a slatted bench bay with towel hooks, showers by the entrance on a drain line, a rescue station ----------
+// A hanging terry towel: a cloth w wide hung by a loop from a hook at its own origin, falling h, folded in two over the hook (two layers
+// a few mm apart), soft vertical pleats that open toward the hem, the hem swinging a little off the wall.
+function hungTowel(w, h, seed) {
+  const g = new THREE.PlaneGeometry(w, h, 18, 30).translate(0, -h / 2 - .03, 0), p = g.attributes.position, rnd = k => Math.sin(seed * 12.9 + k * 78.2) * .5 + .5;
+  for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i), t = -y / h, u = x / (w / 2);
+    const pleat = .018 * t * Math.sin(u * PI * (2 + rnd(1)) + seed) + .008 * Math.sin(u * 9 + seed * 3) * t;
+    p.setX(i, x * (1 - .28 * (1 - t) ** 3)); // gathered at the loop
+    p.setZ(i, .03 + pleat + .035 * t * t * rnd(2) + .012 * (1 - u * u)); p.setY(i, y + .01 * Math.cos(u * PI) * t); }
+  g.computeVertexNormals(); return g;
+}
+{ const St = M(z, 'brushedSteel', { roughness: .32, color: 0xc4c0b8 }), Wd = M(z, 'benchWood'), Gr = M(z, 'brushedSteel', { roughness: .55, color: 0x6c6a64 });
+  const terry = c => M(z, 'loopCarpet', { color: c, macro: .06, grime: .05, roughness: .95 });
+  { // the bench bay on the north wall, between the third and fourth columns: a tiled plinth bench with a hardwood slatted top, hooks above
+    const x1 = 26.2, x2 = 31.8, zb = 32;
+    B(T, x1, 0, zb - .46, x2, .38, zb); B(Bd, x1 + .02, 0, zb - .48, x2 - .02, .1, zb - .46); // the plinth, its teal kick strip, set 2 cm back
+    for (let i = 0; i < 5; i++) { const zz = zb - .43 + i * .09; B(Wd, x1 + .04, .38, zz, x2 - .04, .415, zz + .07); } // slats on 2 cm gaps
+    for (const x of [x1 + .3, (x1 + x2) / 2, x2 - .3]) B(Gr, x - .03, .38, zb - .44, x + .03, .39, zb - .02); // the bearers under the slats, seen in the gaps
+    solid(X0 + x1, 0, Z0 + zb - .46, X0 + x2, .415, Z0 + zb);
+    B(St, x1 + .2, 1.62, zb - .012, x2 - .2, 1.7, zb); // the hook rail: a brushed plate screwed to the tile
+    const cols = [0xf3efe6, 0x2f6f78, 0xe9dcc2, 0xf3efe6, 0xc9563f];
+    for (let i = 0; i < 9; i++) { const x = x1 + .45 + i * (x2 - x1 - .9) / 8;
+      add(St, bent([[0, 0, 0], [0, 0, .05], [0, .04, .085], [0, .07, .075]].map(([a, b, c]) => [X0 + x + a, 1.66 + b, Z0 + zb - .012 - c]), .007, .02), true); // a bent hook
+      add(St, new THREE.CylinderGeometry(.011, .011, .004, 20).rotateX(PI / 2).translate(X0 + x, 1.66, Z0 + zb - .014)); // its rose on the plate
+      if ([1, 2, 5, 7].includes(i)) add(terry(cols[i % 5]), put(hungTowel(.5, .78 + .06 * Math.sin(i), i), X0 + x, 1.74, Z0 + zb - .03, PI)); }
+  }
+  { // two shower posts flanking the way in, on a slot drain across the deck; a teal tile square under each
+    drain(z, X0 + 3.1, 0, Z0 + 16, 0, { l: 9.2, w: .15 });
+    for (const zc of [12.2, 19.8]) { const x = 3.1, A = (m, g) => add(m, g.translate(X0 + x, 0, Z0 + zc), true);
+      K(Bd, x - .6, 0, zc - .6, x + .6, .002, zc + .6);
+      A(St, new THREE.LatheGeometry([[0, 0], [.07, 0], [.07, .008], [.06, .014], [.032, .02], [.031, 2.12], [0, 2.12]].map(([a, b]) => new THREE.Vector2(a, b)), 48)); // base flange, column
+      add(St, bent([[X0 + x, 2.1, Z0 + zc], [X0 + x, 2.28, Z0 + zc], [X0 + x + .3, 2.28, Z0 + zc]].map((q, k) => k ? q : q), .016, .1), true); // the neck
+      A(St, new THREE.LatheGeometry([[0, 2.23], [.075, 2.215], [.085, 2.2], [.08, 2.195], [0, 2.2]].map(([a, b]) => new THREE.Vector2(a, b)), 48).translate(.3, 0, 0)); // the rose
+      A(Gr, new THREE.CylinderGeometry(.075, .075, .002, 40).translate(.3, 2.194, 0)); // its spray plate
+      A(St, new THREE.CylinderGeometry(.038, .038, .07, 32).rotateZ(PI / 2).translate(.05, 1.12, 0)); // the push valve's body
+      A(Gr, new THREE.CylinderGeometry(.026, .03, .02, 32).rotateZ(PI / 2).translate(.095, 1.12, 0)); // and its button
+      round(X0 + x, Z0 + zc, .07, 0, 2.3); }
+  }
+  { // the rescue station on the south wall: a ring buoy on its peg bracket, a 3.6 m reaching pole on two brackets, a sign
+    const zw = 0, xr = 28.6;
+    for (const x of [23.6, 26.6]) { B(St, x - .03, 1.1, zw, x + .03, 1.32, zw + .006); // backplates
+      add(St, bent([[0, 1.28, 0], [0, 1.28, .09], [0, 1.36, .1]].map(([a, b, c]) => [X0 + x + a, b, Z0 + zw + .006 + c]), .009, .03), true); } // J-hooks
+    add(M(z, 'brushedSteel', { roughness: .3, color: 0xd0d0cc }), new THREE.CylinderGeometry(.016, .016, 3.6, 24).rotateZ(PI / 2).translate(X0 + 25.1, 1.305, Z0 + .1), true); // the pole on them
+    add(Gr, new THREE.CylinderGeometry(.019, .019, .1, 24).rotateZ(PI / 2).translate(X0 + 23.25, 1.305, Z0 + .1), true); // its end cap
+    add(St, bent([[X0 + 26.85, 1.305, Z0 + .1], [X0 + 27, 1.305, Z0 + .1], [X0 + 27.1, 1.4, Z0 + .1], [X0 + 27.02, 1.5, Z0 + .1]], .011, .05), true); // the hook end
+    B(St, xr - .04, 1.5, zw, xr + .04, 1.66, zw + .006); add(St, bent([[X0 + xr, 1.6, Z0 + .006], [X0 + xr, 1.6, Z0 + .1], [X0 + xr, 1.66, Z0 + .12]], .012, .03), true); // the ring's peg
+    for (const [m, g] of ringParts(z, { color: 0xc8402c, color2: 0xf1ece0, R: .29, r: .065, bands: 4 })) add(m, g.rotateX(PI / 2).translate(X0 + xr, 1.33, Z0 + .075), true); // the ring buoy, upright on its peg
+    const sg = plaques(z, ['RESCUE']); { const [m, q] = sg(0, .6, .15); add(m, q.translate(X0 + 26.1, 1.85, Z0 + .004), true); }
+  }
+}
+// the deck's edges, under the dark of the walls: swan-neck sconces just under the frieze, over what people use there
+for (const [x, zc, ry] of [[27.6, 32, PI], [30.4, 32, PI], [13, 32, PI], [13, 0, 0], [21, 0, 0], [28.6, 0, 0], [0, 12.2, PI / 2], [0, 19.8, PI / 2]]) sconce(z, X0 + x, 2.1, Z0 + zc, ry, { power: 26 });
