@@ -80,3 +80,26 @@ Two things keep the pair cheap; `waterViews.cull = false` turns both off (`tools
 - **The pair is cut to what the water can sample** (render-target scissor, nothing drawn or cleared outside): the lens to the projected basin box (the bent ray ends inside the basin), the mirror to the projected box 9 m round the pool and below the surface (the mirror is read 9 m along the mirrored ray, eased toward the picture's edge, never past it), plus 3 pixels for the mirror's taps and filtering. If any corner of a box is behind the eye that picture is drawn whole; for the mirror that is nearly always, for the lens it cuts pool views to 30-45 %.
 
 `node tools/pool-skip.mjs [--halls]` walks every opening next to a zone a pool is drawn from (running, jumping, spinning and flicking the view at pool doorways; `--halls` adds the centre lines) and compares every game frame with the same frame drawn with `cull` off, pixel for pixel, the pair filled with magenta between frames so a stale picture cannot pass for a fresh one. `tools/test.mjs` runs it for the night hall.
+
+## Portals
+
+Two openings joined as if they were one doorway, at any distance and turned any way about the vertical: you see through one into the place behind the other, with exact perspective, and walk through without any visible move. Used by the hotel's west door 34.8 and east door 38.4, which both open into the vestibule built far off at x 300 (`js/zones/hotel.js`), and by the dev yard's test pair (`js/zones/yard.js`).
+
+**Declaring one** (in the place file, after the zones of both sides exist):
+
+```js
+portal([2.2, 0, 34.8, Math.PI / 2], [302.8, 0, 299.8, 0], 1, 2.24); // [x, y, z, ry] of each end, then width and height (both ends the same size)
+```
+
+Each end is the middle of the opening's sill, on the plane where the two sides meet, and `ry` is the way its front faces (as `rotateY(ry)` turns +z; the front is the side you stand on before going through). Put the plane at the back face of the wall the opening is cut in: the reveal and the door frame in front of it stay this side's own, and the far end's reveal continues it. Build each side as a real doorway (wall round the opening, a frame, no backing); what lies behind a plane on its own side never shows and never blocks.
+
+**What follows by itself:**
+
+- *Seeing* (`js/portals.js`): after each scene draw from the main camera (colour, and the AO pass's normals and depth) every end in view (in front of it, its zone drawn, within 80 m) marks the stencil with a pocket behind its opening whose fragments sit at the depth where their ray crosses the plane, so nothing behind the plane hides it and the eye may stand in the plane; there the depth is cleared and the scene drawn again from the eye taken through the link, same projection (so AO, fog, shafts and bloom see one picture), scissored to the opening, with the far end's zone layers, clipped at the far plane by the one clipping plane every program has (`clip` in `core.js`, clipping nothing otherwise). Openings seen through openings: two levels, then a dark fill.
+- *Walking* (`js/player.js`): the centre crossing the plane inside the opening (eye within its height) takes position, frame start, the rest of the move, speed and facing through, inside the 10 cm sub-steps. A body straddling the plane collides with this side's solids not wholly behind it and the far side's not wholly behind the far end. Noclip goes through too.
+- *Mood and lamps* (`js/lights.js`): each pair is an opening between its two zones, measured from the end on your side, and the zone behind is counted from your place taken through, so the mood blends exactly as at a doorway; a lamp fixture in front of a far end ranks by its distance from your place taken through.
+- *Culling*: the far side draws what its end's zone sees (`js/seen.js`); an eye in a portal's reveal also draws that end's zone. `tools/pvs.mjs` needs nothing more: each side's zones see only their own surroundings.
+
+**Not supported yet:** different skies or suns either side (the sun, sky and sun shafts are this side's: keep both ends under one sky); a pool seen through a portal (pools are hidden in the far picture); loose balls and rings, and the sound, do not go through (a ball meets the far side's solids only in its own space); scaled links (both ends the same size); see-through things on this side in front of an opening are drawn under the far picture; a custom `ShaderMaterial` without `clipping: true` is not clipped at the far plane. The cube-map bakes and pool pictures do not see through portals.
+
+**Testing:** `node tools/portals.mjs [--only i,j] [--modes walk,run,hop,diag,back]` walks every end both ways (walking, running, hopping at 7.2 m/s in 0.05 s frames, diagonally, backing out mid-plane) and checks where you end, that the crossing frame changes the picture no more than its neighbours, and that the picture with the eye in the plane is the same from both sides. Photos: `#4.2,34.8,1.5708,0` (hallway, west door), `#302.6,301.6,1.5708,0` (vestibule, looking back out), `#-692.3,-688.5,0.05,0` (yard pair, `?dev`).

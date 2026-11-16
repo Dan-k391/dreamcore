@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { renderer, scene, camera, V, zones, inR } from './core.js';
 import { seaMat } from './mat.js';
-import { emitters, colliders, floorH, flats, warps } from './build.js';
+import { emitters, colliders, floorH, flats, warps, ends, side, across, carry } from './build.js';
 import { setSky } from './sky.js';
 import { ponds, ripple } from './water.js';
 import { libBaked } from './level.js';
@@ -20,18 +20,24 @@ const lights = Array.from({ length: 9 }, () => {
 // two. Across an opening k from one side is 1 - k from the other, so every zone's odds against every other agree whichever side you
 // count from, and the shares do not move when `zone` flips; a neighbour's doors count only near the door into it (nothing through a wall).
 function weights(x, z, zone) {
-  const r = new Map([[zone, 1]]), reach = (from, f) => { const got = [];
-    for (const o of from.openings) { const n = o.p === from ? o.q : o.p, t = (o.ax ? z : x) - o.at, s = o.ax ? x : z, a = Math.max(o.lo - s, s - o.hi, 0);
-      const k = Math.min(.99, Math.max(0, .5 + .5 * (o.p === from ? t : -t) / BAND)) * Math.max(0, 1 - a / BAND), w = f * k / (1 - k);
-      if (w > 0 && n !== zone) { got.push([n, w]); if (w > (r.get(n) || 0)) r.set(n, w); } } // reached two ways: the larger
+  // a portal's opening (o.e: its end on each side) is measured in the space of the side you count from, and the zone behind it is
+  // counted from your place taken through it, so the mood crosses a portal exactly as it crosses a doorway
+  const r = new Map([[zone, 1]]), reach = (from, f, x, z) => { const got = [];
+    for (const o of from.openings) { const n = o.p === from ? o.q : o.p, e = o.e?.[o.p === from ? 0 : 1];
+      const t = e ? side(e, x, z) < -.5 ? -1e9 : -side(e, x, z) : ((o.ax ? z : x) - o.at) * (o.p === from ? 1 : -1), s = e ? Math.abs(across(e, x, z)) : o.ax ? x : z, a = e ? Math.max(s - e.w / 2, 0) : Math.max(o.lo - s, s - o.hi, 0);
+      const k = Math.min(.99, Math.max(0, .5 + .5 * t / BAND)) * Math.max(0, 1 - a / BAND), w = f * k / (1 - k);
+      if (w > 0 && n !== zone) { got.push([n, w, ...(e ? carry(e, x, z) : [x, z])]); if (w > (r.get(n) || 0)) r.set(n, w); } } // reached two ways: the larger
     return got; };
-  for (const [n, w] of reach(zone, 1)) reach(n, w);
+  for (const [n, w, nx, nz] of reach(zone, 1, x, z)) reach(n, w, nx, nz);
   let sum = 0; for (const v of r.values()) sum += v;
   return [...r].map(([q, v]) => [q, v / sum]);
 }
 function relight(pos, zone, fade, wts) { // fade: how far to move brightness this call (1 = snap); wts: weights() there, else the zone alone (the bakes)
   const gw = {}; for (const [z, v] of wts || [[zone, 1]]) gw[z.grp] = (gw[z.grp] || 0) + v; // a fixture's group gives up its 8 m handicap as you near it
-  const want = emitters.map(e => [e.p.distanceTo(pos) + 8 * (1 - Math.min(1, gw[e.zone.grp] || 0)) - (e.light ? 2 : 0), e]).sort((a, b) => a[0] - b[0]).slice(0, lights.length).map(a => a[1]);
+  // in play (wts given), a fixture in front of a portal's far end is also as near as it is from your place taken through that portal
+  const via = wts ? ends.filter(e => { const d = side(e, pos.x, pos.z); return d >= 0 && d < 30; }).map(e => { const [x, z] = carry(e, pos.x, pos.z); return [e.to, V(x, pos.y + e.to.p.y - e.p.y, z)]; }) : [];
+  const dist = e => { let d = e.p.distanceTo(pos); for (const [f, q] of via) if (side(f, e.p.x, e.p.z) > 0) d = Math.min(d, e.p.distanceTo(q)); return d; };
+  const want = emitters.map(e => [dist(e) + 8 * (1 - Math.min(1, gw[e.zone.grp] || 0)) - (e.light ? 2 : 0), e]).sort((a, b) => a[0] - b[0]).slice(0, lights.length).map(a => a[1]);
   for (const l of lights) {
     const keep = want.includes(l.e);
     l.k = Math.min(1, Math.max(0, l.k + (keep ? fade : -fade)));
@@ -89,6 +95,7 @@ const BAND = 2.5, openings = []; // BAND: metres either side of an opening over 
   // the band must end before any passage warp and where it lands: there both twins must show the passage's own mood, or the move would show
   console.assert(openings.every(o => warps.every(w => [0, 1].every(c => { const [x1, x2, z1, z2] = o.ax ? [o.lo, o.hi, o.at, o.at] : [o.at, o.at, o.lo, o.hi];
     return Math.max(w[0] + c * w[4] - x2, x1 - w[2] - c * w[4], w[1] + c * w[5] - z2, z1 - w[3] - c * w[5]) > BAND; }))), 'a passage warp or its landing lies within an opening band');
+  for (let i = 0; i < ends.length; i += 2) { const o = { p: ends[i].zone, q: ends[i + 1].zone, e: [ends[i], ends[i + 1]] }; o.p.openings.push(o); if (o.q !== o.p) o.q.openings.push(o); } // portals (build.js): an opening each pair
 }
 try { await compiled; } catch (e) { console.warn('compiling ahead failed, compiling as drawn instead', e); }
 performance.mark('load: scene compiled');
