@@ -103,8 +103,10 @@ const place = (x, z, yaw, pitch) => { // teleport: stand at (x, z) facing that w
 };
 // ---------- doors (props/metalwork.js door() with o.openable): E swings the one you look at, within reach, open or shut ----------
 // The latch is drawn first (the open sound's latch and hinge lead the motion), then the leaf swings over SWING s, eased in and out like a
-// heavy leaf. It is solid all the way: a step that would put it into the body is not taken, so it waits against you and moves on once you
-// step clear. Twins (a connecting pair either side of a portal) move together. The close sound's thud (0.3 s in) lands as the leaf shuts.
+// heavy leaf, away from whoever opened it (a shut door picks its way from the side you stand; closing goes back the way it came). It is
+// solid all the way: a step that would put it into the body is not taken, so it waits against you and moves on once you step clear. A door
+// in a portal has a copy in the far space (door(..., { copy })): pressing either moves the one door, both copies at once, tested together.
+// Its sounds come from the copy on your side. The close sound's thud (0.3 s in) lands as the leaf shuts.
 const SWING = .8, LATCH = .1, REACH = 1.6, _f = new THREE.Vector3();
 const ease = u => u * u * (3 - 2 * u);
 function inReach() { // the openable door the eye looks at within reach (to its leaf's middle at handle height), roughly facing it
@@ -116,15 +118,17 @@ function inReach() { // the openable door the eye looks at within reach (to its 
 const inSwing = d => { const p = camera.position, at = [[p.x, p.z, feet], ...ends.filter(e => Math.abs(side(e, p.x, p.z)) < 1).map(e => [...carry(e, p.x, p.z), feet + e.to.p.y - e.p.y])]; // the body here, and taken through a portal it is near
   return !fly && d.k.some(k => at.some(([x, z, f]) => blocks(k, f) && near(k, x, z, R) && clear(k, x, null, z, R))); };
 let eWas = 0;
+const mine = q => q.copy && Math.abs(q.copy.y - camera.position.y) < Math.abs(q.y - camera.position.y) ? q.copy : q; // the copy in the space the eye is in
 function stepDoors(dt, press) {
-  const d = press && inReach();
-  if (d) for (const q of [d, d.twin].filter(Boolean)) { q.to = 1 - q.to; q.wait = q.to ? LATCH : 0; q.thud = false; q.loud = q === d; if (q.loud && q.to) sfx?.play(`door.${q.kind}.open`, q.k[0][6][0], q.y + 1.05, q.k[0][6][1]); }
-  for (const q of doors) { if (q.u === q.to) continue;
+  const d = press && inReach(), q = d && (d.of || d), p = camera.position;
+  if (q) { if (!q.u) q.set(0, (p.x - d.at[0]) * Math.sin(d.ry) + (p.z - d.at[1]) * Math.cos(d.ry) > 0 ? 1 : -1); // shut: it will swing away from you (on the leaf's +z side: to -z); a copy's space turns with it
+    q.to = 1 - q.to; q.wait = q.to ? LATCH : 0; q.thud = false; if (q.to) { const r = mine(q), c = r.k[0][6]; sfx?.play(`door.${q.kind}.open`, c[0], r.y + 1.05, c[1]); } }
+  for (const q of doors) { if (q.of || q.u === q.to) continue;
     if (q.wait > 0) { q.wait -= dt; continue; }
     const u = Math.max(0, Math.min(1, q.u + (q.to ? dt : -dt) / SWING)), was = q.f; q.set(ease(u));
-    if (inSwing(q)) { q.set(was); continue; } // the body is in its way: it waits
-    q.u = u; const c = q.k[0][6]; reshade(c[0], q.y + 1.1, c[1], 1.3);
-    if (!q.to && !q.thud && q.loud && u * SWING <= .3) { q.thud = true; sfx?.play(`door.${q.kind}.close`, c[0], q.y + 1.05, c[1]); } } // heard from the one pressed (its twin is the same door seen through the portal)
+    if (inSwing(q) || q.copy && inSwing(q.copy)) { q.set(was); continue; } // the body is in its way (on either side of the portal): it waits
+    q.u = u; for (const r of [q, q.copy]) if (r) { const c = r.k[0][6]; reshade(c[0], r.y + 1.1, c[1], 1.3); }
+    if (!q.to && !q.thud && u * SWING <= .3) { q.thud = true; const r = mine(q), c = r.k[0][6]; sfx?.play(`door.${q.kind}.close`, c[0], r.y + 1.05, c[1]); } }
 }
 const eye = { lift: 0 }; // metres added to the eye height; only dev.lift (?dev) changes it
 const frame = dt => { // one game frame of dt seconds: the loop below passes the real time, dev.step() a fixed one

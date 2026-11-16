@@ -18,7 +18,7 @@ Everything is generated; nothing is downloaded. Textures are GPU-baked once at l
 | `textile.js` | wallpaper, damask, loopCarpet, blackoutCarpet (`loopCarpet`, tinted), hotelCarpet, velvet, vinylFoam, ceilingTile |
 | `metal.js` | chrome (`smudge`), brushedSteel (`brushed`), galvanised, anodised, brass (`smudge`, tinted), castIron, paintedSteel |
 | `plastic.js` | gelcoat, hardPlastic, pvc, rubber, glass, frostedGlass (`glass`) |
-| `wood.js` | hardwood, benchWood, weatheredWood, palmTrunk, palmLeaf |
+| `wood.js` | hardwood, veneer (book-matched walnut door faces, grain along u: `swap: 1` on a door), benchWood, weatheredWood, palmTrunk, palmLeaf |
 | `light.js` | troffer, trofferOff (`troffer`), opalPanel, ledTube, frostedGlobe (`opal`), backlitPanel (`opal`) |
 
 Materials sharing a set are in the same family. Changing a shared set changes all of them.
