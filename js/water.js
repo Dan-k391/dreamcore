@@ -50,7 +50,7 @@ under.setSize(1, 1); under.depthTexture = new THREE.DepthTexture(1, 1, THREE.Flo
 mirror.matrixAutoUpdate = lens.matrixAutoUpdate = false;
 const BUF = new THREE.Vector2(), fit = () => { // follow the drawing buffer (resize, pixel ratio, render scale): three resizes the depth texture with the target
   renderer.getDrawingBufferSize(BUF); const w = Math.ceil(BUF.x * OVER), h = Math.ceil(BUF.y * OVER);
-  if (under.width !== w || under.height !== h) { under.setSize(w, h); renderer.initRenderTarget(under); }
+  if (under.width !== w || under.height !== h) { under.setSize(w, h); const t = renderer.getRenderTarget(); renderer.initRenderTarget(under); renderer.setRenderTarget(t); } // init leaves no framebuffer bound, and this runs inside the frame's render
 };
 const wideCam = new THREE.PerspectiveCamera(), gl = renderer.getContext(), P = new THREE.Vector3(), M4 = new THREE.Matrix4(), frustum = new THREE.Frustum(), LO = new THREE.Vector3(), HI = new THREE.Vector3();
 // Is this pool certainly hidden? Each frame its proxy, the water widened 1.5 m and raised 3 m, is drawn invisibly after everything opaque
