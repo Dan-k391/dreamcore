@@ -11,7 +11,8 @@ When the two pull against each other, quality wins: one place finished properly 
 
 ## Who does what
 
-- **The lead** plans and directs: decides what gets built, writes the briefs, judges results against the bar as art director, commits and pushes. It does not write game code.
+- **The lead** plans and directs: decides what gets built, writes the briefs, judges results against the bar as art director, commits and pushes. It does not write game code, except small fixes (below).
+- **Small fixes take the short path.** A small, contained change (a tuning number, a few lines in one or two files, a text or doc edit) the lead makes itself: edit, rebuild the bundle, run the suite, look at it if the picture changes, commit. No subagent, no brief, no reviewer, and nothing beyond what was asked: no added scope, no extra proofs or new suite checks unless the fix needs one. Go back to the full process when it grows past about 30 lines, or could break the controls or let the player leave the level.
 - **Subagents do the work.** Claude subagents use medium effort:
   - Opus 5.5 for the tough work: shared systems (rendering, shaders, materials, physics, collision), building or rebuilding a place or its objects, art review, and review of that code.
   - Sonnet 5.5 for the easier work: test runs and photo comparisons, audit photos and contact sheets, mechanical edits, small well-specified fixes, merges, tool edits.
