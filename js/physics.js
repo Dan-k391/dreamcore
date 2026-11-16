@@ -35,22 +35,24 @@ function reshade(x, y, z, r) {
     if (_p.x > c.left - r && _p.x < c.right + r && _p.y > c.bottom - r && _p.y < c.top + r) { sun.shadow.needsUpdate = renderer.shadowMap.needsUpdate = true; } } // the sun has no cache (64 MB, saves 0.04 ms): a full redraw
 }
 const SM = renderer.shadowMap, drawShadows = SM.render, gl = renderer.getContext(), looseRoot = new THREE.Object3D(), cache = new Map(), noClear = () => {};
-const _s = new THREE.Sphere(), _m = new THREE.Matrix4(), _v = new THREE.Vector4();
+const _s = new THREE.Sphere(), _m = new THREE.Matrix4(), _v = new THREE.Vector4(), _lo = new THREE.Vector3(), _hi = new THREE.Vector3(), _c = Array.from({ length: 8 }, () => new THREE.Vector4());
 function blit(a, b, [x0, y0, x1, y1]) { // texels [x0, x1) x [y0, y1) of render target a into b, colour and depth; three's record of the bindings left as its own copies leave it
   const st = renderer.state, P = renderer.properties;
   st.bindFramebuffer(gl.READ_FRAMEBUFFER, P.get(a).__webglFramebuffer); st.bindFramebuffer(gl.DRAW_FRAMEBUFFER, P.get(b).__webglFramebuffer);
   for (const bit of [gl.COLOR_BUFFER_BIT, gl.DEPTH_BUFFER_BIT]) gl.blitFramebuffer(x0, y0, x1, y1, x0, y0, x1, y1, bit, gl.NEAREST); // apart: one blit of both is ten times slower (ANGLE)
   st.bindFramebuffer(gl.READ_FRAMEBUFFER, null); st.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
 }
-function cover(o, s) { // the texels o can be drawn to in shadow s's map (its camera as last drawn): its bounding sphere's box, projected, rounded out
+function cover(o, s) { // the texels o can be drawn to in shadow s's map (its camera as last drawn): its bounding box, projected, rounded out
   const W = s.map.width, H = s.map.height, c = s.camera;
   if (!o.visible || o.count === 0) return null;
-  if (o.isInstancedMesh) { if (!o.boundingSphere) o.computeBoundingSphere(); _s.copy(o.boundingSphere); } else { if (!o.geometry.boundingSphere) o.geometry.computeBoundingSphere(); _s.copy(o.geometry.boundingSphere); }
-  _s.applyMatrix4(o.matrixWorld); _m.multiplyMatrices(c.projectionMatrix, c.matrixWorldInverse);
-  let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
-  for (let k = 0; k < 8; k++) { _v.set(_s.center.x + (k & 1 ? _s.radius : -_s.radius), _s.center.y + (k & 2 ? _s.radius : -_s.radius), _s.center.z + (k & 4 ? _s.radius : -_s.radius), 1).applyMatrix4(_m);
-    if (_v.w < 1e-6) return [0, 0, W, H]; // reaches behind the lamp: anywhere
-    x0 = Math.min(x0, _v.x / _v.w); x1 = Math.max(x1, _v.x / _v.w); y0 = Math.min(y0, _v.y / _v.w); y1 = Math.max(y1, _v.y / _v.w); }
+  _m.multiplyMatrices(c.projectionMatrix, c.matrixWorldInverse); let lo, hi; // the corners of its geometry's box, or round an instanced mesh's sphere (in the world)
+  if (o.isInstancedMesh) { if (!o.boundingSphere) o.computeBoundingSphere(); _s.copy(o.boundingSphere).applyMatrix4(o.matrixWorld); lo = _lo.setScalar(-_s.radius).add(_s.center); hi = _hi.setScalar(_s.radius).add(_s.center); }
+  else { const g = o.geometry; if (!g.boundingBox) g.computeBoundingBox(); lo = g.boundingBox.min; hi = g.boundingBox.max; _m.multiply(o.matrixWorld); } // a door's leaf: its sphere is twice its size
+  for (let k = 0; k < 8; k++) _c[k].set(k & 1 ? hi.x : lo.x, k & 2 ? hi.y : lo.y, k & 4 ? hi.z : lo.z, 1).applyMatrix4(_m);
+  let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9, past = 0; const at = q => { x0 = Math.min(x0, q.x / q.w); x1 = Math.max(x1, q.x / q.w); y0 = Math.min(y0, q.y / q.w); y1 = Math.max(y1, q.y / q.w); };
+  for (let k = 0; k < 8; k++) { const a = _c[k], da = a.z + a.w; if (da >= 0) { at(a); if (a.z > a.w) past++; } // the box cut at the lamp's near plane (as the GPU cuts it), not
+    for (const b of [1, 2, 4]) if (!(k & b)) { const q = _c[k | b], db = q.z + q.w; if (da < 0 !== db < 0) at(_v.copy(a).lerp(q, da / (da - db))); } } // a corner behind the lamp taken as anywhere (a lamp just above a doorway: the whole map, every frame of its door's swing)
+  if (x0 > x1 || past === 8) return null; // wholly behind the lamp or past its reach (a door's copy 200 m above the portal room's lamps)
   x0 = Math.max(0, Math.floor((x0 + 1) / 2 * W) - 1); y0 = Math.max(0, Math.floor((y0 + 1) / 2 * H) - 1); x1 = Math.min(W, Math.ceil((x1 + 1) / 2 * W) + 1); y1 = Math.min(H, Math.ceil((y1 + 1) / 2 * H) + 1);
   return x0 < x1 && y0 < y1 ? [x0, y0, x1, y1] : null;
 }
@@ -70,7 +72,7 @@ SM.render = function (ls, scene, cam) {
   for (const l of all) { const s = l.shadow, was = s.drawn; s.drawn = new Map(kids.map(o => [o, [pose(o), cover(o, s)]]));
     if (!full.includes(l)) { const u = [1e9, 1e9, -1e9, -1e9]; // one box round where what moved was and is: a blit costs more than its texels (ANGLE)
       for (const [o, [p, r]] of s.drawn) { const [p0, r0] = was.get(o); if (p.some((v, i) => v !== p0[i])) for (const q of [r0, r]) if (q) { u[0] = Math.min(u[0], q[0]); u[1] = Math.min(u[1], q[1]); u[2] = Math.max(u[2], q[2]); u[3] = Math.max(u[3], q[3]); } }
-      if (u[0] < u[2]) blit(cache.get(s), s.map, u); }
+      if (u[0] < u[2]) blit(cache.get(s), s.map, u); else { s.loose = false; continue; } } // nothing that moved reaches this map, before or now: it is as it was (a lamp near a swinging door whose cone misses it)
     s.needsUpdate = true; s.loose = false; }
   const clear = renderer.clear; renderer.clear = noClear; // the loose things over the static depth just put back; outside the box they draw what is there
   try { drawShadows.call(SM, ls, looseRoot, cam); } finally { renderer.clear = clear; renderer.setRenderTarget(target, face, level); }
