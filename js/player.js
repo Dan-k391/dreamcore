@@ -41,7 +41,7 @@ addEventListener('mousemove', e => { // mouse look: captured pointer where the b
 });
 addEventListener('keydown', e => { if (paused()) return; keys[e.code] = 1; if (e.code === 'Space') e.preventDefault(); if (e.code === 'KeyM') sfx?.mute(); });
 addEventListener('keyup', e => keys[e.code] = 0);
-document.getElementById('s').textContent = 'click to enter  ·  wasd walk  ·  mouse look  ·  q / e turn  ·  space jump (hold to hop)  ·  shift run  ·  c zoom  ·  m mute  ·  v noclip';
+document.getElementById('s').textContent = 'click to enter  ·  wasd walk  ·  mouse look  ·  space jump (hold to hop)  ·  shift run  ·  c zoom  ·  m mute  ·  v noclip';
 let zone = zone0; // the zone you are in
 
 // The body: an upright cylinder of radius R from the soles (feet) up 1.75 m. A solid blocks it sideways where it overlaps the body
@@ -98,7 +98,7 @@ const frame = dt => { // one game frame of dt seconds: the loop below passes the
   if (Math.abs(camera.fov - fov) > .05) { camera.fov += (fov - camera.fov) * Math.min(1, dt * (fov < 70 || camera.fov < 70 ? 12 : 3)); camera.updateProjectionMatrix(); }
   const pool = !!zone.tile, deep = (pool || zone.wade) && feet < -.5; // only the pool rooms have water below 0; elsewhere a low floor is just a low floor
   const speed = (k('ShiftLeft') ? 6 : 2.85) * (deep ? .55 : 1); // wading is slower
-  camera.rotateOnWorldAxis(UP, ((k('ArrowLeft') | k('KeyQ')) - (k('ArrowRight') | k('KeyE'))) * dt * 2.2);
+  camera.rotateOnWorldAxis(UP, (k('ArrowLeft') - k('ArrowRight')) * dt * 2.2);
   const yaw = eu.setFromQuaternion(camera.quaternion).y, sn = Math.sin(yaw), cs = Math.cos(yaw), ix = k('KeyD') - k('KeyA'), iy = (k('KeyW') | k('ArrowUp')) - (k('KeyS') | k('ArrowDown'));
   // vel is in the world, so turning in the air doesn't swing the jump round; diagonals are no faster; quick to start (90% in 0.23 s), quicker to stop
   const il = Math.hypot(ix, iy) || 1, tx = (ix * cs - iy * sn) / il * speed, tz = (-ix * sn - iy * cs) / il * speed, ease = Math.min(1, dt * (air ? 3 : tx * tx + tz * tz < sp * sp ? 14 : 10));
