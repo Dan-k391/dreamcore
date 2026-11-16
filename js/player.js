@@ -67,6 +67,11 @@ function collide(p, feet = 0) { // push the body out of every solid it overlaps;
   for (let pass = 0; pass < 4; pass++) if (!overlaps(p, feet, R, true)) return true;
   return !overlaps(p, feet, R - .002, false); // false: still inside something
 }
+const floorVia = (x, z, fx, fz) => { // the floor at (x, z) as reached from (fx, fz): through a portal when the step between them crosses its opening
+  for (const e of ends) { const a = side(e, fx, fz), b = side(e, x, z); if (!(a >= 0 && b < 0)) continue; const t = a / (a - b);
+    if (Math.abs(across(e, fx + (x - fx) * t, fz + (z - fz) * t)) < e.w / 2) { const [qx, qz] = carry(e, x, z); return floorH(qx, qz) - e.to.p.y + e.p.y; } }
+  return floorH(x, z);
+};
 const groundAt = (x, z, feet) => { // the highest floor or solid top under the body that a step from `feet` reaches
   let g = floorH(x, z);
   for (const c of colliders) if (c[5] > g && c[5] <= feet + STEP && near(c, x, z, RS) && clear(c, x, null, z, RS)) g = c[5];
@@ -148,7 +153,7 @@ const frame = dt => { // one game frame of dt seconds: the loop below passes the
     p.x = cx - dz * a + dx * b; p.z = cz + dx * a + dz * b; }
   // A rise taller than a step is a wall. Pool sides can't be walked up: the ways out are the steps, the ladders, or a jump onto something low enough.
   const rise = grip ? .05 : .35; // on a ladder the deck is stepped onto only once the climb has brought the feet level with it
-  const lead = (to, from) => to + Math.sign(to - from) * .3, tall = (x, z) => { const here = floorH(x, z); return here - feet > rise || floorH(lead(x, ox), lead(z, oz)) - Math.max(feet, here) > rise; }; // tested a body-width ahead, so the eye never reaches the wall face; measured from the step being stepped onto, or a fast climber would see two steps ahead as one wall
+  const lead = (to, from) => to + Math.sign(to - from) * .3, tall = (x, z) => { const here = floorH(x, z); return here - feet > rise || floorVia(lead(x, ox), lead(z, oz), x, z) - Math.max(feet, here) > rise; }; // tested a body-width ahead, so the eye never reaches the wall face; measured from the step being stepped onto, or a fast climber would see two steps ahead as one wall
   if (!fly && tall(p.x, p.z)) { if (!tall(p.x, oz)) p.z = oz; else if (!tall(ox, p.z)) p.x = ox; else { p.x = ox; p.z = oz; } }
   if (hop) { const ax = (p.x - ox) / dt, az = (p.z - oz) / dt; if (ax * ax + az * az < vel.lengthSq() - 1e-6) vel.set(ax, az); } // a wall met in the air takes the speed into it, or it would come back once past
   const ground = groundAt(p.x, p.z, feet), was = feet;
