@@ -129,7 +129,7 @@ defZone('hV', { music: 'hotel', ...dry, step: 'carpet', grp: 'm', k: .8, exp: .3
   // a slim surface downlight in the middle of each reveal's soffit (2 mm below it: the leaf's top clears it by 4), a brass ring round an opal
   // lens, washing the leaf and the reveal so the doorway reads lit from the room and from the hallway through it
   for (const [x, zc] of [[AX, Z1 - DV / 2], [X1 - DV / 2, BZ]]) {
-    add(Br, new THREE.LatheGeometry([[.036, 0], [.046, 0], [.047, -.0012], [.046, -.002], [.036, -.002]].map(([r, y]) => new THREE.Vector2(r, y)), 32).translate(x, Y + 2.24, zc));
+    add(Br, new THREE.LatheGeometry([[.046, 0], [.047, -.0012], [.046, -.002], [.036, -.002], [.036, 0]].map(([r, y]) => new THREE.Vector2(r, y)), 32).translate(x, Y + 2.24, zc));
     add(M(null, 'opalPanel'), new THREE.CircleGeometry(.0365, 32).rotateX(Math.PI / 2).translate(x, Y + 2.24 - .0015, zc), true);
     lit(z, x, Y + 2.2, zc, 14, [x, Y, zc], 1.25, 6, 0xffcf98);
   }
