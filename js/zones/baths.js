@@ -124,7 +124,7 @@ const Glow = M(null, 'opalPanel');
   for (let i = 0; i < 24; i++) { const a = a1 + (a2 - a1) * (i + .5) / 24, c = (R + RI) / 2, h = c * Math.sin((a2 - a1) / 48) + .1;
     turned(X0 + CX + c * Math.sin(a), Z0 + 16 + c * Math.cos(a), (R - RI) / 2, h, a - PI / 2, GY - .4, GY); }
   B(T, 36.2, GY - .4, 0, 40.6, GY, 1.6); // the landing at the stair's head (its far end runs on behind the curved wall)
-  const N = 17, x1 = 31.7, x2 = 36.2, run = (x2 - x1) / N;
+  const N = 17, x1 = 30.6, x2 = 36.2, run = (x2 - x1) / N; // treads deeper than the walker's 0.3 m look-ahead (player.js, tall), or two risers read as a wall
   flight(T, X0 + x1, Z0, X0 + x2, Z0 + 1.6, 'x', 1, 0, N, .25);
   for (let i = 0; i < N; i++) { const a = x1 + run * i, y = .25 * (i + 1);
     K(Bd, a, y, 0, a + .045, y + .0015, 1.6); // a teal nosing on every tread
