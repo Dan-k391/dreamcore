@@ -2,9 +2,9 @@
 // Materials: js/tex/metal.js. Convention, the yard and the inventory: docs/props.md.
 import * as THREE from 'three';
 import { toCreasedNormals } from 'three/addons/utils/BufferGeometryUtils.js';
-import { zones } from '../core.js';
+import { zones, scene } from '../core.js';
 import { M } from '../mat.js';
-import { ladders, add, put, solidAt, round, spot, turned, box, RoundedBoxGeometry } from '../build.js';
+import { ladders, add, put, solidAt, round, spot, turned, turn, box, doors, boxUV, RoundedBoxGeometry } from '../build.js';
 
 const V3 = (x, y, z) => new THREE.Vector3(x, y, z), V2 = (x, y) => new THREE.Vector2(x, y);
 const cost = {}; // triangles per object, filled as they are built (read by the yard check)
@@ -108,7 +108,7 @@ const turnTo = (g, dir) => g.applyQuaternion(new THREE.Quaternion().setFromUnitV
 // o.leaf false: the frame alone. o.double (default when o.w > 1.3): a pair of leaves hung from both jambs, meeting in the middle
 // (the +x leaf mirrored, opening by the same o.open), no strike on the jamb.
 function door(z, x, y, zc, ry = 0, o = {}) {
-  const Wc = o.w ?? 1, dbl = o.double ?? Wc > 1.3, K = parts(o.leaf === false ? 'frame' : dbl ? 'doubleDoor' : 'door'), Hc = 2.24, FU = .1, FD = .075, open = o.open ?? 0;
+  const Wc = o.w ?? 1, dbl = o.double ?? Wc > 1.3, K = parts(o.leaf === false ? 'frame' : dbl ? 'doubleDoor' : 'door'), Hc = 2.24, FU = .1, FD = .075, open = o.openable ? 0 : o.open ?? 0;
   const F = M(z, 'paintedSteel', { color: o.frame ?? 0xe9e5dc, dirt: .35, dirtCol: [.5, .45, .38], wear: .3 });
   const Lf = M(z, 'paintedSteel', { color: o.color ?? 0x3a6d98, dirt: .35, dirtCol: [.5, .45, .38], wear: .3 });
   const St = M(z, 'brushedSteel'), Al = M(z, 'anodised', { color: 0xc8c8c4, roughness: .42 }), Rb = M(z, 'rubber', { color: 0x2a2826 });
@@ -173,27 +173,44 @@ function door(z, x, y, zc, ry = 0, o = {}) {
     LP(Al, cyl(.0035, .002, 12).rotateZ(Math.PI / 2).translate(bx0 + .277, by - .012, bz)); // the valve screw in the end cap
     const sp = V3(bx0 + .06, by + .0275, bz);
     LP(St, cyl(.0085, .012, 16).translate(sp.x, sp.y + .004, sp.z));
-    const swing = g => g.translate(-AX, 0, -AZ).rotateY(open).translate(AX, 0, AZ);
-    for (const [m, g, own] of leaf) KP(m, swing(g), own);
-    // the arm: spindle (turned with the leaf) to a shoe on the head's pull face, two links meeting at an elbow that stands off the leaf
-    const s = swing(new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(sp.toArray(), 3))).attributes.position, S = V3(s.getX(0), .0, s.getZ(0));
-    const F = V3(-Wc / 2 + .3, 0, -FD - .016), L1 = .2, L2 = .22, d = Math.max(.02, Math.min(S.distanceTo(F), L1 + L2 - .005)), dir = F.clone().sub(S).normalize();
-    const a = (L1 * L1 - L2 * L2 + d * d) / (2 * d), hh = Math.sqrt(Math.max(L1 * L1 - a * a, 0)), pv = V3(-dir.z, 0, dir.x), n = V3(-Math.sin(open), 0, -Math.cos(open));
-    const E = S.clone().addScaledVector(dir, a).addScaledVector(pv, pv.dot(n) > 0 ? hh : -hh), ay = sp.y + .012;
+    const swing = (g, a = open) => g.translate(-AX, 0, -AZ).rotateY(a).translate(AX, 0, AZ);
+    const F = V3(-Wc / 2 + .3, 0, -FD - .016), L1 = .2, L2 = .22, ay = sp.y + .012;
     const link = (p, q, w, yy) => rbox(p.distanceTo(q) + .018, .0055, w, .0025, 2).rotateY(-Math.atan2(q.z - p.z, q.x - p.x)).translate((p.x + q.x) / 2, yy, (p.z + q.z) / 2);
-    KP(Al, link(S, E, .017, ay)); KP(Al, link(E, F, .013, ay + .0058));
-    KP(Al, lathe([[.009, -.004], [.0095, -.002], [.0095, .009], [.008, .0105], [0, .011]], 16).translate(E.x, ay, E.z)); // the elbow knuckle
+    const arm = a => { // the arm at leaf angle a: spindle (turned with the leaf) to a shoe on the head's pull face, two links meeting at an elbow that stands off the leaf
+      const S = V3(sp.x - AX, 0, sp.z - AZ).applyAxisAngle(V3(0, 1, 0), a).add(V3(AX, 0, AZ)); S.y = 0;
+      const d = Math.max(.02, Math.min(S.distanceTo(F), L1 + L2 - .005)), dir = F.clone().sub(S).normalize();
+      const k = (L1 * L1 - L2 * L2 + d * d) / (2 * d), hh = Math.sqrt(Math.max(L1 * L1 - k * k, 0)), pv = V3(-dir.z, 0, dir.x), n = V3(-Math.sin(a), 0, -Math.cos(a));
+      const E = S.clone().addScaledVector(dir, k).addScaledVector(pv, pv.dot(n) > 0 ? hh : -hh);
+      return [[Al, link(S, E, .017, ay)], [Al, link(E, F, .013, ay + .0058)], [Al, lathe([[.009, -.004], [.0095, -.002], [.0095, .009], [.008, .0105], [0, .011]], 16).translate(E.x, ay, E.z)]]; // the elbow knuckle
+    };
+    if (!D) { for (const [m, g, own] of leaf) KP(m, swing(g), own); for (const [m, g] of arm(open)) KP(m, g); }
     KP(St, cyl(.0055, .012, 14).translate(F.x, ay + .006, F.z));
     KP(St, rbox(.06, .07, .016, .004).translate(F.x, Hc + .02, -FD - .008)); // the shoe, dropping from the head face to the arm
     for (const sx of [-.02, .02]) KP(St, screw(.003).rotateX(-Math.PI / 2).translate(F.x + sx, Hc + .035, -FD - .016));
     for (const [m, g, own] of out) K.p(m, mirror ? flip(g) : g, own);
-    const c = V3(x0 + LW / 2 - AX, 0, -AZ).applyAxisAngle(V3(0, 1, 0), open).add(V3(AX, 0, AZ)), [px, pz] = spot(x, zc, ry, mirror ? -c.x : c.x, c.z);
-    turned(px, pz, LW / 2, LT / 2, ry + (mirror ? -open : open), y + .03, y + 2.23); // the leaf is solid where it stands
+    const sx = mirror ? -1 : 1, at = a => { const c = V3(x0 + LW / 2 - AX, 0, -AZ).applyAxisAngle(V3(0, 1, 0), a).add(V3(AX, 0, AZ)); return spot(x, zc, ry, sx * c.x, c.z); };
+    const k = turned(...at(open), LW / 2, LT / 2, ry + sx * open, y + .03, y + 2.23); // the leaf is solid where it stands
+    if (D) { // openable: the leaf (about its hinge axis) and the arm's links are meshes of their own, moved by D.set
+      const mesh = (m, gs) => { const q = new THREE.Mesh(merge(gs.map(g => mirror ? flip(g) : g)), m); q.castShadow = q.receiveShadow = true; q.matrixAutoUpdate = false; D.meshes.push(q); scene.add(q); return q; };
+      const by = new Map(); for (const [m, g, own] of leaf) { const n = g.index ? g.toNonIndexed() : g; if (!own) boxUV(n); n.translate(-AX, 0, -AZ); by.has(m) ? by.get(m).push(n) : by.set(m, [n]); }
+      const lm = [...by].map(([m, gs]) => mesh(m, gs)), am = mesh(Al, arm(0).map(([, g]) => boxUV(g.index ? g.toNonIndexed() : g)));
+      const base = new THREE.Matrix4().makeRotationY(ry).setPosition(x, y, zc), hinge = base.clone().multiply(new THREE.Matrix4().makeTranslation(sx * AX, 0, AZ)), R = new THREE.Matrix4();
+      D.leaves.push(a => {
+        R.makeRotationY(sx * a); for (const q of lm) { q.matrix.multiplyMatrices(hinge, R); q.matrixWorld.copy(q.matrix); }
+        am.geometry.dispose(); am.geometry = merge(arm(a).map(([, g]) => { g = boxUV(g.index ? g.toNonIndexed() : g); return mirror ? flip(g) : g; })); am.matrix.copy(base); am.matrixWorld.copy(base);
+        turn(k, ...at(a), LW / 2, LT / 2, ry + sx * a);
+      });
+      D.k.push(k);
+    }
   };
+  // o.openable: the leaf swings open to o.swing radians and back on E (player.js), solid all the way; shut to start (o.open ignored)
+  const D = o.openable && o.leaf !== false ? { ...(([a, b]) => ({ x: a, z: b }))(spot(x, zc, ry, 0, -.6)), y, ry, max: o.swing ?? 1.75, kind: o.kind ?? 'metal', f: 0, to: 0, u: 0, meshes: [], leaves: [], k: [], set(f) { this.f = f; for (const s of this.leaves) s(f * this.max); } } : null;
   if (o.leaf !== false) { hang(false); if (dbl) hang(true); }
   K.place(x, y, zc, ry);
+  if (D) { D.set(0); doors.push(D); }
   for (const sx of [-1, 1]) solidAt(x, y, zc, ry, sx * (Wc / 2 + FU / 2), 1.2, 0, FU, 2.4, 2 * FD);
   solidAt(x, y, zc, ry, 0, Hc + FU / 2, 0, Wc + 2 * FU, FU, 2 * FD);
+  return D;
 }
 // The older call (field, terrace): a frame tinted like `mat`, a leaf tinted like `leaf`, ajar by `open`.
 const doorway = (mat, leaf, x, y, z, ry, open = 1.9) => door(zoneOf(mat) || zoneOf(leaf), x, y, z, ry, { open, frame: hexOf(mat), color: hexOf(leaf) });

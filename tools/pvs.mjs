@@ -3,7 +3,8 @@
 // Loads the real game (?dev&bare) and, from a grid of eye points over every zone (1 m apart, eye at 1.6 m and at a jump's 2.6 m
 // above the floor, skipping points inside solids), and from every eye of tools/walk.mjs's walk list (each opening crossed at 10 cm,
 // each zone's centre line, at 1.6 m and 2.5 m: the narrow sight lines a 1 m grid steps over), renders a small cube view with every
-// opaque mesh flat-coloured by its zone and reads back which zones show. See-through things (glass, cut-out leaves, water, loose things) hide nothing. --check only compares
+// opaque mesh flat-coloured by its zone and reads back which zones show. Portal openings are shut for it (what shows through one is drawn
+// with the far end's own row). See-through things (glass, cut-out leaves, water, loose things) hide nothing. --check only compares
 // with js/seen.js and fails if a zone is seen that seen.js leaves out (run after changing what a place opens onto).
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -18,6 +19,8 @@ const sample = res => `(async () => {
   dev.hold = true;
   const rig = n => { const rt = new THREE.WebGLCubeRenderTarget(n), cam = new THREE.CubeCamera(.05, 3000, rt); for (const c of cam.children) c.layers.enableAll(); return { n, rt, cam, buf: new Uint8Array(n * n * 4) }; }; // every zone's layer: the answer must not depend on the seen.js in force
   const big = rig(${res}), rigs = ${res} === 96 ? [big, rig(64)] : [big]; // walk eyes also at seams.mjs --pop's 64 px: a sliver one size's pixel centres hit and another's miss is in either way
+  for (const e of B.ends) { const m = new THREE.Mesh(new THREE.PlaneGeometry(e.w, e.h).translate(0, e.h / 2, 0), new THREE.MeshBasicMaterial({ side: THREE.DoubleSide })); // a portal's opening is shut: what shows through it is the far end's own row (js/portals.js)
+    m.position.copy(e.p); m.rotation.y = e.ry; m.userData.zone = ''; scene.add(m); m.updateMatrixWorld(); }
   const flat = new Map(), clear = m => m.transparent || m.alphaTest > 0 || m.transmission > 0 || m.opacity < 1 || m.depthWrite === false || m.colorWrite === false || m.visible === false;
   const meshes = [], other = []; scene.traverse(o => { if (o.isMesh && !o.isInstancedMesh) meshes.push(o); else if (o.isMesh || o.isLine || o.isPoints || o.isSprite) other.push(o); }); // other: drawn in its own colours it reads as a zone id (u0..u5 'seen' from the mall), so hidden
   const opaque = new Set(meshes.filter(o => !Array.isArray(o.material) && !clear(o.material) && !B.seeThrough.includes(o) && !o.material.uniforms?.tMirror && (o.material.isMeshStandardMaterial || o.material.isMeshBasicMaterial || o.material.isMeshLambertMaterial || o.material.isMeshPhongMaterial)));

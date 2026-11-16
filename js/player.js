@@ -1,13 +1,13 @@
 // The player: controls, collision and the frame step.
 import * as THREE from 'three';
 import { renderer, camera, uTime, V, WY, zones, inR } from './core.js';
-import { colliders, emitters, warps, ladders, floorH, clear, out, near } from './build.js';
+import { colliders, emitters, warps, ladders, doors, ends, side, across, carry, spin, behind, reveal, floorH, clear, out, near } from './build.js';
 import { setSky, sun } from './sky.js';
 import { ponds, ripple, resetWater } from './water.js';
 import { relight, zone0, lights, weights } from './lights.js';
 import { composer, look, atmos, bloom, film } from './post.js';
 import { sfx, startAudio } from './audio.js';
-import { wakes, stepLoose, drawLoose, resetLoose } from './physics.js';
+import { wakes, stepLoose, drawLoose, resetLoose, reshade } from './physics.js';
 
 // ---------- walking ----------
 const canvas = renderer.domElement, o = document.getElementById('o'), keys = {}, eu = new THREE.Euler(0, 0, 0, 'YXZ');
@@ -41,7 +41,7 @@ addEventListener('mousemove', e => { // mouse look: captured pointer where the b
 });
 addEventListener('keydown', e => { if (paused()) return; keys[e.code] = 1; if (e.code === 'Space') e.preventDefault(); if (e.code === 'KeyM') sfx?.mute(); });
 addEventListener('keyup', e => keys[e.code] = 0);
-document.getElementById('s').textContent = 'click to enter  ·  wasd walk  ·  mouse look  ·  space jump (hold to hop)  ·  shift run  ·  c zoom  ·  m mute  ·  v noclip';
+document.getElementById('s').textContent = 'click to enter  ·  wasd walk  ·  mouse look  ·  space jump (hold to hop)  ·  shift run  ·  c zoom  ·  e open  ·  m mute  ·  v noclip';
 let zone = zone0; // the zone you are in
 
 // The body: an upright cylinder of radius R from the soles (feet) up 1.75 m. A solid blocks it sideways where it overlaps the body
@@ -53,13 +53,25 @@ const R = .3, RS = .22, STEP = .35, TALL = 1.75;
 // in (the classic air-strafe rule), up to TOP, which is 6 m/s × sqrt(16 / 11): no jump lands farther, at any height, than a 6 m/s run did before.
 const G_UP = 16, G_DOWN = 24, JUMP = 4.3 * Math.sqrt(G_UP / 11), AIR = 10, AIR_CAP = .76, TOP = 7.2;
 const blocks = (c, feet) => c[5] > feet + STEP && c[4] < feet + 1.7;
-function collide(p, feet = 0) { // push the body out of every solid it overlaps; a few passes settle corners between solids
-  for (let pass = 0; pass < 4; pass++) { let hit = false;
-    for (const c of colliders) if (near(c, p.x, p.z, R) && blocks(c, feet) && clear(c, p.x, null, p.z, R)) { p.x += out.x; p.z += out.z; hit = true; }
-    if (!hit) return true;
-  }
-  return !colliders.some(c => near(c, p.x, p.z, R - .002) && blocks(c, feet) && clear(c, p.x, null, p.z, R - .002)); // false: still inside something
+// A body straddling a portal's plane, inside its opening, meets the solids of both sides: this side's that are not wholly behind the
+// plane, and the far side's (in its own space, the push brought back) that are not wholly behind the far end.
+const straddle = (x, z, feet) => ends.find(e => Math.abs(side(e, x, z)) < R && Math.abs(across(e, x, z)) < e.w / 2 + R && feet < e.p.y + e.h && feet + TALL > e.p.y);
+function overlaps(p, feet, r, push) { // every solid the body of radius r overlaps; push: move it out of each as found
+  const g = straddle(p.x, p.z, feet); let hit = false;
+  for (const c of colliders) if (near(c, p.x, p.z, r) && blocks(c, feet) && !(g && behind(g, c)) && clear(c, p.x, null, p.z, r)) { if (!push) return true; p.x += out.x; p.z += out.z; hit = true; }
+  if (g) { const [qx, qz] = carry(g, p.x, p.z), f = feet + g.to.p.y - g.p.y;
+    for (const c of colliders) if (near(c, qx, qz, r) && blocks(c, f) && !behind(g.to, c) && clear(c, qx, null, qz, r)) { if (!push) return true; const [dx, dz] = spin(g.to, out.x, out.z); p.x += dx; p.z += dz; hit = true; break; } } // one far solid a pass: the next pass re-carries the moved body
+  return hit;
 }
+function collide(p, feet = 0) { // push the body out of every solid it overlaps; a few passes settle corners between solids
+  for (let pass = 0; pass < 4; pass++) if (!overlaps(p, feet, R, true)) return true;
+  return !overlaps(p, feet, R - .002, false); // false: still inside something
+}
+const floorVia = (x, z, fx, fz) => { // the floor at (x, z) as reached from (fx, fz): through a portal when the step between them crosses its opening
+  for (const e of ends) { const a = side(e, fx, fz), b = side(e, x, z); if (!(a >= 0 && b < 0)) continue; const t = a / (a - b);
+    if (Math.abs(across(e, fx + (x - fx) * t, fz + (z - fz) * t)) < e.w / 2) { const [qx, qz] = carry(e, x, z); return floorH(qx, qz) - e.to.p.y + e.p.y; } }
+  return floorH(x, z);
+};
 const groundAt = (x, z, feet) => { // the highest floor or solid top under the body that a step from `feet` reaches
   let g = floorH(x, z);
   for (const c of colliders) if (c[5] > g && c[5] <= feet + STEP && near(c, x, z, RS) && clear(c, x, null, z, RS)) g = c[5];
@@ -78,7 +90,7 @@ let fly = false, fvy = 0, from = null, vWas = 0;
 const bod = {}; // the body's state for the sound, one object filled each frame
 const cue = document.body.appendChild(document.createElement('div')); cue.hidden = true; cue.textContent = 'noclip';
 cue.style.cssText = 'position:fixed;left:16px;top:14px;font-size:11px;letter-spacing:.3em;color:#f2e4c4;opacity:.6;pointer-events:none';
-const inside = (x, z, f) => colliders.some(c => near(c, x, z, R - .002) && blocks(c, f) && clear(c, x, null, z, R - .002));
+const inside = (x, z, f) => overlaps(V(x, 0, z), f, R - .002, false);
 const setFly = on => { const p = camera.position;
   if (on) from = { x: p.x, z: p.z, feet };
   else { const fl = floorH(p.x, p.z), top = colliders.filter(c => c[5] <= feet + STEP && near(c, p.x, p.z, RS) && clear(c, p.x, null, p.z, RS)).sort((c, d) => d[5] - c[5])[0];
@@ -89,6 +101,31 @@ const place = (x, z, yaw, pitch) => { // teleport: stand at (x, z) facing that w
   camera.position.x = x; camera.position.z = z; camera.rotation.set(pitch, yaw, 0, 'YXZ');
   feet = floorH(x, z); vy = lag = dip = dipV = fvy = 0; vel.set(0, 0); air = grip = fly = false; cue.hidden = true;
 };
+// ---------- doors (props/metalwork.js door() with o.openable): E swings the one you look at, within reach, open or shut ----------
+// The latch is drawn first (the open sound's latch and hinge lead the motion), then the leaf swings over SWING s, eased in and out like a
+// heavy leaf. It is solid all the way: a step that would put it into the body is not taken, so it waits against you and moves on once you
+// step clear. Twins (a connecting pair either side of a portal) move together. The close sound's thud (0.3 s in) lands as the leaf shuts.
+const SWING = .8, LATCH = .1, REACH = 1.6, _f = new THREE.Vector3();
+const ease = u => u * u * (3 - 2 * u);
+function inReach() { // the openable door the eye looks at within reach (to its leaf's middle at handle height), roughly facing it
+  const p = camera.position; camera.getWorldDirection(_f); let best = null, bd = REACH;
+  for (const d of doors) { const c = d.k[0][6], dx = c[0] - p.x, dy = Math.max(d.y + .3, Math.min(d.y + 2, p.y)) - p.y, dz = c[1] - p.z, r = Math.hypot(dx, dz); // across the floor to the leaf's middle; facing it at eye level
+    if (r < bd && (dx * _f.x + dy * _f.y + dz * _f.z) / Math.hypot(r, dy) > .6) { best = d; bd = r; } }
+  return best;
+}
+const inSwing = d => { const p = camera.position, at = [[p.x, p.z, feet], ...ends.filter(e => Math.abs(side(e, p.x, p.z)) < 1).map(e => [...carry(e, p.x, p.z), feet + e.to.p.y - e.p.y])]; // the body here, and taken through a portal it is near
+  return !fly && d.k.some(k => at.some(([x, z, f]) => blocks(k, f) && near(k, x, z, R) && clear(k, x, null, z, R))); };
+let eWas = 0;
+function stepDoors(dt, press) {
+  const d = press && inReach();
+  if (d) for (const q of [d, d.twin].filter(Boolean)) { q.to = 1 - q.to; q.wait = q.to ? LATCH : 0; q.thud = false; q.loud = q === d; if (q.loud && q.to) sfx?.play(`door.${q.kind}.open`, q.k[0][6][0], q.y + 1.05, q.k[0][6][1]); }
+  for (const q of doors) { if (q.u === q.to) continue;
+    if (q.wait > 0) { q.wait -= dt; continue; }
+    const u = Math.max(0, Math.min(1, q.u + (q.to ? dt : -dt) / SWING)), was = q.f; q.set(ease(u));
+    if (inSwing(q)) { q.set(was); continue; } // the body is in its way: it waits
+    q.u = u; const c = q.k[0][6]; reshade(c[0], q.y + 1.1, c[1], 1.3);
+    if (!q.to && !q.thud && q.loud && u * SWING <= .3) { q.thud = true; sfx?.play(`door.${q.kind}.close`, c[0], q.y + 1.05, c[1]); } } // heard from the one pressed (its twin is the same door seen through the portal)
+}
 const eye = { lift: 0 }; // metres added to the eye height; only dev.lift (?dev) changes it
 const frame = dt => { // one game frame of dt seconds: the loop below passes the real time, dev.step() a fixed one
   const p = camera.position, k = c => keys[c] ? 1 : 0, sp = vel.length();
@@ -124,19 +161,25 @@ const frame = dt => { // one game frame of dt seconds: the loop below passes the
   const hang = grip && at && !off && feet < top - .05; // on the rungs below the deck: the body stays on the ladder
   let mx = vel.x * dt, mz = vel.y * dt;
   if (lad && k('Space') && !iy && !ix && Math.abs(feet - top) < .03 && (p.x - (lad[0] + lad[2]) / 2) * lad[4] + (p.z - (lad[1] + lad[3]) / 2) * lad[5] < .5) { mx += lad[4] * 1.5 * dt; mz += lad[5] * 1.5 * dt; } // jump held at the top: step off onto the deck
-  let ox = p.x, oz = p.z, warp; const n = Math.max(1, Math.ceil(Math.hypot(mx, mz) / .1));
+  let ox = p.x, oz = p.z, warp, gate; const n = Math.max(1, Math.ceil(Math.hypot(mx, mz) / .1));
   const fb = grip ? feet - .3 : feet; // on a ladder a solid deck is stepped onto only once the feet are level with it, as below
   let roomy = fly || collide(p, fb); // false: squeezed somewhere a teleport put you, so any move is allowed until you are out
   for (let i = 0; i < n; i++) { // in steps of 10 cm at most, so nothing thin is run through and no passage warp strip is stepped over
     const sx = p.x, sz = p.z; p.x += mx / n; p.z += mz / n; const stop = !fly && !collide(p, fb) && roomy; if (stop) { p.x = sx; p.z = sz; }
     if (!fly && !warp && (warp = warps.find(w => inR(p.x, p.z, w[0], w[1], w[2], w[3])))) { p.x += warp[4]; p.z += warp[5]; ox += warp[4]; oz += warp[5]; }
+    // a portal: the centre went from in front of its plane to behind it, through the opening (the eye within its height). Everything that
+    // has a place or a direction is taken through exactly: where you are, where the frame started, the move left, the speed, the facing
+    if (!gate && (gate = ends.find(e => { const a = side(e, sx, sz), b = side(e, p.x, p.z), y = feet + 1.62 + eye.lift - e.p.y; if (!(a >= 0 && b < 0) || y < 0 || y > e.h) return false;
+      const t = a / (a - b); return Math.abs(across(e, sx + (p.x - sx) * t, sz + (p.z - sz) * t)) < e.w / 2; }))) {
+      [p.x, p.z] = carry(gate, p.x, p.z); [ox, oz] = carry(gate, ox, oz); [mx, mz] = spin(gate, mx, mz); const [vx, vz] = spin(gate, vel.x, vel.y); vel.set(vx, vz);
+      camera.rotateOnWorldAxis(UP, gate.turn); feet += gate.to.p.y - gate.p.y; }
     if (stop) break; }
   if (hang) { // held between the rails: within 10 cm of the ladder's middle, and inside its zone
     const cx = (lad[0] + lad[2]) / 2, cz = (lad[1] + lad[3]) / 2, [dx, dz] = [lad[4], lad[5]], a0 = (p.x - cx) * -dz + (p.z - cz) * dx, a = a0 - (a0 - Math.max(-.1, Math.min(.1, a0))) * Math.min(1, dt * 8), b = Math.max(-.6, Math.min(.6, (p.x - cx) * dx + (p.z - cz) * dz));
     p.x = cx - dz * a + dx * b; p.z = cz + dx * a + dz * b; }
   // A rise taller than a step is a wall. Pool sides can't be walked up: the ways out are the steps, the ladders, or a jump onto something low enough.
   const rise = grip ? .05 : .35; // on a ladder the deck is stepped onto only once the climb has brought the feet level with it
-  const lead = (to, from) => to + Math.sign(to - from) * .3, tall = (x, z) => { const here = floorH(x, z); return here - feet > rise || floorH(lead(x, ox), lead(z, oz)) - Math.max(feet, here) > rise; }; // tested a body-width ahead, so the eye never reaches the wall face; measured from the step being stepped onto, or a fast climber would see two steps ahead as one wall
+  const lead = (to, from) => to + Math.sign(to - from) * .3, tall = (x, z) => { const here = floorH(x, z); return here - feet > rise || floorVia(lead(x, ox), lead(z, oz), x, z) - Math.max(feet, here) > rise; }; // tested a body-width ahead, so the eye never reaches the wall face; measured from the step being stepped onto, or a fast climber would see two steps ahead as one wall
   if (!fly && tall(p.x, p.z)) { if (!tall(p.x, oz)) p.z = oz; else if (!tall(ox, p.z)) p.x = ox; else { p.x = ox; p.z = oz; } }
   if (hop) { const ax = (p.x - ox) / dt, az = (p.z - oz) / dt; if (ax * ax + az * az < vel.lengthSq() - 1e-6) vel.set(ax, az); } // a wall met in the air takes the speed into it, or it would come back once past
   const ground = groundAt(p.x, p.z, feet), was = feet;
@@ -168,7 +211,8 @@ const frame = dt => { // one game frame of dt seconds: the loop below passes the
   Object.assign(bod, { feet, sp, step: f !== foot && !air && sp > .5, foot: f & 1, run: sp > 4.2, landed, hit, jumped, splash, fall: vy, deep, grip, fly, air }); // for the footsteps (sound.js)
   foot = f;
 
-  const here = Object.values(zones).find(z => inR(p.x, p.z, ...z.box));
+  stepDoors(dt, k('KeyE') && !eWas); eWas = k('KeyE');
+  const here = ends.find(e => reveal(e, p.x, p.z))?.zone || Object.values(zones).find(z => inR(p.x, p.z, ...z.box)); // in a portal's reveal: its zone, whichever box holds it (or weights() would measure from the wrong space)
   if (here && here !== zone) { zone = here; sfx?.zone(zone); setSky(zone.sky || 'day'); }
   const wts = weights(p.x, p.z, zone);
   if (warp) relight(p, zone, 1, wts); // arrived somewhere else: the lamps come at once
@@ -214,7 +258,7 @@ const looseCost = { ms: 0 }; // what the loose things cost the last frame, in ms
 function resetAll(x, z, yaw, pitch) {
   for (const c in keys) keys[c] = 0; eye.lift = 0; uTime.value = 0; camera.fov = 72; camera.updateProjectionMatrix();
   place(x, z, yaw, pitch); stride = foot = vy = drop = simT = hitP = fallP = coy = buf = spaceWas = 0; grip = splashP = false; vel.set(0, 0);
-  zone = Object.values(zones).find(q => inR(x, z, ...q.box)) || zones.bA; // as lights.js picks zone0
+  zone = ends.find(e => reveal(e, x, z))?.zone || Object.values(zones).find(q => inR(x, z, ...q.box)) || zones.bA; // as lights.js picks zone0
   resetWater(); resetLoose();
   const wts = weights(x, z, zone); setSky(zone.sky || 'day'); relight(camera.position, zone, 1, wts); relight(camera.position, zone, 1, wts);
   for (const l of lights) l.shadow.needsUpdate = true; sun.shadow.needsUpdate = renderer.shadowMap.needsUpdate = true; // the loose things moved: every shadow is drawn again

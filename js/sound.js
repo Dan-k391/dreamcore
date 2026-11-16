@@ -126,7 +126,7 @@ function makeSound(ac, out, L) { // L: the level: { zones, zoneAt(x, z), emitter
     // each zone's share: yours and those near a doorway (weights) and, faintly, the rooms your doorways open into
     for (const b of buses.values()) b.tp = b.tb = 0, b.tc = 0;
     for (const [z, s] of st.wts) { const b = bus(z); b.tb = Math.sqrt(s); b.tc = Math.min(1, 2 * s); b.tp = Math.min(1, 2 * s); }
-    for (const o of cur.openings || []) { const n = o.p === cur ? o.q : o.p, sa = o.ax ? st.x : st.z, sb = o.ax ? st.z : st.x, d = Math.hypot(Math.max(o.lo - sa, sa - o.hi, 0), sb - o.at), k = Math.exp(-d / 5), b = bus(n);
+    for (const o of cur.openings || []) { const n = o.p === cur ? o.q : o.p, sa = o.ax ? st.x : st.z, sb = o.ax ? st.z : st.x, e = o.e?.[o.p === cur ? 0 : 1], d = e ? Math.hypot(st.x - e.p.x, st.z - e.p.z) : Math.hypot(Math.max(o.lo - sa, sa - o.hi, 0), sb - o.at), k = Math.exp(-d / 5) * (e?.door ? Math.min(1, e.door.f * 4) : 1), b = bus(n); // a portal (o.e): from its end on this side, nothing through a shut leaf
       b.tb = Math.max(b.tb, .3 * k); b.tp = Math.max(b.tp, .5 * k); }
     const cb = bus(cur); cb.tp = 1; cb.tc = 1; cb.tb = Math.max(cb.tb, .5);
     for (const b of buses.values()) {

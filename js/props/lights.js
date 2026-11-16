@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { V, H } from '../core.js';
 import { M } from '../mat.js';
-import { emitters, add as add0, box, round, lit, put, solidAt, fixture } from '../build.js';
+import { emitters, add as add0, box, round, lit, put, solidAt, fixture, floorH } from '../build.js'; // floorH: a fixture aims at the floor under it (a room 200 m down was lit straight up)
 
 const PI = Math.PI, v2 = (r, y) => new THREE.Vector2(r, y);
 const hash = (x, z) => { const s = Math.sin(x * 12.9898 + z * 78.233) * 43758.5453; return s - Math.floor(s); };
@@ -77,7 +77,7 @@ function batten(z, x, y, zc, ry = 0, o = {}) {
   const t = new THREE.CylinderGeometry(.013, .013, tl - .06, 32, 1, true).rotateZ(-PI / 2).rotateX(-PI / 2), uv = t.attributes.uv;
   for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getY(i) * (tl - .06), uv.getX(i) * .075);
   A(tm, t.translate(0, ty, 0), true);
-  if (on && o.power) lit(z, x, y - .08, zc, o.power, [x, 0, zc], 1.5, 10, 0xffd8a8);
+  if (on && o.power) lit(z, x, y - .08, zc, o.power, [x, floorH(x, zc), zc], 1.5, 10, 0xffd8a8);
 }
 
 // ---------- surface opal panel: an extruded aluminium frame, mitred, round a direct-lit opal diffuser ----------
@@ -88,7 +88,7 @@ function opalPanel(z, x, y, zc, ry = 0, o = {}) {
   const q = new THREE.PlaneGeometry(w - .032, l - .032).rotateX(PI / 2), uv = q.attributes.uv, s = hash(x, zc);
   for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * (w - .032) + s, uv.getY(i) * (l - .032));
   A(on ? M(null, 'opalPanel') : M(z, 'opalPanel', { emit: null, color: 0xd8d4c8 }), q.translate(0, -.034, 0), true);
-  if (on && o.power) lit(z, x, y - .1, zc, o.power, [x, 0, zc], 1.45, 12, 0xffd8a8);
+  if (on && o.power) lit(z, x, y - .1, zc, o.power, [x, floorH(x, zc), zc], 1.45, 12, 0xffd8a8);
 }
 
 // ---------- park lamp posts: a fluted cast base, a tapered steel pole, and a crook-neck lantern or a globe on top ----------
@@ -194,7 +194,7 @@ function sconce(z, x, y, zc, ry = 0, o = {}) {
   A(glass, lathe([[.03, cy + .034], [.04, cy + .048], [.052, cy + .075], [.06, cy + .105], [.064, cy + .135], [.066, cy + .158], [.067, cy + .166], [.064, cy + .17]], 48).translate(0, 0, cz), true);
   A(glass, new THREE.TorusGeometry(.0655, .003, 6, 48).rotateX(PI / 2).translate(0, cy + .169, cz)); // the rolled rim, glass seen in its thickness
   solidAt(x, y, zc, ry, 0, .05, .1, .14, .32, .2);
-  if (on && o.power) { const c = Math.cos(ry), s = Math.sin(ry); lit(z, x + cz * s, y + .12, zc + cz * c, o.power, [x + .8 * s, 0, zc + .8 * c], 1.4, 8, 0xffcf96); }
+  if (on && o.power) { const c = Math.cos(ry), s = Math.sin(ry); lit(z, x + cz * s, y + .12, zc + cz * c, o.power, [x + .8 * s, floorH(x, zc), zc + .8 * c], 1.4, 8, 0xffcf96); }
 }
 
 // ---------- small wall / step light: a cast aluminium brick light with a three-louvre eyelid over an opal lens ----------

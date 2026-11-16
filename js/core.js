@@ -19,6 +19,29 @@ camera.position.set(spawned ? spawn[0] : 1.9, 1.62, spawned ? spawn[1] : 20);
 if (spawned) camera.rotation.set(spawn[3] || 0, spawn[2] || 0, 0, 'YXZ');
 const uTime = { value: 0 }, V = (x, y, z) => new THREE.Vector3(x, y, z), sunDir = V(0, 1, 0);
 const quadVS = 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0., 1.); }';
+// The one clipping plane every program is built with: js/portals.js moves it onto a portal's far plane while drawing what is seen through
+// it, and everywhere else it clips nothing. Set, and one render made, before anything compiles (compile() takes the clipping state of the
+// last render), so no program is ever built twice for it. Clipped in hardware (gl_ClipDistance) where the GPU can: three's own clipping
+// discards in the fragment shader, and a shader that may discard loses the early depth test, which tripled the scene pass everywhere.
+// So every material takes the clip-distance extension (a getter on the prototype: ShaderMaterials set their own, the setter keeps it on)
+// and the fragment test is gone; without the extension three's discard stays (correct, slower).
+const clipHW = renderer.extensions.get('WEBGL_clip_cull_distance');
+if (clipHW) {
+  renderer.getContext().enable(clipHW.CLIP_DISTANCE0_WEBGL); // three writes gl_ClipDistance but never switches it on
+  Object.defineProperty(THREE.Material.prototype, 'extensions', { configurable: true,
+    get() { return this._ext ||= { clipCullDistance: true, multiDraw: false }; }, set(v) { this._ext = Object.assign(v, { clipCullDistance: true }); } });
+  const C = THREE.ShaderChunk;
+  C.clipping_planes_pars_vertex += `
+#if NUM_CLIPPING_PLANES > 0 && defined( USE_CLIP_DISTANCE )
+	uniform vec4 clippingPlanes[ NUM_CLIPPING_PLANES ];
+#endif`;
+  C.clipping_planes_vertex += `
+#if NUM_CLIPPING_PLANES > 0 && defined( USE_CLIP_DISTANCE )
+	gl_ClipDistance[ 0 ] = clippingPlanes[ 0 ].w - dot( - mvPosition.xyz, clippingPlanes[ 0 ].xyz );
+#endif`;
+  C.clipping_planes_fragment = '';
+}
+const clip = new THREE.Plane(V(0, 1, 0), 1e6); renderer.clippingPlanes = [clip]; renderer.render(new THREE.Scene(), camera);
 const H = 2.7, PH = 5, WY = -0.12; // backrooms ceiling, pool hall ceiling, water level (shared by every pool)
 
 // ---------- zones: each has its own materials, ambient probe, exposure, fog, grade and room tone ----------
@@ -30,4 +53,4 @@ const zones = {}; // id -> zone, in the order the places register them (see leve
 const defZone = (id, z) => zones[id] = Object.assign(z, { id, mats: [], fog: new THREE.Vector4(...z.fog), tint: V(...z.tint), probe: V(...(z.probe || [(z.box[0] + z.box[2]) / 2, 1.4, (z.box[1] + z.box[3]) / 2])) });
 const inR = (x, z, x1, z1, x2, z2) => x > x1 && x < x2 && z > z1 && z < z2;
 
-export { renderer, scene, camera, uTime, V, sunDir, quadVS, H, PH, WY, warm, dark, dry, zones, defZone, inR };
+export { clip, renderer, scene, camera, uTime, V, sunDir, quadVS, H, PH, WY, warm, dark, dry, zones, defZone, inR };

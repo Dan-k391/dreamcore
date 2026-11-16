@@ -10,13 +10,14 @@ import { renderer, scene, camera, uTime, sunDir, quadVS } from './core.js';
 import { seeThrough } from './build.js';
 import { sun } from './sky.js';
 import './water.js';
+import './portals.js'; // hooks the scene draws below: what is seen through a portal goes into the same buffers
 
 import { zone0 as zone } from './lights.js'; // the starting zone: the look starts from it
 // ---------- post ----------
 // Only the scene render is multisampled: it draws into msaa, which the AO pass and atmos read; the full-screen passes after it
 // write the same value to every sample, so their ping-pong targets need none (a 4x resolve per pass saved, same picture).
 const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType }));
-const msaa = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 });
+const msaa = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4, stencilBuffer: true, resolveStencilBuffer: false }); // the stencil: portals.js marks openings in it, used only while drawing (resolving it is slow on D3D: it tripled the scene pass)
 const scenePass = new RenderPass(scene, camera), sceneRender = scenePass.render.bind(scenePass);
 scenePass.render = (r, w, read, ...x) => sceneRender(r, w, msaa, ...x);
 composer.addPass(scenePass);

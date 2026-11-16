@@ -33,5 +33,7 @@
  { "name": "metro-arrival", "hash": "702,-596.5,-1.0,0" },
  { "name": "metro", "hash": "729,-597.6,1.42,-0.02" },
  { "name": "glasshouse-arrival", "hash": "831,-600,-1.5708,0" },
- { "name": "glasshouse", "hash": "848.6,-599.2,1.75,-0.04" }
+ { "name": "glasshouse", "hash": "848.6,-599.2,1.75,-0.04" },
+{ "name": "hotel-portal-west", "hash": "4.2,34.8,1.5708,0" },
+{ "name": "vestibule-back", "hash": "302.6,301.6,1.5708,0" }
 ]
