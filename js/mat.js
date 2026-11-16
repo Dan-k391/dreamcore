@@ -94,7 +94,7 @@ const fixPars = `
       return mix(a, 1., clamp(length(g - c) - 1., 0., 1.)); } // past the grid's edge: the plain capture
   #endif
   #ifdef NL
-    uniform vec4 uLamp[NL]; uniform vec3 uLampCol; uniform float uFixBase;
+    uniform vec4 uLamp[NL], uFixT[NL]; uniform vec3 uLampCol; uniform float uFixBase;
     float fixVis(float tile, vec3 d, float dist) { // how much of the fixture reaches here: its distance map, 2x2 filtered
       vec3 n = d / (abs(d.x) + abs(d.y) + abs(d.z)); vec2 o = n.y >= 0. ? n.xz : (1. - abs(n.zx)) * vec2(n.x >= 0. ? 1. : -1., n.z >= 0. ? 1. : -1.);
       vec2 p = (o * .5 + .5) * ${FT}. - .5, f = fract(p); ivec2 i0 = ivec2(floor(p)), org = ivec2(int(mod(tile, ${FA}.)), int(tile / ${FA}.)) * ${FT};
@@ -107,9 +107,25 @@ const fixMain = `
   #ifdef NL
     { vec3 nW = inverseTransformDirection(geometryNormal, viewMatrix);
       for (int i = 0; i < NL; i++) {
-        vec3 dW = vEW - uLamp[i].xyz; float d2 = dot(dW, dW), k = uLamp[i].w / (d2 + .2); if (k < .002) continue;
+        vec3 dW = vEW - uLamp[i].xyz; vec4 T = uFixT[i]; float a = dot(dW, T.xyz), d2 = dot(dW, dW), k = uLamp[i].w / (d2 + .2);
+        vec3 dL = dW - T.xyz * clamp(a, -T.w, T.w); // from the nearest point of a line fixture (uFixT: its direction, half length); a point: dW
+        if (T.w > 0.) { float h = sqrt(d2 - a * a + .2); k = uLamp[i].w / (2. * T.w * h) * (atan((T.w - a) / h) + atan((T.w + a) / h)); } // its power spread evenly along it, so lines end to end make one even strip
+        if (k < .002) continue;
+        #ifdef USE_CLEARCOAT
+          if (dot(nW, dL) >= 0. && dot(inverseTransformDirection(geometryClearcoatNormal, viewMatrix), dL) >= 0.) continue;
+        #else
+          if (dot(nW, dL) >= 0.) continue; // behind the surface: RE_Direct would add nothing, so skip its shadow lookup too
+        #endif
         vec3 dO = dW + nW * .03; float vis = k < .01 ? 1. : fixVis(uFixBase + float(i), dO, length(dO)); if (vis <= 0.) continue; // a faint far one: its shadow would not show
-        IncidentLight fx; fx.direction = normalize((viewMatrix * vec4(-dW, 0.)).xyz); fx.color = uLampCol * k * vis; fx.visible = true;
+        #ifdef STANDARD
+          if (T.w > 0.) { // a line: diffuse from its nearest point, the highlight from its point nearest the reflected ray (a streak, not a dot per line)
+            vec3 c = uLampCol * k * vis, Td = (viewMatrix * vec4(T.xyz, 0.)).xyz, L0 = (viewMatrix * vec4(-dW, 0.)).xyz - Td * T.w, Ld = Td * (2. * T.w), r = reflect(-geometryViewDir, geometryNormal);
+            float rd = dot(r, Ld); vec3 Ls = L0 + Ld * clamp((dot(r, L0) * rd - dot(L0, Ld)) / max(dot(Ld, Ld) - rd * rd, 1e-6), 0., 1.), Lp = normalize((viewMatrix * vec4(-dL, 0.)).xyz);
+            reflectedLight.directDiffuse += saturate(dot(geometryNormal, Lp)) * c * BRDF_Lambert(material.diffuseColor);
+            float a2 = pow2(material.roughness), nz = a2 / saturate(a2 + T.w / length(Ls)); Ls = normalize(Ls); // the streak's energy spread along the line (Karis 2013)
+            reflectedLight.directSpecular += nz * saturate(dot(geometryNormal, Ls)) * c * BRDF_GGX(Ls, geometryViewDir, geometryNormal, material); continue; } // (no clearcoat or sheen from lines)
+        #endif
+        IncidentLight fx; fx.direction = normalize((viewMatrix * vec4(-dL, 0.)).xyz); fx.color = uLampCol * k * vis; fx.visible = true;
         RE_Direct(fx, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight); } }
   #endif
 `;

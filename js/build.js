@@ -127,7 +127,7 @@ function slab(mat, axis, at, depth, a1, a2, y1, y2, cuts, through = false) { // 
 }
 const room = (z, x1, z1, x2, z2, h) => { box(z.carpet, x1, -.2, z1, x2, 0, z2); box(z.ceil, x1, h, z1, x2, h + .2, z2); };
 const wall = (z, x1, z1, x2, z2, h = H) => { box(z.paper, x1, 0, z1, x2, h, z2); box(z.trim, x1 - .012, 0, z1 - .012, x2 + .012, .1, z2 + .012); };
-const fixture = (z, x, y, zc, power) => { (z.fix ||= []).push(V(x, y, zc)); z.fix.at(-1).w = power; console.assert(z.fix.length <= 24, 'over 24 fixtures in ' + z.id); }; // a light every material of this zone computes, shadowed by a map baked at load (lights.js), up to 24 a zone
+const fixture = (z, x, y, zc, power, seg) => { (z.fix ||= []).push(V(x, y, zc)); z.fix.at(-1).w = power; z.fix.at(-1).seg = seg; console.assert(z.fix.length <= 24, 'over 24 fixtures in ' + z.id); }; // a light every material of this zone computes, shadowed by a map baked at load (lights.js), up to 24 a zone; seg [dx, dy, dz]: a line of light from p - seg to p + seg (a cove's strip), its power spread evenly along it
 const tube = (pts, r, seg, mat) => { const m = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts.map(p => V(...p))), seg, r, 16), mat); m.castShadow = m.receiveShadow = true; scene.add(m); return m; };
 const lit = (z, x, y, zc, power, to = [x, 0, zc], angle = 1.35, dist = 12, color = 0xffdfb0) => emitters.push({ zone: z, p: V(x, y, zc), t: V(...to), power, angle, dist, color });
 // Kit objects (js/props/, docs/props.md) are built about their own origin, feet at y 0, front toward +z, and set in the world by put():

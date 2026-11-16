@@ -81,7 +81,7 @@ for (const z of agZ) { const lo = z.env[0].map(v => Math.floor((v - 1) / AG_H) *
 const fixRT = new THREE.WebGLRenderTarget(AW, fixH + agRows, { type: THREE.HalfFloatType, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false, generateMipmaps: false }); // RGBA: the fixtures' maps (texelFetch, red) and the grids (filtered)
 console.assert(fixRT.height <= renderer.capabilities.maxTextureSize, 'fixture atlas taller than a texture may be');
 { let base = 0; for (const z of fixZ) {
-  const u = { uLamp: { value: z.fix.map(p => new THREE.Vector4(p.x, p.y, p.z, p.w)) }, uLampCol: { value: new THREE.Color(0xffedc0) }, uFixBase: { value: base }, tFix: { value: fixRT.texture } };
+  const u = { uLamp: { value: z.fix.map(p => new THREE.Vector4(p.x, p.y, p.z, p.w)) }, uFixT: { value: z.fix.map(p => { const s = V(...(p.seg || [0, 0, 0])), l = s.length(); return new THREE.Vector4(...(l ? s.divideScalar(l) : s).toArray(), l); }) }, uLampCol: { value: new THREE.Color(0xffedc0) }, uFixBase: { value: base }, tFix: { value: fixRT.texture } };
   for (const m of z.mats) if (m.userData.envU) { Object.assign(m.userData.envU, u); m.defines = { ...m.defines, NL: z.fix.length }; }
   base += z.fix.length; }
   for (const z of agZ) { const { lo, n, per, y0 } = z.ag, u = { tFix: { value: fixRT.texture }, uAG0: { value: new THREE.Vector4(...lo, 1 / AG_H) }, uAG1: { value: new THREE.Vector4(...n, per) }, uAG2: { value: new THREE.Vector4(0, y0, 1 / AW, 1 / fixRT.height) } };
