@@ -114,13 +114,14 @@ renderer.render = (s, c) => {
   draw(s, c);
   if (s !== scene || c !== camera || !ends.length || !renderer.getRenderTarget()) return;
   const tg = renderer.getRenderTarget(); if (!tg.stencilBuffer && tg.depthTexture?.format !== THREE.DepthStencilFormat) return; // no stencil, no clip: a far side would cover the whole picture (a test's capture target); none is drawn
-  if (!warm) { warm = true; for (const m of [reset, fill, mark]) { pm.material = m; renderer.compile(pocket, c); } renderer.compile(taking, c); }
+  if (!warm.has(s.overrideMaterial)) { warm.add(s.overrideMaterial); const t = tg.clone(); t.setSize(1, 1); renderer.setRenderTarget(t); // drawn, not only compiled: ANGLE makes a program's variant for the target's formats on its first draw (2-3 ms on first sight of a portal), so once into a 1 px twin of each pass's target
+    try { for (const m of [reset, fill, mark]) { pm.material = m; draw(pocket, c); } draw(taking, c); } finally { renderer.setRenderTarget(tg); t.depthTexture?.dispose(); t.dispose(); } }
   const rt = renderer.getRenderTarget(), auto = renderer.autoClear, upd = scene.matrixWorldAutoUpdate, on = ponds.map(w => w.visible);
   if (!scene.overrideMaterial) stats.drawn = stats.levels = 0;
   renderer.autoClear = false; scene.matrixWorldAutoUpdate = false; for (const w of ponds) w.visible = false; // shortcut: no pool is drawn through a portal (its pictures are of the main view)
   try { pass(c, 0, [-1, -1, 1, 1], rt, null); }
   finally { ref = -1; sb.setMask(0xff); renderer.autoClear = auto; scene.matrixWorldAutoUpdate = upd; ponds.forEach((w, i) => w.visible = on[i]); scissor(rt, null); }
 };
-let warm = false; // the pocket's three programs, compiled on the first scene draw with its target bound (a program's output colour space is the target's): none on first sight of a portal
+const warm = new Set(); // the passes (by override material) whose target the pocket's three programs and the take's were drawn into once (a program's output colour space is the target's): none on first sight of a portal
 
 export { stats, DEPTH, rectOf };

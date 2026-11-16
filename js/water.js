@@ -34,7 +34,7 @@ const waterViews = { reuse: true, cull: true }; // cull false (?dev): pictures e
 let captured = false, frameNo = 0, epoch = 0;
 const beforeScene = scene.onBeforeRender;
 scene.onBeforeRender = function (r, s, c, ...args) {
-  if (c === camera && !s.overrideMaterial) { captured = false; frameNo++; }
+  if (c === camera && !s.overrideMaterial) { captured = false; frameNo++; fit(); }
   beforeScene.call(this, r, s, c, ...args);
 };
 // One mirror/lens pair for every pool: they share a plane, so a capture made for one is right for all (below the plane each pool
@@ -50,7 +50,7 @@ under.setSize(1, 1); under.depthTexture = new THREE.DepthTexture(1, 1, THREE.Flo
 mirror.matrixAutoUpdate = lens.matrixAutoUpdate = false;
 const BUF = new THREE.Vector2(), fit = () => { // follow the drawing buffer (resize, pixel ratio, render scale): three resizes the depth texture with the target
   renderer.getDrawingBufferSize(BUF); const w = Math.ceil(BUF.x * OVER), h = Math.ceil(BUF.y * OVER);
-  if (under.width !== w || under.height !== h) under.setSize(w, h);
+  if (under.width !== w || under.height !== h) { under.setSize(w, h); renderer.initRenderTarget(under); }
 };
 const wideCam = new THREE.PerspectiveCamera(), gl = renderer.getContext(), P = new THREE.Vector3(), M4 = new THREE.Matrix4(), frustum = new THREE.Frustum(), LO = new THREE.Vector3(), HI = new THREE.Vector3();
 // Is this pool certainly hidden? Each frame its proxy, the water widened 1.5 m and raised 3 m, is drawn invisibly after everything opaque
@@ -248,6 +248,9 @@ function twin(x1, z1, x2, z2) {
   };
   return T;
 }
+// made at load, not on the frame a pool first shows (the baths seen first through their door: five targets and textures in one frame); `under` by fit(), from the first frame on
+for (const r of [...ponds.flatMap(w => w.sim), mirrorRT]) renderer.initRenderTarget(r);
+for (const w of ponds) for (const u of [w.material.uniforms, w.tileU]) for (const k in u) if (u[k].value?.isTexture && !u[k].value.isRenderTargetTexture) renderer.initTexture(u[k].value);
 function ripple(w, drops) { // one 60Hz step of a pool's waves, with up to DROPS disturbances [x, z, size] in world space
   simMat.uniforms.tSim.value = w.sim[0].texture; simMat.uniforms.uPx.value = w.px;
   simMat.uniforms.uDrop.value.forEach((d, i) => { const [x, z, p] = drops[i] || [0, 0, 0]; d.set((x - w.rect.x) / (w.rect.z - w.rect.x), (z - w.rect.y) / (w.rect.w - w.rect.y), p); });
