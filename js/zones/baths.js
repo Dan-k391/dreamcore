@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { V, WY, zones, defZone } from '../core.js';
 import { M, P, poolMats } from '../mat.js';
-import { flats, pools, rings, loose, add, block, box, solid, round, turned, put, solidAt, flight, lit, fixture, portal, RoundedBoxGeometry } from '../build.js';
+import { doors, via, flats, pools, rings, loose, add, block, box, solid, round, turned, put, solidAt, flight, lit, fixture, portal, RoundedBoxGeometry } from '../build.js';
 import { poolLadder, railing, drain, door } from '../props/metalwork.js';
 import { poolLight, opalPanel, sconce } from '../props/lights.js';
 import { mallBench } from '../props/garden.js';
@@ -25,7 +25,7 @@ const poolFloor = (x, z) => {
 defZone('pB', { music: 'pool', amb: { water: 1, drips: .7, verb: [0, .25, 1] }, step: 'tile', grp: 'r', k: .3, exp: .32, fog: [.2, .15, .1, .0006], tint: [1.02, 1, .97], sat: 1.04, bloom: .32, shaft: 0, hum: 0, water: 1, wet: .8,
         box: [X0 - .4, Z0 - .4, X0 + 45.6, Z0 + 32.4], probe: [X0 + 20, 3, Z0 + 16], env: [[X0 - .4, -2.2, Z0 - .4], [X0 + 45, H, Z0 + 32.4]], band: -99, bandCol: [1, 1, 1], shimmer: .3, caus: .5 });
 defZone('pE', { music: 'pool', amb: { water: .35, drips: .2, verb: [0, .7, .3] }, step: 'tile', grp: 'r', k: .7, exp: .32, fog: [.3, .22, .14, .003], tint: [1.02, 1, .96], sat: 1, bloom: .3, shaft: 0, hum: 0, water: .3, wet: .4,
-        box: [X0 - 9.7, Z0 + 14.5, X0 - .4, Z0 + 24.3], probe: [X0 - 8.2, 1.5, Z0 + 19], env: [[X0 - 9.4, 0, Z0 + 14.8], [X0 - .4, 3.2, Z0 + 24]] });
+        box: [X0 - 9.7, Z0 + 14.5, X0 - .4, Z0 + 24.35], probe: [X0 - 8.2, 1.5, Z0 + 19], env: [[X0 - 9.4, 0, Z0 + 14.8], [X0 - .4, 3.2, Z0 + 24]] });
 flats.push([X0 + 6, Z0 + 9, X0 + 32, Z0 + 23, (x, z) => poolFloor(x - X0, z - Z0)]);
 pools.push([X0 + 6, Z0 + 9, X0 + 32, Z0 + 23, -2.12, 'pB', ['pB', 'pE'], [.07, .16, .15]]);
 poolMats(zones.pB);
@@ -167,15 +167,23 @@ const Glow = M(null, 'opalPanel');
 
 { // ---------- the entrance passage: in at the door in its south end (the hotel's east door 24 through a portal), north 9 m, then east into the hall ----------
   const e = zones.pE, Tp = M(e, 'poolTile'), Bp = M(e, 'poolMosaic', { color: 0x1f5058, roughness: .18 }), h = 3.2;
-  B(Tp, -9.7, -.2, 14.5, -.4, 0, 24.3); B(Tp, -9.7, h, 14.5, -.4, h + .2, 24.3);
-  B(Tp, -9.7, 0, 14.5, -9.4, h, 24.3); B(Tp, -9.4, 0, 14.5, -.4, h, 14.8); B(Tp, -7, 0, 17.2, -6.7, h, 24); B(Tp, -6.7, 0, 17.2, -.4, h, 17.5);
-  B(Tp, -9.4, 0, 24, -8.7, h, 24.3); B(Tp, -7.7, 0, 24, -6.7, h, 24.3); B(Tp, -8.7, 2.24, 24, -7.7, h, 24.3); // its south wall round the door
+  B(Tp, -9.7, -.2, 14.5, -.4, 0, 24.35); B(Tp, -9.7, h, 14.5, -.4, h + .2, 24.35);
+  B(Tp, -9.7, 0, 14.5, -9.4, h, 24.35); B(Tp, -9.4, 0, 14.5, -.4, h, 14.8); B(Tp, -7, 0, 17.2, -6.7, h, 24.35); B(Tp, -6.7, 0, 17.2, -.4, h, 17.5);
+  // its south wall round the door, 0.35 m deep to the portal's plane: the hallway wall's reveal beyond its frame, carried on here in the
+  // hallway's damask (jambs and head) out to the edge of the frame cased on this face, where the passage's tile takes over; tile underfoot, no step
+  const Dm = M(e, 'damask', { color: 0xe0cba0 });
+  B(Tp, -9.4, 0, 24, -8.8, h, 24.35); B(Tp, -7.6, 0, 24, -7, h, 24.35); B(Tp, -8.8, 2.34, 24, -7.6, h, 24.35);
+  B(Dm, -8.8, 0, 24, -8.7, 2.34, 24.35); B(Dm, -7.7, 0, 24, -7.6, 2.34, 24.35); B(Dm, -8.7, 2.24, 24, -7.7, 2.34, 24.35);
   for (const [y1, y2] of [[2.4, 2.45], [0, .1]]) { // the frieze and a teal base course, carried round from the hall
     K(Bp, -9.4, y1, 14.8, -9.398, y2, 24); K(Bp, -9.4, y1, 14.8, -.4, y2, 14.802); K(Bp, -7.002, y1, 17.5, -7, y2, 24); K(Bp, -7, y1, 17.198, -.4, y2, 17.2);
-    K(Bp, -9.4, y1, 23.998, -8.7, y2, 24); K(Bp, -7.7, y1, 23.998, -7, y2, 24);
+    if (y1) K(Bp, -9.398, y1, 23.998, -7.002, y2, 24); else { K(Bp, -9.398, y1, 23.998, -8.7, y2, 24); K(Bp, -7.7, y1, 23.998, -7.002, y2, 24); }
   }
-  door(e, X0 - 8.2, 0, Z0 + 24.05, 0, { open: 1.65, color: 0x4b2418, frame: 0xd8ccb4 });
-  portal([5.4, 0, 24, -PI / 2], [X0 - 8.2, 0, Z0 + 24.3, PI]); // the hallway's east door 24 (its plane the wall's back face) is this door's outer face
+  // the hallway's east door 24 (room 307) is this doorway's door: the portal's plane through the hallway frame's middle (x 5.05) and here
+  // the reveal's outer end; the door's copy stands in it (one leaf in both spaces, docs/building.md, Portals), a plain frame cased round this face.
+  // The hallway's door is found in build.js's doors (places never import each other; hotel.js is built first, js/level.js)
+  const d24 = doors.find(d => d.zone === zones.hT && d.at[1] === 24), [pA] = portal([5.05, 0, 24, -PI / 2], [X0 - 8.2, 0, Z0 + 24.35, PI], 1, 2.24, d24);
+  pA.to.door = door(e, ...via(pA, 5.05, 0, 24, PI / 2), { openable: true, leafMat: M(e, 'veneer', { swap: 1 }), frame: 0xd8ccb4, copy: d24 });
+  door(e, X0 - 8.2, 0, Z0 + 24.05, 0, { leaf: false, pivot: true, frame: 0xd8ccb4 });
   opalPanel(e, X0 - 8.2, h, Z0 + 20.6, 0, { w: .6, l: 1.2, power: 22 }); opalPanel(e, X0 - 8.2, h, Z0 + 16, 0, { w: .6, l: .6, power: 14 }); opalPanel(e, X0 - 3.6, h, Z0 + 16, PI / 2, { w: .6, l: 1.2, power: 22 });
 }
 

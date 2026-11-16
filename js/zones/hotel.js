@@ -70,7 +70,7 @@ const gates = {}; // the hallway's two openable doors onto the vestibule, by wal
       if (shut) { solid(x1, 0, c - .5, x2, 2.24, c + .5); block(K, k > 0 ? x1 : x2 - .2, 0, c - .5, k > 0 ? x1 + .2 : x2, 2.24, c + .5); }
       // an open door's frame is turned round so its hinge jamb is the north one: the leaf then stands where the hallway, walked from the
       // south as you come in, looks through the opening (hinged on the south, it hid behind that jamb)
-      if (gate) gates[k] = door(z, f - k * .05, 0, c, -ry, { openable: true, leafMat: M(z, 'veneer', { swap: 1 }), frame: 0xd8ccb4 }); // turned round (hinged north); double-acting, it swings away from whoever opens it, its copy in the vestibule (below) with it
+      if (gate) { const d = door(z, f - k * .05, 0, c, -ry, { openable: true, leafMat: M(z, 'veneer', { swap: 1 }), frame: 0xd8ccb4 }); if (GATE[k] === c) gates[k] = d; } // turned round (hinged north); double-acting, it swings away from whoever opens it, its copy in the vestibule (below) with it; east door 24's copy is in the baths' passage (zones/baths.js, found in build.js's doors)
       else door(z, f - k * .05, 0, c, open ? -ry : ry, shut ? { leafMat: M(z, 'veneer', { swap: 1 }), frame: 0xd8ccb4 } : { leaf: false, frame: 0xd8ccb4 });
       if (open) { // the leaf on the frame's knuckles, swung into the passage along its north side; the wall's back lined dark (the warm light from beyond is the passage's: zones/passages.js)
         openLeaf(z, f - k * .05, c, -ry, LEAF, K, Br);
