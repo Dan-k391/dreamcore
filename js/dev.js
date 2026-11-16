@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { renderer, scene, camera, uTime, zones, WY } from './core.js';
 import { colliders, emitters, floorH } from './build.js';
 import { skyNow } from './sky.js';
-import { eye, o, zone, feet, air, frame, place, looseCost, resetAll } from './player.js';
+import { vel, eye, o, zone, feet, air, frame, place, looseCost, resetAll } from './player.js';
 import { groups, floaters } from './physics.js';
 import { composer } from './post.js';
 import { libStats } from './tex.js';
@@ -17,7 +17,7 @@ if (new URLSearchParams(location.search).has('dev')) {
   const r2 = v => +v.toFixed(2);
   renderer.info.autoReset = false; // so info() counts every pass of a frame, not just the last
   window.dev = { _ready: false, readyAt: 0, hold: false, // readyAt: ms from page start to the first frame drawn (tools/perf.mjs)
-    get ready() { return this._ready; }, set ready(v) { if (v && !this._ready) this.readyAt = Math.round(performance.now()); this._ready = v; }, THREE, renderer, scene, camera, composer, zones, colliders, emitters, floorH, uTime,
+    get ready() { return this._ready; }, set ready(v) { if (v && !this._ready) this.readyAt = Math.round(performance.now()); this._ready = v; }, THREE, vel, renderer, scene, camera, composer, zones, colliders, emitters, floorH, uTime,
     get lift() { return eye.lift; }, set lift(v) { eye.lift = v; }, // metres added to the eye height
     step(n = 1, dt = 1 / 60) { for (let i = 0; i < n; i++) frame(dt); }, // deterministic: only the caller's dt moves the game
     reset(x, z, yaw = 0, pitch = 0) { this.hold = true; resetAll(x, z, yaw, pitch); }, // a fresh load's starting state at (x, z): lift, fov, keys, clock, sky, lamps, waves, loose bodies, eye adaptation

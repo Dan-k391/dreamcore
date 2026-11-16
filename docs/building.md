@@ -33,7 +33,7 @@ No two faces in one plane: one surface per plane (trim the hidden face, let one 
 
 ## Making things solid
 
-Used by `js/player.js` and `js/physics.js`. A solid blocks the body where it overlaps it above step height (0.35 m), its top is ground you can stand on, and its underside stops a jump. A jump peaks at about 0.84 m and carries about 2.1 m walking (2.85 m/s) and 4.5 m running (6 m/s), so a gap narrower than that onto anything standable is reachable.
+Used by `js/player.js` and `js/physics.js`. A solid blocks the body where it overlaps it above step height (0.35 m), its top is ground you can stand on, and its underside stops a jump. A jump peaks at about 0.84 m (rising against 16 m/s², falling at 24) and carries about 1.7 m walking (2.85 m/s), 3.5 m running (6 m/s) and 4.2 m at the 7.2 m/s a chain of strafing hops can build; at every landing height that is no farther than a 6 m/s run carried under the old single 11 m/s² arc (4.5 m on the level), so the level needs no new seals.
 
 - `box()` is solid over its true extent by itself. `block()` is the same shape and never solid.
 - For anything built otherwise, add its solid in the same place file:

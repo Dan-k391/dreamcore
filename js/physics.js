@@ -136,7 +136,8 @@ const BR = .22;
 function legs(g, b, me) {
   const i = 3 * b, x = g.p[i], y = g.p[i + 1], z = g.p[i + 2], cy = Math.min(me.feet + 1.5, Math.max(me.feet + .2, y)), dx = x - me.x, dy = y - cy, dz = z - me.z, d2 = dx * dx + dy * dy + dz * dz, R = BR + g.r;
   if (d2 >= R * R) return false;
-  const d = Math.sqrt(d2) || 1e-6, k = (R - d) / d, nx = dx / d, ny = dy / d, nz = dz / d;  g.p[i] += dx * k; g.p[i + 1] += dy * k; g.p[i + 2] += dz * k; g.o[i] += dx * k; g.o[i + 1] += dy * k; g.o[i + 2] += dz * k; // being put outside the body is not speed: a deep overlap (a fall beside it) would fire it off
+  const d = Math.sqrt(d2) || 1e-6, nx = dx / d, ny = dy / d, nz = dz / d, sink = y + dy * (R - d) / d < g.floor(x, z) + g.r; // pushed down into its floor (a ball under the feet): out sideways instead
+  const k = sink ? Math.sqrt(R * R - dy * dy) / (Math.hypot(dx, dz) || 1e-6) - 1 : (R - d) / d, ky = sink ? 0 : k; g.p[i] += dx * k; g.p[i + 1] += dy * ky; g.p[i + 2] += dz * k; g.o[i] += dx * k; g.o[i + 1] += dy * ky; g.o[i + 2] += dz * k; // being put outside the body is not speed: a deep overlap (a fall beside it) would fire it off
   const vn = Math.min(me.vx * nx + me.vz * nz, g.float ? 1.5 : 9), own = ((g.p[i] - g.o[i]) * nx + (g.p[i + 1] - g.o[i + 1]) * ny + (g.p[i + 2] - g.o[i + 2]) * nz) / h; // the legs' speed into it (the water between cushions a float)
   if (own < vn) { const e = (vn - own) * h; g.o[i] -= nx * e; g.o[i + 1] -= ny * e; g.o[i + 2] -= nz * e; } // it moves off at that speed
   return true;
@@ -187,7 +188,7 @@ function stepGroup(g, me) {
       const d = Math.sqrt(d2), e = 2 * r - d;
       if (dy > .5 * d) hit = 1; // resting on it (or just touching)
       if (e <= 0) continue;
-      if (g.still[c] >= 30 && e > .004) wake(g, c); // a hard knock wakes a sleeping ball; a light one finds it as firm as the floor
+      if (g.still[c] >= 30 && e > .004 && -(v[i] * dx + v[i + 1] * dy + v[i + 2] * dz) / d * h > .004) wake(g, c); // a hard knock wakes a sleeping ball: deep, and from a ball moving into it; a light one, or a still one a jam (the legs in a full pit) keeps pressed into it, finds it as firm as the floor
       const w = g.still[c] >= 30 ? 1 : .5 + .4 * dy / d, k = e * w / d, kj = e * (1 - w) / d; // the upper ball gives way more, so a pile carries its weight down to the floor in one step
       p[i] += dx * k; p[i + 1] += dy * k; p[i + 2] += dz * k; p[j] -= dx * kj; p[j + 1] -= dy * kj; p[j + 2] -= dz * kj; }
     if (!g.solid && me.feet !== undefined) legs(g, b, me); // a small ball: the legs last, so none is left inside them
