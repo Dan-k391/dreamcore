@@ -14,7 +14,7 @@ const run = (url, expr, ...opt) => { // -> {result, errors}; browse.mjs exits 1 
 const AREAS = { // area: [check count (a full run warns when it differs), runs alone, what it covers]
   perf: [5, 1, 'checks that measure time: library bake, ready, first sign, openings, physics budgets'],
   seen: [1, 0, 'js/seen.js covers what each zone can see (tools/pvs.mjs --check, the longest single check)'],
-  move: [49, 0, 'walks between places, jumping and hopping, ladders, passage warps, portals, doors, noclip, the flume'],
+  move: [50, 0, 'walks between places, jumping and hopping, ladders, passage warps, portals, doors, noclip, the flume'],
   load: [12, 0, 'page loads, draw-call and shader-compile guards, frame ceilings, the single file, other hosts, production'],
   water: [9, 0, 'pool pictures, optics, mirror reflections, skipped pool pictures'],
   solid: [11, 0, 'what stops you: benches, doors, arches, the flume; coplanar faces; nothing pops at an opening'],
@@ -249,6 +249,11 @@ catch (e) { check('js/seen.js covers what each zone can see (tools/pvs.mjs --che
 if (on('move')) { const q = 'portals: walk and hop through both ways, one picture either side of the plane, the far side clipped at its plane (tools/portals.mjs)';
   try { execFileSync(process.execPath, [fileURLToPath(new URL('./portals.mjs', import.meta.url)), '--port', base.split(':')[2].slice(0, -1), '--only', '0,1', '--modes', 'walk,hop,same,sweep,clip,leak,deep'], { encoding: 'utf8' }); check(q, true); }
   catch (e) { check(q, false, String(e.stdout || e.message).split('\n').filter(l => !l.startsWith('ok')).join('\n').slice(0, 600)); } }
+// A room's lamps are on as you step in (tools/probe.mjs): opening the lift lobby's and the baths passage's doors from the hallway and walking
+// through, every lamp the game lights in the room entered is fully on from 10 frames before the crossing to 30 after (they were still coming up at it).
+if (on('move')) { const q = 'lamps: a room opened and walked into is fully lit as you step in (tools/probe.mjs --only lobby38,baths24)';
+  try { execFileSync(process.execPath, [fileURLToPath(new URL('./probe.mjs', import.meta.url)), '--port', base.split(':')[2].slice(0, -1), '--only', 'lobby38,baths24'], { encoding: 'utf8' }); check(q, true); }
+  catch (e) { check(q, false, String(e.stdout || e.message).slice(0, 600)); } }
 // Nothing pops in at a doorway: crossing each opening (20 cm steps, standing and mid-jump eyes), every mesh in view is on the camera's layers.
 if (on('solid')) try { execFileSync(process.execPath, [fileURLToPath(new URL('./seams.mjs', import.meta.url)), '--port', base.split(':')[2].slice(0, -1), '--pop', '--fast'], { encoding: 'utf8' }); check('nothing pops in crossing an opening (tools/seams.mjs --pop --fast)', true); }
 catch (e) { check('nothing pops in crossing an opening (tools/seams.mjs --pop --fast)', false, String(e.stdout || e.message).slice(0, 600)); }

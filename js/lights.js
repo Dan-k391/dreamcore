@@ -6,6 +6,7 @@ import { emitters, loose, rings, colliders, floorH, flats, warps, ends, side, ac
 import { setSky } from './sky.js';
 import { ponds, ripple } from './water.js';
 import { libBaked } from './level.js';
+import seen from './seen.js';
 
 // lamps: nine shadow-casting spotlights are shared by every light fixture in the level and follow the player from
 // fixture to fixture, fading out before they move. More fixtures cost nothing; the world can grow without more lights.
@@ -19,35 +20,55 @@ const lights = Array.from({ length: 9 }, () => {
 // Counted as odds against the zone you are in: an opening gives k / (1 - k), a zone behind a neighbour's opening the product of the
 // two. Across an opening k from one side is 1 - k from the other, so every zone's odds against every other agree whichever side you
 // count from, and the shares do not move when `zone` flips; a neighbour's doors count only near the door into it (nothing through a wall).
-function weights(x, z, zone) {
+function weights(x, z, zone, open) { // open(e): count the portal end e as open whatever its leaf (the lamp ranking, below)
   // a portal's opening (o.e: its end on each side) is measured in the space of the side you count from, and the zone behind it is
   // counted from your place taken through it, so the mood crosses a portal exactly as it crosses a doorway
   const r = new Map([[zone, 1]]), reach = (from, f, x, z) => { const got = [];
     for (const o of from.openings) { const n = o.p === from ? o.q : o.p, e = o.e?.[o.p === from ? 0 : 1];
       const t = e ? side(e, x, z) < -.5 ? -1e9 : -side(e, x, z) : ((o.ax ? z : x) - o.at) * (o.p === from ? 1 : -1), s = e ? Math.abs(across(e, x, z)) : o.ax ? x : z, a = e ? Math.max(s - e.w / 2, 0) : Math.max(o.lo - s, s - o.hi, 0);
-      const k = Math.min(.99, Math.max(0, .5 + .5 * t / BAND)) * Math.max(0, 1 - a / BAND) * (e ? gap(e) : 1), w = f * k / (1 - k);
+      const k = Math.min(.99, Math.max(0, .5 + .5 * t / BAND)) * Math.max(0, 1 - a / BAND) * (e ? open?.(e) ? 1 : gap(e) : 1), w = f * k / (1 - k);
       if (w > 0 && n !== zone) { got.push([n, w, ...(e ? carry(e, x, z) : [x, z])]); if (w > (r.get(n) || 0)) r.set(n, w); } } // reached two ways: the larger
     return got; };
   for (const [n, w, nx, nz] of reach(zone, 1, x, z)) reach(n, w, nx, nz);
   let sum = 0; for (const v of r.values()) sum += v;
   return [...r].map(([q, v]) => [q, v / sum]);
 }
+const frustum = new THREE.Frustum(), _m = new THREE.Matrix4(), _s = new THREE.Sphere();
+function view(zone) { // the zone ids that may be seen from `zone`, and (.near) those of them seen directly, not through a portal; null: any (a zone seen.js does not list is drawn from everywhere)
+  if (!seen[zone.id]) return null; const v = new Set([zone.id, ...seen[zone.id]]); v.near = new Set(v);
+  for (let hop = 0; hop < 3; hop++) for (const e of ends) { const q = e.to.zone?.id; if (live(e) && e.zone && v.has(e.zone.id) && q && !v.has(q)) { if (!seen[q]) return null; v.add(q); seen[q].forEach(c => v.add(c)); } }
+  return v;
+}
 function relight(pos, zone, fade, wts, ahead) { // fade: how far to move brightness this call (1 = snap); wts: weights() there, else the zone alone (the bakes); ahead: where the body will be once a swap is done (player.js)
-  const gw = {}; for (const [z, v] of wts || [[zone, 1]]) gw[z.grp] = (gw[z.grp] || 0) + v; // a fixture's group gives up its 8 m handicap as you near it
+  // a door you have opened counts as open from the press (its latch and swing take time; the room is not yet seen), and so does a shut one
+  // within 3 m of where you will be: its room is ranked as it will be once open, so the lamps it takes while unseen are the ones it keeps
+  const near = (e, q, r) => { const d = side(e, q.x, q.z); return d >= 0 && Math.hypot(d, Math.max(0, Math.abs(across(e, q.x, q.z)) - e.w / 2)) < r; };
+  const open = e => e.door && ((e.door.of || e.door).to || near(e, ahead || pos, 3) && !ahead?.through);
+  const gw = {}; for (const [z, v] of wts ? weights(pos.x, pos.z, zone, open) : [[zone, 1]]) gw[z.grp] = (gw[z.grp] || 0) + v; // a fixture's group gives up its 8 m handicap as you near it
   // in play (wts given), a fixture in front of a portal's far end is also as near as it is from your place taken through that portal: an open one within 30 m
   // of its opening, and on through up to two more beyond by the same rule (the lift lobby seen from the vestibule across the hallway); a shut one within 3 m
   // (so its lamps are settled before the leaf opens; not its wall's plane: every door along it would count). The rule is the same at every step, so the set is
   // the same either side of a plane (a shut door counted only on the first step lost the lift lobby's lamps on entering the vestibule from the hallway).
   // Ranked from where you will be too (`ahead`, player.js), so a swap (1/3 s out, 1/3 s in) is done by the time you get there; and a shut door only from
   // there: its room is unseen, so walking away from one it gives up its lamps early to the room you go into (they were still coming up at the plane)
-  const reach = (q, shut) => ends.filter(e => { const d = side(e, q.x, q.z); return d >= 0 && Math.hypot(d, Math.max(0, Math.abs(across(e, q.x, q.z)) - e.w / 2)) < (live(e) ? 30 : shut ? 3 : -1); }).map(e => { const [x, z] = carry(e, q.x, q.z); return [e.to, V(x, q.y + e.to.p.y - e.p.y, z)]; });
+  const reach = (q, shut) => ends.filter(e => near(e, q, live(e) || (e.door.of || e.door).to ? 30 : shut ? 3 : -1)).map(e => { const [x, z] = carry(e, q.x, q.z); return [e.to, V(x, q.y + e.to.p.y - e.p.y, z)]; });
   const from = [pos, ahead || pos], via = [];
-  if (wts) from.forEach((p, shut) => { for (let hop = 0, fr = [[, p]]; hop < 3 && fr.length; hop++) { fr = fr.flatMap(([, q]) => reach(q, shut)); via.push(...fr); } });
+  // (not from an `ahead` taken through a portal: walking out of a room, the shut door across the hallway took the lamps you were heading for)
+  if (wts) from.forEach((p, shut) => { shut &&= !p.through; for (let hop = 0, fr = [[, p]]; hop < 3 && fr.length; hop++) { fr = fr.flatMap(([, q]) => reach(q, shut)); via.push(...fr); } });
+  // a door being opened within 3 m: also ranked from 2 m inside, where you will be once through (the room's lamps come while it is unseen)
+  if (wts) for (const e of ends) { const q = e.door && (e.door.of || e.door); if (q?.to && q.u < 1 && near(e, pos, 3)) { const d = side(e, pos.x, pos.z) + 2, [x, z] = carry(e, pos.x - e.n.x * d, pos.z - e.n.z * d); via.push([e.to, V(x, pos.y + e.to.p.y - e.p.y, z)]); } }
   const dist = e => { let d = Math.min(...from.map(p => e.p.distanceTo(p))); for (const [f, q] of via) if (side(f, e.p.x, e.p.z) > 0) d = Math.min(d, e.p.distanceTo(q)); return d; };
   const want = emitters.map(e => [dist(e) + 8 * (1 - Math.min(1, gw[e.zone.grp] || 0)) - (e.light ? 2 : 0), e]).sort((a, b) => a[0] - b[0]).slice(0, lights.length).map(a => a[1]);
+  relight.want = want; // for the probes (tools/probe.mjs)
+  // A lamp lighting only a zone nobody can see from here changes at once: the zones seen.js gives yours, and through each open portal of
+  // those the zone behind it and what that sees, up to three portals on. So a room behind a shut door takes its lamps the moment they are
+  // wanted and is fully lit before the leaf moves (they faded in 1/3 s after 1/3 s out, and were still coming up as you stepped through)
+  // so does one in a zone seen directly whose reach (a sphere: nothing past its distance is lit) is out of the view (through a portal: always in it)
+  const vis = wts && view(zone); if (vis) { camera.updateMatrixWorld(); frustum.setFromProjectionMatrix(_m.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)); }
+  const hid = e => vis && e && (!vis.has(e.zone.id) || vis.near.has(e.zone.id) && !frustum.intersectsSphere(_s.set(e.p, e.dist)));
   for (const l of lights) {
-    const keep = want.includes(l.e);
-    l.k = Math.min(1, Math.max(0, l.k + (keep ? fade : -fade)));
+    const keep = want.includes(l.e), f = (l.hid = hid(l.e)) ? 1 : fade;
+    l.k = Math.min(1, Math.max(0, l.k + (keep ? f : -f)));
     const e = !keep && l.k === 0 && want.find(e => !e.light);
     if (e) {
       if (l.e) l.e.light = null;

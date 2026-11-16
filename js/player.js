@@ -133,10 +133,10 @@ function stepDoors(dt, press) {
     if (!q.to && !q.thud && u * SWING <= .3) { q.thud = true; const r = mine(q), c = r.k[0][6]; sfx?.play(`door.${q.kind}.close`, c[0], r.y + 1.05, c[1]); } }
 }
 const eye = { lift: 0 }; // metres added to the eye height; only dev.lift (?dev) changes it
-// Where the body will be in t s at this speed (its place once a lamp swap, 1/3 s out and 1/3 s in, is done), taken through an open portal on the way, stopped in a shut one's plane
-const ahead = V(0, 0, 0), aheadOf = (p, t) => { let x = p.x + vel.x * t, z = p.z + vel.y * t, y = p.y;
+// Where the body will be in t s at this speed (its place once a lamp swap, 1/3 s out and 1/3 s in, is done), taken through an open portal (or a door being opened) on the way, stopped in a shut one's plane
+const ahead = V(0, 0, 0), aheadOf = (p, t) => { let x = p.x + vel.x * t, z = p.z + vel.y * t, y = p.y; ahead.through = false;
   for (const e of ends) { const a = side(e, p.x, p.z), b = side(e, x, z); if (!(a >= 0 && b < 0) || Math.abs(across(e, p.x + (x - p.x) * a / (a - b), p.z + (z - p.z) * a / (a - b))) > e.w / 2) continue;
-    if (!live(e)) return ahead.set(p.x + (x - p.x) * a / (a - b), y, p.z + (z - p.z) * a / (a - b)); [x, z] = carry(e, x, z); y += e.to.p.y - e.p.y; break; }
+    if (!live(e) && !(e.door.of || e.door).to) return ahead.set(p.x + (x - p.x) * a / (a - b), y, p.z + (z - p.z) * a / (a - b)); if (e.door && b > -2) { x -= e.n.x * (2 + b); z -= e.n.z * (2 + b); } [x, z] = carry(e, x, z); y += e.to.p.y - e.p.y; ahead.through = true; break; } // through a door: at least 2 m in, where the room's lamps are ranked from as you step through
   return ahead.set(x, y, z); };
 const frame = dt => { // one game frame of dt seconds: the loop below passes the real time, dev.step() a fixed one
   const p = camera.position, k = c => keys[c] ? 1 : 0, sp = vel.length();
@@ -226,7 +226,7 @@ const frame = dt => { // one game frame of dt seconds: the loop below passes the
   const here = ends.find(e => reveal(e, p.x, p.z))?.zone || Object.values(zones).find(z => inR(p.x, p.z, ...z.box)); // in a portal's reveal: its zone, whichever box holds it (or weights() would measure from the wrong space)
   if (here && here !== zone) { zone = here; sfx?.zone(zone); setSky(zone.sky || 'day'); }
   const wts = weights(p.x, p.z, zone);
-  aheadOf(p, 2 / 3);
+  aheadOf(p, 1);
   if (warp) relight(p, zone, 1, wts, ahead); // arrived somewhere else: the lamps come at once
   relight(p, zone, warp ? 1 : dt * 3, wts, ahead);
   for (const w of ponds) w.visible = wts.some(([z]) => w.seen.includes(z.id));
