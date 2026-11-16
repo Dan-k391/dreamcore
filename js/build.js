@@ -30,6 +30,23 @@ const pools = []; // each pool, registered by its place, made into water by wate
 const onSun = []; // f(sun): run once the sun exists, for things built before it that use its shadow map
 const ladders = []; // [x1, z1, x2, z2, dx, dz, top]: a ladder's zone, the way up it (unit, toward the deck) and the deck's height; moving that way climbs, the other way descends
 const rings = []; // floating rings: bob on the water (see frame)
+// Portals: two openings joined as if they were one doorway (docs/building.md, Portals). portal(a, b, w, h) with a, b = [x, y, z, ry]: the
+// middle of each opening's sill on its plane, and the way its front faces as rotateY(ry) turns +z (the front is the side you stand on before
+// going through). Each end: p, ry, n (front), r (across), w, h, to (the other end), turn (yaw added going through), M (this side's space into
+// the other's); zone (its front's zone) and mask (the layers drawn looking out of it) once merge() runs. js/portals.js draws what is seen
+// through; player.js walks and collides through; lights.js blends the mood and ranks the lamps through.
+const ends = [];
+function portal(a, b, w = 1, h = 2.24) {
+  const mk = ([x, y, z, ry]) => ({ p: V(x, y, z), ry, n: V(Math.sin(ry), 0, Math.cos(ry)), r: V(Math.cos(ry), 0, -Math.sin(ry)), w, h }), A = mk(a), B = mk(b);
+  for (const [e, f] of [[A, B], [B, A]]) { e.to = f; e.turn = f.ry - e.ry + Math.PI; e.c = Math.cos(e.turn); e.s = Math.sin(e.turn);
+    e.M = new THREE.Matrix4().makeTranslation(f.p.x, f.p.y, f.p.z).multiply(new THREE.Matrix4().makeRotationY(e.turn)).multiply(new THREE.Matrix4().makeTranslation(-e.p.x, -e.p.y, -e.p.z)); }
+  ends.push(A, B); return [A, B];
+}
+const side = (e, x, z) => (x - e.p.x) * e.n.x + (z - e.p.z) * e.n.z, across = (e, x, z) => (x - e.p.x) * e.r.x + (z - e.p.z) * e.r.z; // metres in front of its plane; along it from its middle
+const carry = (e, x, z) => { const dx = x - e.p.x, dz = z - e.p.z; return [e.to.p.x + e.c * dx + e.s * dz, e.to.p.z - e.s * dx + e.c * dz]; }; // a point taken through e
+const spin = (e, x, z) => [e.c * x + e.s * z, -e.s * x + e.c * z]; // a direction taken through e
+const reveal = (e, x, z, back = 0) => { const d = side(e, x, z); return d >= -back && d < 1 && Math.abs(across(e, x, z)) < e.w / 2; }; // in the 1 m strip in front of e's opening (its reveal, whichever zone's box holds it)
+const behind = (e, c) => Math.max(side(e, c[0], c[1]), side(e, c[2], c[1]), side(e, c[0], c[3]), side(e, c[2], c[3])) < 1e-3; // a solid's rectangle wholly at or behind e's plane
 function add(mat, g, ownUV = false) { // ownUV: keep the geometry's own UVs (a library material's `uv` option says how many metres one unit is)
   g = g.index ? g.toNonIndexed() : g;
   const p = g.attributes.position, n = g.attributes.normal, uv = g.attributes.uv;
@@ -196,10 +213,14 @@ function merge() { // once every place is built (level.js)
   // would lack every wall that zone cannot see, and its light would pour through them once you walk round (the backrooms' sun wedge).
   const sm = renderer.shadowMap, drawShadows = sm.render;
   sm.render = (lights, s, cam) => { const m = cam.layers.mask; cam.layers.enableAll(); drawShadows.call(sm, lights, s, cam); cam.layers.mask = m; };
+  for (const e of ends) { const f = e.p.clone().addScaledVector(e.n, .3); e.zone = zoneAt(f.x, f.z); e.mask = maskAt(f.x, f.z); e.bit = bits.has(e.zone?.id) ? 1 << bits.get(e.zone.id) : 1; }
+  console.assert(ends.every(e => e.zone && e.w === e.to.w && e.h === e.to.h), 'a portal end outside every zone, or its two ends of different sizes');
   scene.onBeforeRender = (r, s, cam) => {
     if (!cam.isPerspectiveCamera) cam.layers.enableAll();
-    else cam.layers.mask = maskAt(cam.matrixWorld.elements[12], cam.matrixWorld.elements[14]);
+    else { const x = cam.matrixWorld.elements[12], z = cam.matrixWorld.elements[14]; let m = cam.userData.mask ?? maskAt(x, z);
+      for (const e of ends) if (m !== -1 && reveal(e, x, z, .01)) m |= e.mask; // in a portal's reveal (outside its zone's box, inside a neighbour's): see as its zone
+      cam.layers.mask = m; }
   };
 }
 
-export { colliders, emitters, flats, seeThrough, skyOnly, warps, pools, onSun, ladders, rings, loose, add, block, box, solid, round, turned, clear, out, near, flight, passage, slab, room, wall, fixture, tube, lit, put, spot, solidAt, floorH, sea, merge, maskAt, RoundedBoxGeometry , floorAt };
+export { ends, portal, side, across, carry, spin, behind, reveal, colliders, emitters, flats, seeThrough, skyOnly, warps, pools, onSun, ladders, rings, loose, add, block, box, solid, round, turned, clear, out, near, flight, passage, slab, room, wall, fixture, tube, lit, put, spot, solidAt, floorH, sea, merge, maskAt, RoundedBoxGeometry, floorAt };

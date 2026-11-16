@@ -3,10 +3,33 @@ import * as THREE from 'three';
 import { dry, zones, defZone } from '../core.js';
 import { hotelTex } from '../tex.js';
 import { dirt, P, M, sign, voidMat } from '../mat.js';
-import { add, block, box, solid, turned, put, RoundedBoxGeometry } from '../build.js';
+import { add, block, box, solid, turned, put, spot, portal, lit, flats, RoundedBoxGeometry } from '../build.js';
 import { door } from '../props/metalwork.js';
 import { sconce, opalPanel } from '../props/lights.js';
+import { mallBench, pottedPlant } from '../props/garden.js';
 import { skirting } from '../props/structure.js';
+
+// A door leaf standing open in a frame placed by door(z, x, 0, zc, ry): hinged on the frame's -x jamb, swung `by` radians toward the frame's front.
+// The shut leaves' own materials (door() in props/metalwork.js); K the dark keyway, Br the viewer.
+function openLeaf(z, x, zc, ry, by, K, Br, y = 0) {
+  const Lf = M(z, 'paintedSteel', { color: 0x4b2418, dirt: .35, dirtCol: [.5, .45, .38], wear: .3, roughness: .6 }), St = M(z, 'brushedSteel');
+  const at = g => put(g.rotateY(-by).translate(-.5095, 0, -.0295), x, y, zc, ry); // the leaf is built hinge at 0, along +x, its push face at -z
+  const lt = .045, mz = -.0295, cx = .9625;
+  add(Lf, at(new RoundedBoxGeometry(1.026, 2.228, lt, 2, .004).translate(.5095, 1.12, mz)));
+  add(St, at(new THREE.BoxGeometry(.0025, .235, .024).translate(1.0232, 1.05, mz))); // lock face plate on the leaf edge
+  for (const sd of [1, -1]) { const fz = mz + sd * lt / 2; // lever handles on roses both sides, a cylinder escutcheon below
+    add(St, at(new THREE.CylinderGeometry(.026, .0265, .009, 24).rotateX(Math.PI / 2).translate(cx, 1.05, fz + sd * .0045)));
+    add(St, at(new THREE.CylinderGeometry(.0095, .0095, .056, 16).rotateX(Math.PI / 2).translate(cx, 1.05, fz + sd * .034)));
+    add(St, at(new RoundedBoxGeometry(.13, .02, .022, 2, .007).translate(cx - .055, 1.05, fz + sd * .062)));
+    add(St, at(new RoundedBoxGeometry(.02, .02, .04, 2, .007).translate(cx - .11, 1.05, fz + sd * .047)));
+    add(St, at(new THREE.CylinderGeometry(.021, .023, .007, 20).rotateX(Math.PI / 2).translate(cx, .978, fz + sd * .0035)));
+    add(K, at(new THREE.BoxGeometry(.004, .016, .001).translate(cx, .978, fz + sd * .0075))); // its keyway
+  }
+  add(St, at(new THREE.BoxGeometry(.926, .25, .0012).translate(.5095, .14, mz - lt / 2 - .0006))); // kick plate on the push face
+  add(Br, at(new THREE.LatheGeometry([[0, .009], [.009, .009], [.011, .007], [.0115, .003], [.0115, 0]].map(([r, y]) => new THREE.Vector2(r, y)), 24).rotateX(-Math.PI / 2).translate(.5095, 1.52, mz - lt / 2))); // the door viewer
+  const c = Math.cos(by), s = Math.sin(by), [a, b] = spot(x, zc, ry, -.5095 + .5095 * c - mz * s, -.0295 + .5095 * s + mz * c);
+  turned(a, b, .513, .023, ry - by, y, y + 2.24); // the leaf is solid where it stands
+}
 
 // Engraved lettering (room numbers, row letters): one canvas atlas and one material a zone, a cell per text. Returns (i, w, h) => the
 // i-th cell as a plane (w:h = 2:1) to add() with its own UVs, laid a hair proud of the plate it sits on.
@@ -34,7 +57,7 @@ defZone('hT', { music: 'hotel', ...dry, step: 'carpet', grp: 'm', k: 1, exp: .34
   const z = zones.hT, h = 2.8, C = P(z, { map: hotelTex.map, normalMap: hotelTex.normalMap, ...dirt });
   const W = M(z, 'damask', { color: 0xe0cba0 }), Pl = M(z, 'plaster', { color: 0xe9dcc0 }), Wd = M(z, 'hardwood', { color: 0x6a4030, swap: 1 });
   const Rl = M(z, 'gelcoat', { color: 0x4a2c1e, wear: 0, roughness: .3, macro: .05 }), Br = M(z, 'brass', { roughness: .3, dirt: .6 }), K = P(z, { color: 0x050403, roughness: 1 });
-  const OPEN = [42, 45.6, 49], LEAF = 1.5; // the room doors standing open on the passages to the far-off places (zones/passages.js), and how far
+  const OPEN = [42, 45.6, 49], LEAF = 1.5, GATE = { 1: 34.8, '-1': 38.4 }; // the room doors standing open on the passages to the far-off places (zones/passages.js), and how far; GATE: the west and east doors open on the vestibule
   const nums = [], txt = lettering(z, Array.from({ length: 13 }, (_, i) => String(301 + i)));
   box(C, 2.2, -.2, 21.4, 5.4, 0, 51.6); box(Pl, 2.2, h, 21.4, 5.4, h + .2, 51.6); box(W, 2.6, 2.24, 51.55, 5, h, 51.75);
   for (const [x1, x2, f, k, gap, doors] of [[2.2, 2.6, 2.6, 1, 45, [24, 27.6, 31.2, 34.8, 38.4, 49]], [5, 5.4, 5, -1, 31, [24, 27.6, 34.8, 38.4, 42, 45.6, 49]]]) { // west wall (way to the mall), east wall (way to the cinema)
@@ -42,29 +65,13 @@ defZone('hT', { music: 'hotel', ...dry, step: 'carpet', grp: 'm', k: 1, exp: .34
     let z0 = 21.4;
     for (const [c, isDoor] of ops) { // the wall round each 1.0 x 2.24 m opening; a room door's opening is shut by its leaf and a dark backing
       box(W, x1, 0, z0, x2, h, c - .5); box(W, x1, 2.24, c - .5, x2, h, c + .5); z0 = c + .5;
-      const open = isDoor && k < 0 && OPEN.includes(c), shut = isDoor && !open;
+      const open = isDoor && k < 0 && OPEN.includes(c), gate = isDoor && GATE[k] === c, shut = isDoor && !open && !gate; // gate: open on the vestibule (below), its leaf swung in there
       if (shut) { solid(x1, 0, c - .5, x2, 2.24, c + .5); block(K, k > 0 ? x1 : x2 - .2, 0, c - .5, k > 0 ? x1 + .2 : x2, 2.24, c + .5); }
       // an open door's frame is turned round so its hinge jamb is the north one: the leaf then stands where the hallway, walked from the
       // south as you come in, looks through the opening (hinged on the south, it hid behind that jamb)
-      door(z, f - k * .05, 0, c, open ? -ry : ry, isDoor && !open ? { color: 0x4b2418, frame: 0xd8ccb4 } : { leaf: false, frame: 0xd8ccb4 });
+      door(z, f - k * .05, 0, c, open ? -ry : ry, shut ? { color: 0x4b2418, frame: 0xd8ccb4 } : { leaf: false, frame: 0xd8ccb4 });
       if (open) { // the leaf on the frame's knuckles, swung into the passage along its north side; the wall's back lined dark (the warm light from beyond is the passage's: zones/passages.js)
-        const Lf = M(z, 'paintedSteel', { color: 0x4b2418, dirt: .35, dirtCol: [.5, .45, .38], wear: .3, roughness: .6 }), St = M(z, 'brushedSteel'); // the shut leaves' own materials (door() in props/metalwork.js)
-        const hx = f + .05 - .0295, hz = c + .5095, ph = Math.PI / 2 - LEAF, at = g => g.rotateY(ph).translate(hx, 0, hz); // the hinge axis; the leaf is built hinge at 0, along +x, its push face at -z
-        const lt = .045, mz = -.0295, cx = .9625, sd2 = [1, -1];
-        add(Lf, at(new RoundedBoxGeometry(1.026, 2.228, lt, 2, .004).translate(.5095, 1.12, mz)));
-        add(St, at(new THREE.BoxGeometry(.0025, .235, .024).translate(1.0232, 1.05, mz))); // lock face plate on the leaf edge
-        for (const sd of sd2) { const fz = mz + sd * lt / 2; // lever handles on roses both sides, a cylinder escutcheon below
-          add(St, at(new THREE.CylinderGeometry(.026, .0265, .009, 24).rotateX(Math.PI / 2).translate(cx, 1.05, fz + sd * .0045)));
-          add(St, at(new THREE.CylinderGeometry(.0095, .0095, .056, 16).rotateX(Math.PI / 2).translate(cx, 1.05, fz + sd * .034)));
-          add(St, at(new RoundedBoxGeometry(.13, .02, .022, 2, .007).translate(cx - .055, 1.05, fz + sd * .062)));
-          add(St, at(new RoundedBoxGeometry(.02, .02, .04, 2, .007).translate(cx - .11, 1.05, fz + sd * .047)));
-          add(St, at(new THREE.CylinderGeometry(.021, .023, .007, 20).rotateX(Math.PI / 2).translate(cx, .978, fz + sd * .0035)));
-          add(K, at(new THREE.BoxGeometry(.004, .016, .001).translate(cx, .978, fz + sd * .0075))); // its keyway
-        }
-        add(St, at(new THREE.BoxGeometry(.926, .25, .0012).translate(.5095, .14, mz - lt / 2 - .0006))); // kick plate on the push face
-        add(Br, at(new THREE.LatheGeometry([[0, .009], [.009, .009], [.011, .007], [.0115, .003], [.0115, 0]].map(([r, y]) => new THREE.Vector2(r, y)), 24).rotateX(-Math.PI / 2).translate(.5095, 1.52, mz - lt / 2))); // the door viewer
-        const S = Math.sin(ph), C = Math.cos(ph);
-        turned(hx + .5095 * C + mz * S, hz - .5095 * S + mz * C, .513, .023, ph, 0, 2.24); // the leaf is solid where it stands
+        openLeaf(z, f - k * .05, c, -ry, LEAF, K, Br);
         for (const [a1, a2, y1] of [[c - .7, c - .5, 0], [c + .5, c + .7, 0], [c - .5, c + .5, 2.24]]) block(voidMat, x2, y1, a1, x2 + .02, 2.4, a2);
       }
       if (shut) add(Br, put(new THREE.LatheGeometry([[0, .009], [.009, .009], [.011, .007], [.0115, .003], [.0115, 0]].map(([r, y]) => new THREE.Vector2(r, y)), 24).rotateX(Math.PI / 2).translate(0, 1.52, -.05 + .0225), f, 0, c, ry)); // the door viewer
@@ -89,4 +96,49 @@ defZone('hT', { music: 'hotel', ...dry, step: 'carpet', grp: 'm', k: 1, exp: .34
   }
   for (const zc of [24.6, 30.6, 36.6, 42.6, 48.6]) opalPanel(z, 3.8, h, zc, 0, { w: .6, l: .6, power: 50 });
   sign('EXIT', 3.8, 2.6, 51.54, Math.PI, .6, .22, '#8fffc0', '#021a0c');
+}
+
+// The vestibule: a small sitting room the hallway's west door 34.8 and east door 38.4 both open into, although the hallway lies between
+// them. Built far off at x 300..304, z 300..303.6 and joined to the two doors by portals (build.js portal(), docs/building.md): in through
+// the west door you face its north wall; its west door leads out of the east door of the hallway, still walking west. Hardwood floor and a
+// rug, dark boarding to a dado rail, an old-rose damask above, a picture rail and a coved cornice; two lit sconces and a dim opal panel
+// over the middle for pools of warm light and dark corners; a bench under the sconces and a plant in the corner.
+const Y = -200; // the vestibule's floor: portal-only rooms stand 200 m down, under the sea, where no eye outside them can see them (docs/building.md, Portals)
+defZone('hV', { music: 'hotel', ...dry, step: 'carpet', grp: 'm', k: .8, exp: .34, fog: [.3, .2, .12, .004], bloom: .3, wet: .05, hum: .2, box: [299.7, 299.7, 304.1, 303.9], probe: [301.9, Y + 1.4, 301.9], env: [[300, Y, 300], [303.8, Y + 2.8, 303.6]] });
+{
+  const z = zones.hV, X1 = 300, X2 = 303.8, Z1 = 300, Z2 = 303.6, h = 2.8, T = .3, AX = 302.8, BZ = 301.6; // the room's inside; A: the south door's middle, B: the west door's
+  const Fl = M(z, 'hardwood', { color: 0x6e4630 }), Rg = M(z, 'hotelCarpet', { color: 0x8a5a48 }), W = M(z, 'damask', { color: 0xb88068 }), Pl = M(z, 'plaster', { color: 0xe6d6b8 });
+  const Wd = M(z, 'hardwood', { color: 0x4e2e20, swap: 1 }), Rl = M(z, 'gelcoat', { color: 0x3e2418, wear: 0, roughness: .3, macro: .05 }), Br = M(z, 'brass', { roughness: .3, dirt: .6 }), K = P(z, { color: 0x050403, roughness: 1 });
+  box(Fl, X1 - T, Y - .2, Z1 - T, X2 + T, Y, Z2 + T); flats.push([X1 - T, Z1 - T, X2 + T, Z2 + T, () => Y]); // the floor's height (floorH is 0 where no flat says otherwise) box(Pl, X1 - T, Y + h, Z1 - T, X2 + T, Y + h + .2, Z2 + T);
+  block(Rg, 300.55, Y, 301.25, 302.15, Y + .005, 303.05); // the rug, under the bench's front
+  // the walls, each round its 1.0 x 2.24 opening: south (door A), west (door B), north, east
+  box(W, X1 - T, Y, Z1 - T, AX - .5, Y + h, Z1); box(W, AX + .5, Y, Z1 - T, X2 + T, Y + h, Z1); box(W, AX - .5, Y + 2.24, Z1 - T, AX + .5, Y + h, Z1);
+  box(W, X1 - T, Y, Z1, X1, Y + h, BZ - .5); box(W, X1 - T, Y, BZ + .5, X1, Y + h, Z2); box(W, X1 - T, Y + 2.24, BZ - .5, X1, Y + h, BZ + .5);
+  box(W, X1 - T, Y, Z2, X2 + T, Y + h, Z2 + T); box(W, X2, Y, Z1, X2 + T, Y + h, Z2);
+  door(z, AX, Y, Z1 - .05, 0, { leaf: false, frame: 0xd8ccb4 }); door(z, X1 - .05, Y, BZ, Math.PI / 2, { leaf: false, frame: 0xd8ccb4 });
+  openLeaf(z, AX, Z1 - .05, 0, 1.5, K, Br, Y); openLeaf(z, X1 - .05, BZ, Math.PI / 2, 1.5, K, Br, Y); // both leaves swung in, along the door's west and north sides
+  portal([2.2, 0, 34.8, Math.PI / 2], [AX, Y, Z1 - T, 0]); // the hallway's west door 34.8 (its plane the wall's back face) is the south door's outer face
+  portal([5.4, 0, 38.4, -Math.PI / 2], [X1 - T, Y, BZ, Math.PI / 2]); // and its east door 38.4 the west door's
+  // A run of moulding `prof` ([out, up] in metres) along a wall face from a to b ([x, z]), the room on its left; mitred at an inside corner (m0, m1)
+  const run = (mat, prof, a, b, y, m0, m1) => {
+    const dx = b[0] - a[0], dz = b[1] - a[1], L = Math.hypot(dx, dz), d = new THREE.Vector3(dx / L, 0, dz / L), o = new THREE.Vector3(d.z, 0, -d.x);
+    const g = new THREE.ExtrudeGeometry(new THREE.Shape(prof.map(([u, v]) => new THREE.Vector2(u, v))), { depth: L, bevelEnabled: false, curveSegments: 4 }), p = g.attributes.position;
+    for (let i = 0; i < p.count; i++) { const u = p.getX(i), w = p.getZ(i); if (m1 && w > L - 1e-5) p.setZ(i, w - u); if (m0 && w < 1e-5) p.setZ(i, w + u); }
+    g.computeVertexNormals(); add(mat, g.applyMatrix4(new THREE.Matrix4().makeBasis(o, new THREE.Vector3(0, 1, 0), d)).translate(a[0], y, a[1]));
+  };
+  const COVE = [[0, -.12], [.009, -.12], [.013, -.112], [.02, -.108], ...Array.from({ length: 9 }, (_, i) => { const t = Math.PI - i / 8 * Math.PI / 2; return [.108 + .086 * Math.cos(t), -.108 + .086 * Math.sin(t) + .002]; }), [.112, -.014], [.12, -.008], [.12, 0], [0, 0]];
+  // the wall runs between the corners and the doors' frames (1.2 m wide), as [from, to, mitre at start, at end]
+  const corner = [[X1, Z1], [X1, Z2], [X2, Z2], [X2, Z1]], runs = [[[X1, BZ + .61], corner[1], 0, 1], [corner[1], corner[2], 1, 1], [corner[2], corner[3], 1, 1], [corner[3], [AX + .61, Z1], 1, 0], [[AX - .61, Z1], corner[0], 0, 1], [corner[0], [X1, BZ - .61], 1, 0]];
+  for (const [a, b, m0, m1] of runs) {
+    const dx = Math.sign(b[0] - a[0]), dz = Math.sign(b[1] - a[1]), ox = dz * .012, oz = -dx * .012; // the boarding's face, 12 mm into the room
+    const [x1, x2] = [a[0], b[0]].sort((p, q) => p - q), [z1, z2] = [a[1], b[1]].sort((p, q) => p - q);
+    block(Wd, Math.min(x1, x1 + ox), Y, Math.min(z1, z1 + oz), Math.max(x2, x2 + ox), Y + .9, Math.max(z2, z2 + oz));
+    const a2 = [a[0] + ox, a[1] + oz], b2 = [b[0] + ox, b[1] + oz];
+    run(Rl, DADO, a2, b2, Y + .9, m0, m1); run(Rl, PICTURE, a, b, Y + 2.38, m0, m1); run(Pl, COVE, a, b, Y + h, m0, m1);
+    skirting(z, [[a2[0], Y, a2[1]], [b2[0], Y, b2[1]]], { color: 0x3a2318 });
+  }
+  // light: two sconces lit over the bench on the north wall, a dim opal panel in the middle of the ceiling
+  for (const x of [300.85, 302.95]) sconce(z, x, Y + 1.75, Z2, Math.PI, { power: 26 });
+  opalPanel(z, 301.9, Y + h, 301.8, 0, { w: .6, l: .6, power: 14 });
+  mallBench(z, 301.4, Y, Z2 - .42, Math.PI); pottedPlant(z, X2 - .42, Y, Z2 - .42, -.6);
 }
