@@ -8,7 +8,7 @@ import { doorway, railing } from '../props/metalwork.js';
 import { column, pier, steps } from '../props/structure.js';
 import { parkBench, palmPlanter } from '../props/garden.js';
 
-defZone('sK', { music: 'terrace', ...dry, sky: 'dusk', air: .7, grp: 's', k: 1, exp: .3, fog: [.95, .6, .55, .0012], sat: 1.12, bloom: .12, shaft: .1, wet: .35, box: [650.4, 600, 745, 700], probe: [672, 2, 649.4] });
+defZone('sK', { music: 'terrace', ...dry, amb: { wind: 1.1, crickets: .6, sea: [664, 662, 684, 662, -25], seaLv: .6 }, sky: 'dusk', air: .7, grp: 's', k: 1, exp: .3, fog: [.95, .6, .55, .0012], sat: 1.12, bloom: .12, shaft: .1, wet: .35, box: [650.4, 600, 745, 700], probe: [672, 2, 649.4] });
 { // terrace above the clouds x[650,704] z[639,660], out of the vaulted hall's far door: white stone at sunset, a court of arches, a stair to a lookout
   const z = zones.sK, blue = P(z, { color: 0x86a8d8, roughness: .4 }), PI = Math.PI;
   const Su = M(z, 'stucco', { color: 0xffffff }), Ls = M(z, 'limestone', { color: 0xffffff, wear: 0, floor: 0 }); // rendered walls; ashlar paving and the passage wall, the court piers' own stone (one draw call)

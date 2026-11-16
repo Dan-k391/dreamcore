@@ -8,8 +8,11 @@ import { groups, floaters } from './physics.js';
 import { composer } from './post.js';
 import { libStats } from './tex.js';
 import { ponds, uTest } from './water.js';
-import { renderMusic } from './audio.js';
+import { renderMusic, renderSound, startAudio } from './audio.js';
+import * as audio from './audio.js';
+import * as voices from './voices.js';
 import { pieces } from './music.js';
+import { openings } from './lights.js';
 
 // ---------- test harness: with ?dev in the address, tools/test.mjs and tools/shots.mjs drive the game through window.dev ----------
 if (new URLSearchParams(location.search).has('dev')) {
@@ -43,6 +46,9 @@ if (new URLSearchParams(location.search).has('dev')) {
       const p = camera.position.clone(), q = camera.quaternion.clone(); camera.position.set(x, y, z); camera.rotation.set(pitch, yaw, 0, 'YXZ'); camera.updateMatrixWorld();
       composer.render(0); camera.position.copy(p); camera.quaternion.copy(q); },
     physics(n = 60) { let t = 0; for (let i = 0; i < n; i++) { frame(1 / 60); t += looseCost.ms; } return +(t / n).toFixed(3); }, // ms a frame the loose things cost, over n frames
+    // the effects: render({ secs, path, at, music }) offline (audio.js); start() the live sound without the click; play(name, x, y, z) and
+    // loop(name, x, y, z) through the live one (doors: play('door.wood.open', x, y, z)); voices: the one-shot writers (voices.js)
+    openings, sound: { render: renderSound, voices, start: () => { audio.sfx || startAudio(zone); return audio.sfx; }, play: (...a) => audio.sfx?.play(...a), loop: (...a) => audio.sfx?.loop(...a), get live() { return audio.sfx; } },
     music: { render: renderMusic, pieces }, // offline renders of the sound: render([[0, zoneA], [t, zoneB]], secs, { room, tap, log }) -> { buf, ms, peakNodes, log }
     lib: libStats, // the material library's bake: ms, sets, bytes
     texMem() { // material textures in the scene (env maps and shadow maps aside), counted as w x h x bytes per texel x 1.33 when mipmapped

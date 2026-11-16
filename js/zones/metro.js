@@ -17,7 +17,7 @@ const ceilY = zc => YC + Math.sqrt(R * R - (zc - ZC) ** 2);
 const TW = 4.1, TC = (ZF + .2 + ZE - .1) / 2, TS = .95; // tunnel: width, centre line, springing
 const PI = Math.PI, DOOR = 702; // the entry doorway's centre on the back wall
 
-defZone('mT', { music: 'metro', ...dry, sky: 'night', grp: 'q', k: .8, exp: .3, fog: [.012, .011, .009, .004], bloom: .34, wet: .3, hum: .4, box: [692, -604.7, 748, -593.6], probe: [718, 1.6, -598], env: [[700, 0, -604.4], [740, 3.3, -595.5]] });
+defZone('mT', { music: 'metro', ...dry, amb: { hum: .4, vent: .4, ventF: 220, rumble: 1 }, sky: 'night', grp: 'q', k: .8, exp: .3, fog: [.012, .011, .009, .004], bloom: .34, wet: .3, hum: .4, box: [692, -604.7, 748, -593.6], probe: [718, 1.6, -598], env: [[700, 0, -604.4], [740, 3.3, -595.5]] });
 {
   const z = zones.mT, rb = (w, h, d, r, s = 2) => new RoundedBoxGeometry(w, h, d, s, r);
   const A = (m, g, own) => add(m, g, own);
