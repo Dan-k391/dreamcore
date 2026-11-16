@@ -20,7 +20,7 @@ const AREAS = { // area: [check count (a full run warns when it differs), runs a
   solid: [11, 0, 'what stops you: benches, doors, arches, the flume; coplanar faces; nothing pops at an opening'],
   light: [2, 0, 'shadow maps: every caster, the loose-things cache'],
   look: [9, 0, 'zone culling, mood at openings and passages, settings panel, grass viewport'],
-  loose: [13, 0, 'balls, rings, the pit and what they do'],
+  loose: [14, 0, 'balls, rings, the pit and what they do'],
   sound: [1, 0, 'music'],
 };
 const oi = argv.indexOf('--only'), ci = argv.indexOf('--child'), A = ci < 0 ? null : argv[ci + 1], on = a => A === a;
@@ -145,10 +145,12 @@ const solids = [
   ['walk under the flume platform along the south deck, between its posts, to the east wall', 'return dev.go(36.5, -1.4, -P / 2, ["KeyW"], 5)', s => near(s.x, 44.7, .05) && near(s.y, 0, .01)],
   ['in the pit the near balls are drawn with the fine shape, none from afar','const Ph = await import("/js/physics.js"), g = Ph.groups[2]; dev.go(-31.6, 34.5, P / 2, ["KeyW"], .9); dev.step(2); const near = g.fine.count; dev.go(-20, 36, P / 2); dev.step(2); return [near, g.fine.count]', ([near, far]) => near > 20 && far === 0],
   ['a door opens on E away from you: shut it stops you; E within reach then W walks you through (from the hallway and from the vestibule, the portal behind it); closing, it stops against you in its swing, not moving you, and shuts once you step clear', 'const B = await import("/js/build.js"), d = B.doors[0], E = () => { dev.key("KeyE", true); dev.step(1); dev.key("KeyE", false); }, r = {}, S = () => { const s = dev.state(); return [s.zone, +s.x.toFixed(2), +s.z.toFixed(2)]; }; r.shut = dev.go(3.1, 34.8, P / 2, ["KeyW"], 1.5).zone; dev.go(3.1, 34.8, P / 2); E(); r.h = dev.go(3.1, 34.8, P / 2, ["KeyW"], 1.3); dev.go(302.8, 300.9, 0); E(); dev.step(70); r.closed = d.f; E(); r.v = dev.go(302.8, 300.9, 0, ["KeyW"], 1.3); d.set(0, 1); d.u = d.to = 0; dev.go(3.1, 34.8, P / 2); E(); dev.step(70); dev.go(302.95, 299.85, P / 2); E(); dev.step(70); r.wait = [d.f, ...S()]; dev.go(302.8, 301.5, 0); dev.step(70); r.after = d.f; return r', r => r.shut === 'hT' && r.h.zone === 'hV' && Math.abs(r.h.x - 302.8) < .05 && r.closed === 0 && r.v.zone === 'hT' && Math.abs(r.v.z - 34.8) < .05 && r.wait[0] > .2 && r.wait[0] < 1 && r.wait[2] === 302.95 && r.after === 0],
+  // pools that touch are one sheet of water (js/water.js): the arcade channel ran into an unseen wall at the night hall, and a ripple stopped dead at the join
+  ['a ring pushed across the arcade / night hall join floats on into the night hall, and a ripple runs across the join at one height', 'const W = await import("/js/water.js"), f = (await import("/js/physics.js")).floaters.find(q => q.w.zone.id === "pC"), was = { ...f }; dev.go(14, -12, -P / 2); Object.assign(f, { x: 23.2, z: -12, vx: 1.5, vz: 0 }); dev.step(240); const ring = [f.x, f.y, f.w.zone.id]; Object.assign(f, was); const S = W.ponds.find(w => w.zone.id === "pC").sheet, R = S.rect, b = new Uint16Array(4); W.ripple(S, [[23.4, -12, .02]]); dev.step(15); const h = x => { dev.renderer.readRenderTargetPixels(S.sim[0], Math.floor((x - R.x) * 20), Math.floor((-12 - R.y) * 20), 1, 1, b); return dev.THREE.DataUtils.fromHalfFloat(b[0]); }; return [ring, h(23.975), h(24.025)]', ([r, a, b]) => r[0] > 24.2 && r[1] > -.1 && r[1] < .05 && r[2] === 'pN' && Math.abs(a) > .002 && Math.abs(b - a) < .2 * Math.abs(a)],
 ];
 // The area of each solids entry, in order: m move, s solid, l loose, p perf (wall-clock budgets, run alone). Entries of one area share a page, in this order: a
 // ball test leaves the pit and the rings as it found them for the next, so the loose ones stay together.
-const solidArea = 'mmsssssllllpllpsllllmmmmmmllsmslm', AN = { m: 'move', s: 'solid', l: 'loose', p: 'perf' };
+const solidArea = 'mmsssssllllpllpsllllmmmmmmllsmslml', AN = { m: 'move', s: 'solid', l: 'loose', p: 'perf' };
 if (solidArea.length !== solids.length) throw new Error(`solidArea has ${solidArea.length} letters for ${solids.length} entries`);
 const mine = solids.filter((_, k) => AN[solidArea[k]] === A);
 if (mine.length) {

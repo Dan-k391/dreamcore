@@ -40,7 +40,7 @@ Loads the page in a private headless browser on the real GPU, waits for `dev.rea
 
 The regression suite: the page loads with and without `?dev` with no console errors or failed asserts; walks between places land where they should; solids, the ball pit, rings and loose balls behave; physics stays within its cost. Prints one line per area (seconds, passed / failed), then only the failed checks and a final `N passed, M failed (total seconds)`; `--all` prints every line. Run the areas your change touches while working (`--only move,solid`), the whole suite once on the final result; it must be green. `--list` prints the areas with their check counts; an unknown area is an error (exit 2).
 
-Areas (111 checks; every check is in exactly one; alone, in seconds on the lead's machine):
+Areas (112 checks; every check is in exactly one; alone, in seconds on the lead's machine):
 
 - `perf` (5, 36 s): the checks that measure time (library bake, ready, first sign, openings, the two physics budgets). It runs alone, first: other browsers on the GPU would change its numbers.
 - `seen` (1, 217 s): `tools/pvs.mjs --check`, js/seen.js covers what each zone sees; the longest single check, so the full run is about as long as it.
@@ -50,7 +50,7 @@ Areas (111 checks; every check is in exactly one; alone, in seconds on the lead'
 - `solid` (11, 48 s): what stops you (benches, door leaf, shelter, arch, flume deck), coplanar faces, nothing pops at an opening.
 - `light` (2, 41 s): every shadow map has every caster; the loose-things shadow cache.
 - `look` (9, about 30 s): zone culling, mood at openings and passage warps, settings panel, stationary grass viewport.
-- `loose` (13, 23 s): balls, rings, the pit.
+- `loose` (14, 25 s): balls, rings, the pit.
 - `sound` (1, 12 s): music.
 
 The full run starts each area as its own child process (`--child <area>`, internal) with its own browsers, `perf` alone first, then the rest 5 at a time (`--jobs`, or `JOBS=`), longest first: more at once only slows every one (the GPU is shared). All areas serially add up to about 11 minutes; a full run takes about 5 (was 8 min 44 s as one run). A check that depends on state another leaves (the pit's balls, the rings) stays in the same area, in order. Inside an area the checks run as before. A new behaviour worth keeping gets a small check here. The stationary grass viewport check (`tools/grass-viewport.js`) widens the window without moving or advancing time and compares its rendered pixels with a freshly rebuilt view; it catches projection changes missing from the patch cache.

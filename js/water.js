@@ -95,10 +95,16 @@ const scissors = (users, c) => { // the pair cut to what these pools' pixels can
 const proxyMat = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false, transparent: true, side: THREE.DoubleSide });
 const uTest = { value: 0 }; // ?dev measurement (dev.waterCheck): 1 the lens picture alone, 2 the mirror alone, both with the surface flat; 3 a mask
 const DROPS = 8; // disturbances one step takes: the player's and the loose things'
-const simMat = new THREE.ShaderMaterial({ uniforms: { tSim: { value: null }, uPx: { value: null }, uDrop: { value: Array.from({ length: DROPS }, () => V(0, 0, 0)) } }, vertexShader: quadVS,
-  fragmentShader: `uniform sampler2D tSim; uniform vec2 uPx; uniform vec3 uDrop[${DROPS}]; varying vec2 vUv;
+const RECTS = 4; // pools one sheet of water may join (sheets below)
+const simMat = new THREE.ShaderMaterial({ uniforms: { tSim: { value: null }, uPx: { value: null }, uDrop: { value: Array.from({ length: DROPS }, () => V(0, 0, 0)) }, uWet: { value: null } }, vertexShader: quadVS,
+  fragmentShader: `uniform sampler2D tSim; uniform vec2 uPx; uniform vec3 uDrop[${DROPS}]; uniform vec4 uWet[${RECTS}]; varying vec2 vUv;
+    bool wet(vec2 u) { for (int i = 0; i < ${RECTS}; i++) if (u.x > uWet[i].x && u.x < uWet[i].z && u.y > uWet[i].y && u.y < uWet[i].w) return true; return false; } // inside one of the sheet's pools
+    float nb(vec2 u, float own) { return wet(u) ? texture2D(tSim, u).r : own; } // a side wall reflects: past it the water sees its own height
     void main() { vec4 s = texture2D(tSim, vUv); // r = height, g = velocity
-      float avg = (texture2D(tSim, vUv - vec2(uPx.x, 0.)).r + texture2D(tSim, vUv + vec2(uPx.x, 0.)).r + texture2D(tSim, vUv - vec2(0., uPx.y)).r + texture2D(tSim, vUv + vec2(0., uPx.y)).r) * .25;
+      vec2 l = vUv - vec2(uPx.x, 0.), r = vUv + vec2(uPx.x, 0.), d = vUv - vec2(0., uPx.y), u = vUv + vec2(0., uPx.y);
+      if (!wet(vUv)) { float n = 0., c = 0.; if (wet(l)) { n += texture2D(tSim, l).r; c++; } if (wet(r)) { n += texture2D(tSim, r).r; c++; } if (wet(d)) { n += texture2D(tSim, d).r; c++; } if (wet(u)) { n += texture2D(tSim, u).r; c++; }
+        gl_FragColor = vec4(c > 0. ? n / c : 0., 0., 0., 1.); return; } // dry ground in the sheet's box holds the height of the water beside it, so slopes read at a wall are as at the box's own edge
+      float avg = (nb(l, s.r) + nb(r, s.r) + nb(d, s.r) + nb(u, s.r)) * .25;
       s.g = (s.g + (avg - s.r) * 2.) * .993; s.r += s.g;
       for (int i = 0; i < ${DROPS}; i++) { vec2 d = (vUv - uDrop[i].xy) / uPx; s.r += uDrop[i].z * exp(-dot(d, d) / 18.); }
       gl_FragColor = s; }` });
@@ -159,30 +165,58 @@ const waterFS = `uniform sampler2D tMirror, tUnder, tUnderZ, tPlan, tGround, tNo
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
     }`;
-const ponds = pools.map(([x1, z1, x2, z2, floor, zid, seen, scatter]) => {
-  const g = new THREE.PlaneGeometry(x2 - x1, z2 - z1);
+// Pools that touch along an edge are one sheet of water: one wave field, one CPU copy, one height map and one plan over the box round
+// them all, so waves, light and what floats run on across the join, and each pool's surface reads the same field. Within the box,
+// ground outside every pool is dry: a wall to the waves and to the refracted rays.
+const touch = (a, b) => { const ox = Math.min(a[2], b[2]) - Math.max(a[0], b[0]), oz = Math.min(a[3], b[3]) - Math.max(a[1], b[1]); return (ox > 1e-6 && oz > -1e-6) || (oz > 1e-6 && ox > -1e-6); };
+const sheetOf = pools.map((_, i) => i);
+for (let i = 0; i < pools.length; i++) for (let j = 0; j < i; j++) if (touch(pools[i], pools[j])) { const a = sheetOf[i], b = sheetOf[j]; sheetOf.forEach((s, k) => { if (s === a) sheetOf[k] = b; }); }
+const sheets = [...new Set(sheetOf)].map(id => {
+  const mine = pools.filter((_, i) => sheetOf[i] === id), rects = mine.map(p => p.slice(0, 4));
+  if (rects.length > RECTS) throw new Error(`a sheet of water joins ${rects.length} pools; the wave step takes ${RECTS}`);
+  const x1 = Math.min(...rects.map(r => r[0])), z1 = Math.min(...rects.map(r => r[1])), x2 = Math.max(...rects.map(r => r[2])), z2 = Math.max(...rects.map(r => r[3]));
+  const floor = Math.min(...mine.map(p => p[4])), wetAt = (x, z) => rects.some(r => x > r[0] && x < r[2] && z > r[1] && z < r[3]);
   const rt = () => new THREE.WebGLRenderTarget(Math.round((x2 - x1) * 20), Math.round((z2 - z1) * 20), { type: THREE.HalfFloatType, depthBuffer: false }); // 5cm cells
   const sim = [rt(), rt()], rect = new THREE.Vector4(x1, z1, x2, z2), px = new THREE.Vector2(.05 / (x2 - x1), .05 / (z2 - z1));
-  const ppm = Math.min(80, 2048 / Math.max(x2 - x1, z2 - z1)), pw = Math.round((x2 - x1) * ppm), ph = Math.round((z2 - z1) * ppm); // the plan: 80 pixels a metre where it fits
-  const planRT = new THREE.WebGLRenderTarget(pw, ph, { type: THREE.HalfFloatType });
+  const wet = Array.from({ length: RECTS }, (_, i) => { const r = rects[i]; return r ? new THREE.Vector4((r[0] - x1) / (x2 - x1), (r[1] - z1) / (z2 - z1), (r[2] - x1) / (x2 - x1), (r[3] - z1) / (z2 - z1)) : new THREE.Vector4(); });
+  const ppm = Math.min(80, 4096 / Math.max(x2 - x1, z2 - z1)), planRT = new THREE.WebGLRenderTarget(Math.round((x2 - x1) * ppm), Math.round((z2 - z1) * ppm), { type: THREE.HalfFloatType }); // the plan: 80 pixels a metre where it fits
   const gw = Math.round((x2 - x1) * 20), gh = Math.round((z2 - z1) * 20), heights = new Float32Array(gw * gh), solid = colliders.filter(c => !c[6] && c[5] > WY && c[4] < 1.7 && c[2] > x1 && c[0] < x2 && c[3] > z1 && c[1] < z2); // boxes standing in the water
-  for (let j = 0, i = 0; j < gh; j++) for (let k = 0; k < gw; k++, i++) { // the height map: the walking floor, or the surface itself where a wall or column stands in the water
+  for (let j = 0, i = 0; j < gh; j++) for (let k = 0; k < gw; k++, i++) { // the height map: the walking floor, or the surface itself where a wall or column stands in the water or the ground is dry
     const x = x1 + (k + .5) / 20, z = z1 + (j + .5) / 20;
-    heights[i] = solid.some(c => x > c[0] && x < c[2] && z > c[1] && z < c[3]) ? WY : Math.min(WY, floorH(x, z));
+    heights[i] = !wetAt(x, z) || solid.some(c => x > c[0] && x < c[2] && z > c[1] && z < c[3]) ? WY : Math.min(WY, floorH(x, z));
   }
   const ground = new THREE.DataTexture(heights, gw, gh, THREE.RedFormat, THREE.FloatType); ground.needsUpdate = true;
+  // where a floating disc may be: inside a pool, or across a join, in the band the two pools share (a pool's side there is open water)
+  const boxes = [...rects];
+  for (const a of rects) for (const b of rects) if (a !== b && touch(a, b)) {
+    if (Math.min(a[3], b[3]) - Math.max(a[1], b[1]) > 1e-6 && a[2] <= b[0] + 1e-6) boxes.push([a[0], Math.max(a[1], b[1]), b[2], Math.min(a[3], b[3])]); // a west of b
+    if (Math.min(a[2], b[2]) - Math.max(a[0], b[0]) > 1e-6 && a[3] <= b[1] + 1e-6) boxes.push([Math.max(a[0], b[0]), a[1], Math.min(a[2], b[2]), b[3]]); // a north of b
+  }
+  const keep = (x, z, r, o) => { // -> o.x, o.z: the nearest place to (x, z) where a disc of radius r lies all in the water; returns the squared distance to it
+    let d = Infinity; o.x = x; o.z = z;
+    for (const [bx1, bz1, bx2, bz2] of boxes) if (bx2 - bx1 >= 2 * r && bz2 - bz1 >= 2 * r) { const cx = Math.min(bx2 - r, Math.max(bx1 + r, x)), cz = Math.min(bz2 - r, Math.max(bz1 + r, z)), e = (cx - x) ** 2 + (cz - z) ** 2; if (e < d) { d = e; o.x = cx; o.z = cz; } }
+    return d;
+  };
+  return { rects, rect, floor, sim, px, wet, planRT, ppm, ground, keep, ponds: [], twin: twin(x1, z1, x2, z2, wetAt) };
+});
+const ponds = pools.map(([x1, z1, x2, z2, floor, zid, seen, scatter]) => {
+  const S = sheets.find(q => q.rects.some(r => r[0] === x1 && r[1] === z1 && r[2] === x2 && r[3] === z2)), { sim, px, planRT } = S;
+  const g = new THREE.PlaneGeometry(x2 - x1, z2 - z1), rect = new THREE.Vector4(x1, z1, x2, z2);
   const planCam = new THREE.OrthographicCamera((x1 - x2) / 2, (x2 - x1) / 2, (z2 - z1) / 2, (z1 - z2) / 2, .001, Math.max(1.6, WY - floor + .5)); // looking straight down from the surface, to below its deepest floor
   planCam.position.set((x1 + x2) / 2, WY, (z1 + z2) / 2); planCam.up.set(0, 0, -1); planCam.lookAt((x1 + x2) / 2, WY - 1, (z1 + z2) / 2);
-  const U = { uCaus: zones[zid].tileU.uCaus, uCausDir: zones[zid].tileU.uCausDir, tMirror: { value: mirrorRT.texture }, tPlan: { value: planRT.texture }, tGround: { value: ground }, tUnder: { value: under.texture }, tUnderZ: { value: under.depthTexture }, uLens: { value: lens.camera.projectionMatrix }, tNormalMap0: { value: wn0 }, tNormalMap1: { value: wn1 },
-              tSim: { value: sim[0].texture }, uPond: { value: rect }, uPx: { value: px }, uFloor: { value: floor }, uScatter: { value: V(...scatter) }, uMain: { value: 0 }, uTest, uTime };
+  const U = { uCaus: zones[zid].tileU.uCaus, uCausDir: zones[zid].tileU.uCausDir, tMirror: { value: mirrorRT.texture }, tPlan: { value: planRT.texture }, tGround: { value: S.ground }, tUnder: { value: under.texture }, tUnderZ: { value: under.depthTexture }, uLens: { value: lens.camera.projectionMatrix }, tNormalMap0: { value: wn0 }, tNormalMap1: { value: wn1 },
+              tSim: { value: sim[0].texture }, uPond: { value: S.rect }, uPx: { value: px }, uFloor: { value: S.floor }, uScatter: { value: V(...scatter) }, uMain: { value: 0 }, uTest, uTime }; // uPond, uFloor: the sheet's box and deepest floor, which its field, height map and plan span
   const w = new THREE.Mesh(g, new THREE.ShaderMaterial({ uniforms: U, vertexShader: waterVS, fragmentShader: waterFS, transparent: true }));
-  Object.assign(w, { lens, mirror, seen, rect, floor, q: { pending: [], last: null }, px, sim, tileU: zones[zid].tileU, zone: zones[zid], twin: twin(x1, z1, x2, z2) });
-  w.drawPlan = () => { // once, while the zone's lamps are lit for its bake; caustics off, since the plan is a still and they move
-    const caus = w.tileU.uCaus.value, target = renderer.getRenderTarget();
+  Object.assign(w, { lens, mirror, seen, rect, floor, q: { pending: [], last: null }, sheet: S, tileU: zones[zid].tileU, zone: zones[zid], twin: S.twin });
+  S.ponds.push(w);
+  w.drawPlan = () => { // once, while the zone's lamps are lit for its bake; caustics off, since the plan is a still and they move. Into this pool's part of the sheet's plan
+    const caus = w.tileU.uCaus.value, target = renderer.getRenderTarget(), R = S.rect, k = S.ppm, u0 = Math.round((x1 - R.x) * k), v0 = Math.round((R.w - z2) * k);
+    planRT.viewport.set(u0, v0, Math.round((x2 - R.x) * k) - u0, Math.round((R.w - z1) * k) - v0); planRT.scissor.copy(planRT.viewport); planRT.scissorTest = true;
     w.tileU.uCaus.value = 0; sky.visible = false; renderer.setRenderTarget(planRT); renderer.render(scene, planCam);
+    planRT.viewport.set(0, 0, planRT.width, planRT.height); planRT.scissor.copy(planRT.viewport); planRT.scissorTest = false;
     w.tileU.uCaus.value = caus; sky.visible = true; renderer.setRenderTarget(target);
   };
-  w.tileU.uSim.value = sim[0].texture; w.tileU.uPond.value = rect; w.tileU.uPx.value = px;
+  w.tileU.uSim.value = sim[0].texture; w.tileU.uPond.value = S.rect; w.tileU.uPx.value = px;
   w.rotation.x = -Math.PI / 2; w.position.set((x1 + x2) / 2, WY, (z1 + z2) / 2); scene.add(w);
   const proxy = new THREE.Mesh(new THREE.BoxGeometry(x2 - x1 + 3, z2 - z1 + 3, 3.05).translate(0, 0, 1.475), proxyMat); // in the water's frame: z is up
   proxy.renderOrder = -1e9; w.add(proxy); seeThrough.push(proxy); // first of the see-through things, so only opaque depth decides; never in the AO pass
@@ -224,19 +258,22 @@ const ponds = pools.map(([x1, z1, x2, z2, floor, zid, seen, scatter]) => {
 // The CPU's coarse copy of a pool's waves, 20 cm cells, given the same disturbances: what floating things ride on, so the GPU
 // waves never have to be read back. Shallow-water form (heights in the cells, water velocity on the faces between them),
 // tuned to the GPU waves' speed (c = 2.12 m/s: one 5 cm cell * 60 Hz / sqrt 2) and damping (.993 a step); walls reflect, as there.
-function twin(x1, z1, x2, z2) {
+function twin(x1, z1, x2, z2, wetAt) { // over a sheet's box: faces next to dry cells stay shut, and a dry cell beside water holds its height (as on the GPU)
   const nx = Math.round((x2 - x1) / .2), nz = Math.round((z2 - z1) / .2), dx = (x2 - x1) / nx, dz = (z2 - z1) / nz;
   const h = new Float32Array(nx * nz), u = new Float32Array((nx + 1) * nz), v = new Float32Array(nx * (nz + 1)), G = 9.8, D = 2.12 ** 2 / 9.8, t = 1 / 60;
+  const wet = Uint8Array.from({ length: nx * nz }, (_, k) => wetAt(x1 + (k % nx + .5) * dx, z1 + ((k / nx | 0) + .5) * dz)), nWet = wet.reduce((a, b) => a + b, 0);
+  const shore = []; for (let k = 0; k < h.length; k++) if (!wet[k]) { const i = k % nx, n = [i > 0 && k - 1, i < nx - 1 && k + 1, k >= nx && k - nx, k + nx < h.length && k + nx].filter(q => q !== false && wet[q]); if (n.length) shore.push([k, ...n]); }
   const T = { x1, z1, nx, nz, dx, dz, h, u, v, at: { h: 0, gx: 0, gz: 0, ux: 0, uz: 0 } };
   T.step = drops => {
     for (const [x, z, p] of drops) { // the same volume the GPU's gaussian adds, shared bilinearly between the four nearest cells
       const fx = Math.min(nx - 1.001, Math.max(0, (x - x1) / dx - .5)), fz = Math.min(nz - 1.001, Math.max(0, (z - z1) / dz - .5)), i = fx | 0, j = fz | 0, a = fx - i, b = fz - j, q = p * .1414 / (dx * dz);
       h[i + j * nx] += q * (1 - a) * (1 - b); h[i + 1 + j * nx] += q * a * (1 - b); h[i + (j + 1) * nx] += q * (1 - a) * b; h[i + 1 + (j + 1) * nx] += q * a * b;
     }
-    for (let j = 0; j < nz; j++) for (let i = 1; i < nx; i++) { const k = i + j * (nx + 1); u[k] = (u[k] - G * t * (h[i + j * nx] - h[i - 1 + j * nx]) / dx) * .993; }
-    for (let j = 1; j < nz; j++) for (let i = 0; i < nx; i++) { const k = i + j * nx; v[k] = (v[k] - G * t * (h[k] - h[k - nx]) / dz) * .993; }
-    let s = 0; for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) { const k = i + j * nx; s += h[k] -= D * t * ((u[k + j + 1] - u[k + j]) / dx + (v[k + nx] - v[k]) / dz); }
-    s /= h.length; for (let k = 0; k < h.length; k++) h[k] -= s; // the drops add water and the closed sides keep it: hold the mean level at the still surface, as the drawn water's is
+    for (let j = 0; j < nz; j++) for (let i = 1; i < nx; i++) { const k = i + j * (nx + 1), c = i + j * nx; u[k] = wet[c] && wet[c - 1] ? (u[k] - G * t * (h[c] - h[c - 1]) / dx) * .993 : 0; }
+    for (let j = 1; j < nz; j++) for (let i = 0; i < nx; i++) { const k = i + j * nx; v[k] = wet[k] && wet[k - nx] ? (v[k] - G * t * (h[k] - h[k - nx]) / dz) * .993 : 0; }
+    let s = 0; for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) { const k = i + j * nx; if (wet[k]) s += h[k] -= D * t * ((u[k + j + 1] - u[k + j]) / dx + (v[k + nx] - v[k]) / dz); }
+    s /= nWet; for (let k = 0; k < h.length; k++) h[k] = wet[k] ? h[k] - s : 0; // the drops add water and the closed sides keep it: hold the mean level at the still surface, as the drawn water's is
+    for (const [k, ...n] of shore) { let a = 0; for (const q of n) a += h[q]; h[k] = a / n.length; }
   };
   T.sample = (x, z) => { // -> T.at: height above the still surface, its slope, and the water's flow, at (x, z)
     const fx = Math.min(nx - 1.001, Math.max(0, (x - x1) / dx - .5)), fz = Math.min(nz - 1.001, Math.max(0, (z - z1) / dz - .5)), i = fx | 0, j = fz | 0, a = fx - i, b = fz - j;
@@ -249,20 +286,20 @@ function twin(x1, z1, x2, z2) {
   return T;
 }
 // made at load, not on the frame a pool first shows (the baths seen first through their door: five targets and textures in one frame); `under` by fit(), from the first frame on
-for (const r of [...ponds.flatMap(w => w.sim), mirrorRT]) renderer.initRenderTarget(r);
+for (const r of [...sheets.flatMap(S => S.sim), mirrorRT]) renderer.initRenderTarget(r);
 for (const w of ponds) for (const u of [w.material.uniforms, w.tileU]) for (const k in u) if (u[k].value?.isTexture && !u[k].value.isRenderTargetTexture) renderer.initTexture(u[k].value);
-function ripple(w, drops) { // one 60Hz step of a pool's waves, with up to DROPS disturbances [x, z, size] in world space
-  simMat.uniforms.tSim.value = w.sim[0].texture; simMat.uniforms.uPx.value = w.px;
-  simMat.uniforms.uDrop.value.forEach((d, i) => { const [x, z, p] = drops[i] || [0, 0, 0]; d.set((x - w.rect.x) / (w.rect.z - w.rect.x), (z - w.rect.y) / (w.rect.w - w.rect.y), p); });
-  renderer.setRenderTarget(w.sim[1]); simQuad.render(renderer); renderer.setRenderTarget(null);
-  w.sim.reverse(); w.material.uniforms.tSim.value = w.tileU.uSim.value = w.sim[0].texture;
-  if (w.twin.used) w.twin.step(drops.slice(0, DROPS)); // only a pool with something floating on it (physics.js marks them) needs the copy
+function ripple(S, drops) { // one 60Hz step of a sheet's waves, with up to DROPS disturbances [x, z, size] in world space
+  simMat.uniforms.tSim.value = S.sim[0].texture; simMat.uniforms.uPx.value = S.px; simMat.uniforms.uWet.value = S.wet;
+  simMat.uniforms.uDrop.value.forEach((d, i) => { const [x, z, p] = drops[i] || [0, 0, 0]; d.set((x - S.rect.x) / (S.rect.z - S.rect.x), (z - S.rect.y) / (S.rect.w - S.rect.y), p); });
+  renderer.setRenderTarget(S.sim[1]); simQuad.render(renderer); renderer.setRenderTarget(null);
+  S.sim.reverse(); for (const w of S.ponds) w.material.uniforms.tSim.value = w.tileU.uSim.value = S.sim[0].texture;
+  if (S.twin.used) S.twin.step(drops.slice(0, DROPS)); // only a sheet with something floating on it (physics.js marks them) needs the copy
 }
 
 function resetWater() { // ?dev only (dev.reset): every pool flat and still, as at load, on the GPU and in the CPU's copy
   const t = renderer.getRenderTarget(), c = renderer.getClearColor(new THREE.Color()), a = renderer.getClearAlpha(); renderer.setClearColor(0, 0);
-  for (const w of ponds) { for (const r of w.sim) { renderer.setRenderTarget(r); renderer.clear(); } w.twin.h.fill(0); w.twin.u.fill(0); w.twin.v.fill(0); }
+  for (const S of sheets) { for (const r of S.sim) { renderer.setRenderTarget(r); renderer.clear(); } S.twin.h.fill(0); S.twin.u.fill(0); S.twin.v.fill(0); }
   renderer.setRenderTarget(t); renderer.setClearColor(c, a); epoch++; // and no visibility result from before counts
 }
 
-export { ponds, ripple, resetWater, uTest, waterViews };
+export { ponds, sheets, ripple, resetWater, uTest, waterViews };

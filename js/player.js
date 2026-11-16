@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { renderer, camera, uTime, V, WY, zones, inR } from './core.js';
 import { colliders, emitters, warps, ladders, doors, ends, side, across, carry, spin, live, behind, reveal, floorH as bedH, pools, clear, out, near } from './build.js';
 import { setSky, sun } from './sky.js';
-import { ponds, ripple, resetWater } from './water.js';
+import { ponds, sheets, ripple, resetWater } from './water.js';
 import { relight, zone0, lights, weights } from './lights.js';
 import { composer, look, atmos, bloom, film } from './post.js';
 import { sfx, startAudio } from './audio.js';
@@ -243,7 +243,7 @@ const frame = dt => { // one game frame of dt seconds: the loop below passes the
   for (let i = 1; i <= steps; i++) { // the body's place and height move through the frame's steps, so a slow frame doesn't hit things harder or skip them
     if (!me.shoved) { me.x = ox + (p.x - ox) * i / steps; me.z = oz + (p.z - oz) * i / steps; } me.feet = fly ? 1e4 : was + (feet - was) * i / steps; // a flying body touches nothing loose
     stepLoose(me); me.hit = 0; me.splash = false; hitP = 0; splashP = false; fallP = 0;
-    for (const w of ponds) if (w.visible) ripple(w, [[p.x, p.z, wake + drop], ...wakes.filter(k => k[0] === w).map(k => k.slice(1))]);
+    for (const S of sheets) if (S.ponds.some(w => w.visible)) ripple(S, [[p.x, p.z, wake + drop], ...wakes.filter(k => k[0].sheet === S).map(k => k.slice(1))]);
     drop = 0;
   }
   if (me.shoved) { const sx = p.x, sz = p.z; p.x = me.x; p.z = me.z; if (!collide(p, feet)) { p.x = sx; p.z = sz; } } // a ring or ball held against something stops the body

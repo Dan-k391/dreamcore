@@ -12,6 +12,7 @@ import { sun } from './sky.js';
 
 const h = 1 / 60, G = 9.8;
 const pondAt = (x, z) => ponds.find(w => inR(x, z, w.rect.x, w.rect.y, w.rect.z, w.rect.w));
+const K = { x: 0, z: 0 }; // where a float is kept in its sheet of water (water.js keep)
 // The drawn water is flat (water.js shades its waves, it doesn't move the surface), so what floats on it heaves by HEAVE at most:
 // enough to bob with the waves, never enough to leave the surface it is seen on or be flung off it.
 const HEAVE = .04, heave = t => Math.max(-HEAVE, Math.min(HEAVE, t.h * 5));
@@ -171,7 +172,7 @@ function stepGroup(g, me) {
   for (let b = 0; b < g.n; b++) if (g.still[b] < 30) { // fall and move
     const i = 3 * b; o[i] = p[i]; o[i + 1] = p[i + 1]; o[i + 2] = p[i + 2];
     v[i + 1] -= G * h;
-    if (g.float) { const w = pondAt(p[i], p[i + 2]), R = w?.rect; g.in[b] = R && inR(p[i], p[i + 2], R.x + r - .01, R.y + r - .01, R.z - r + .01, R.w - r + .01) ? R : null; if (w) { const t = w.twin.sample(p[i], p[i + 2]), s = WY + heave(t), sub = Math.min(1, Math.max(0, (s - p[i + 1] + r) / (2 * r))); // how much of it is under water (the surface heaved as the rings ride it)
+    if (g.float) { const w = pondAt(p[i], p[i + 2]); g.in[b] = w && w.sheet.keep(p[i], p[i + 2], r - .01, K) === 0 ? w.sheet : null; if (w) { const t = w.twin.sample(p[i], p[i + 2]), s = WY + heave(t), sub = Math.min(1, Math.max(0, (s - p[i + 1] + r) / (2 * r))); // how much of it is under water (the surface heaved as the rings ride it)
       if (sub > 0) { if (v[i + 1] < -1.2 && sub < .3) knock(p[i], s, p[i + 2], -v[i + 1], 4); v[i + 1] += G * sub / g.float * h; const k = Math.min(1, (.6 + sub * 4) * h), kv = Math.min(1, (4 + sub * 60) * h); // it floats, the water drags it along with its flow and holds back its bobbing (near critical: a dive must not launch it)
         v[i] += (t.ux * 1.4 - G * .3 * t.gx - v[i]) * k; v[i + 2] += (t.uz * 1.4 - G * .3 * t.gz - v[i + 2]) * k; v[i + 1] -= v[i + 1] * kv;
         const sp = Math.hypot(v[i], v[i + 2]); if (sp > .08) wakes.push([w, p[i], p[i + 2], Math.min(sp, 2) * .0015 * sub]); } } } // its wake: from moving through the water, not bobbing (a wake raised under a rising ball would lift it further)
@@ -181,7 +182,7 @@ function stepGroup(g, me) {
   for (let it = 0; it < 2; it++) for (let b = 0; b < g.n; b++) if (g.still[b] < 30) { // push out of the legs, the world and each other
     if (g.solid && me.feet !== undefined && legs(g, b, me)) g.kick = b + 1; // a solid ball: the legs first, so the walls have the last word and a pinned ball shoves the body back
     const i = 3 * b;
-    const R = g.float && g.in[b]; if (R) { p[i] = Math.min(R.z - r, Math.max(R.x + r, p[i])); p[i + 2] = Math.min(R.w - r, Math.max(R.y + r, p[i + 2])); } // a float in its pool stays there, as the rings do: before the solids, so pushed at the rim it holds the body instead of rolling up over the edge
+    const S = g.float && g.in[b]; if (S) { S.keep(p[i], p[i + 2], r, K); p[i] = K.x; p[i + 2] = K.z; } // a float in its sheet of water stays there (across a join between pools too), as the rings do: before the solids, so pushed at the rim it holds the body instead of rolling up over the edge
     let x = p[i], y = p[i + 1], z = p[i + 2], hit = 0, fy = g.floor(x, z);
     if (fy > y - r * .5 && !g.slope) { x = o[i]; z = o[i + 2]; fy = g.floor(x, z); } // a floor rising above half its radius (a step, a block) is a wall to it, not a lift onto its top
     // the floor: along its slope's normal where it slopes (the field), so a ball on a slope rolls down it
@@ -257,7 +258,7 @@ for (const g of groups) { g.awake = g.n; if (g.pour) settle(g, g.pour); else g.a
 const RO = .55, RT = .13; // outer radius, tube radius
 const floaters = rings.map((m, i) => ({ m, i, w: pondAt(m.position.x, m.position.z), x: m.position.x, z: m.position.z, y: m.position.y, vx: 0, vz: 0, vy: 0, ax: 0, az: 0, wx: 0, wz: 0, yaw: i * 2.1, wy: 0, shade: [1e9, 0, 0, 0, 0] }));
 for (const w of [...floaters.map(f => f.w), ...groups.filter(g => g.float).map(g => pondAt(g.p[0], g.p[2]))]) if (w) w.twin.used = true; // the pools whose wave copy something rides
-for (const f of floaters) f.solids = colliders.filter(c => c[2] > f.w.rect.x - 1 && c[0] < f.w.rect.z + 1 && c[3] > f.w.rect.y - 1 && c[1] < f.w.rect.w + 1);
+for (const f of floaters) { const R = f.w.sheet.rect; f.solids = colliders.filter(c => c[2] > R.x - 1 && c[0] < R.z + 1 && c[3] > R.y - 1 && c[1] < R.w + 1); } // its whole sheet of water: it may cross into a joined pool
 function stepRing(f, me) {
   const T = f.w.twin, t = uTime.value, e = .42, at = (x, z) => heave(T.sample(x, z)); // heave and lean five times the copy's: the drawn water's slopes are drawn ten times steeper than the waves (water.js), and the ring should agree with what is seen
   const hm = (at(f.x + e, f.z) + at(f.x - e, f.z) + at(f.x, f.z + e) + at(f.x, f.z - e)) / 4, sx = (at(f.x + e, f.z) - at(f.x - e, f.z)) / (2 * e), sz = (at(f.x, f.z + e) - at(f.x, f.z - e)) / (2 * e);
@@ -282,8 +283,8 @@ function stepRing(f, me) {
   // the pool's sides and anything standing in the water; then the other rings
   for (const c of f.solids) if (f.y + RT > c[4] && f.y - RT < c[5] && clear(c, f.x, null, f.z, RO)) { f.x += out.x; f.z += out.z; const l = Math.hypot(out.x, out.z), nx = out.x / l, nz = out.z / l, vn = f.vx * nx + f.vz * nz;
     if (vn < 0) { if (vn < -.12) knock(f.x - nx * RO, f.y, f.z - nz * RO, -vn * 5, 2); f.vx -= 1.3 * vn * nx; f.vz -= 1.3 * vn * nz; } }
-  const R = f.w.rect; f.x = Math.min(R.z - RO, Math.max(R.x + RO, f.x)); f.z = Math.min(R.w - RO, Math.max(R.y + RO, f.z));
-  for (const g of floaters) if (g !== f && g.w === f.w) { const ex = f.x - g.x, ez = f.z - g.z, l = Math.hypot(ex, ez);
+  f.w.sheet.keep(f.x, f.z, RO, K); f.x = K.x; f.z = K.z; f.w = pondAt(f.x, f.z) || f.w; // in its sheet of water: across a join it is in the next pool
+  for (const g of floaters) if (g !== f && g.w.sheet === f.w.sheet) { const ex = f.x - g.x, ez = f.z - g.z, l = Math.hypot(ex, ez);
     if (l < 2 * RO && l > 1e-6) { const nx = ex / l, nz = ez / l, s = (2 * RO - l) / 2, vn = (f.vx - g.vx) * nx + (f.vz - g.vz) * nz;
       f.x += nx * s; f.z += nz * s; g.x -= nx * s; g.z -= nz * s; if (vn < 0) { const j = -.65 * vn; f.vx += nx * j; f.vz += nz * j; g.vx -= nx * j; g.vz -= nz * j; } } }
   if (wet) { const ex = f.x - me.x, ez = f.z - me.z, l = Math.hypot(ex, ez); if (l < RO + .3) { const k = (RO + .3 - l) / (l || 1); me.x -= ex * k; me.z -= ez * k; me.shoved = true; } } // held by a wall: the body stops
