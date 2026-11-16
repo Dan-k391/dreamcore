@@ -42,6 +42,9 @@ Quality is not negotiable; waste is. Half of what a subagent costs is re-reading
 - **Fewer, fuller steps.** One command that does several things, one script that takes all the photos. A job that would run past about 60 steps is two jobs: stop at a clean point and report what the next agent needs.
 - **Do not print what you will not read.** Cut long output with `tail` or `grep`; read files by line range.
 - **Numbers before eyes.** What a script can check (tests, picture differences, timings, counts) a script checks, and its numbers are trusted.
+- **Test what the change touches.** While working, run only the suite areas the change touches (`node tools/test.mjs --only <area>`). The full suite runs once per task, on the final combined result before the commit, not once per subagent.
+- **Proofs match the change.** The before/after photo compare is for rendering changes, `leaks.mjs` for lights and shadows, `pool-skip.mjs` for water and camera, a comparison against a checkout of the old code only when a limit must be shown unchanged. Do not ask for the others.
+- **A new suite check only for a bug that happened,** or for the one essential behaviour of a new system. Every check slows every later run.
 - **Photos in batches, sheets before singles.** Open a full-size photo only to judge fine detail up close or when a sheet raises a doubt; never read the same photo twice. Judging a material or an object at arm's length still needs full-size close-ups: do not skimp there.
 
 ## Test commands
