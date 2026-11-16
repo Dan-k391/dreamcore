@@ -198,7 +198,7 @@ function sconce(z, x, y, zc, ry = 0, o = {}) {
 }
 
 // ---------- small wall / step light: a cast aluminium brick light with a three-louvre eyelid over an opal lens ----------
-// Origin on the wall's face at its centre, front (+z) out; set low beside steps or a passage. o: on, power (a pool place's tiles only: fixture).
+// Origin on the wall's face at its centre, front (+z) out; set low beside steps or a passage. o: on, power (pool places only: fixture).
 function stepLight(z, x, y, zc, ry = 0, o = {}) {
   const on = o.on !== false, al = M(z, 'anodised', { color: 0x8c8c88, roughness: .42, wear: .3, dirt: .5 }), A = (m, g, own) => add(m, put(g, x, y, zc, ry), own);
   const fp = rrect(.14, .085, .012); fp.holes.push(rrect(.098, .056, .006, new THREE.Path())); A(al, plate(fp, .008, .003, 2, 4).translate(0, 0, .006)); // the faceplate round its aperture
@@ -211,7 +211,7 @@ function stepLight(z, x, y, zc, ry = 0, o = {}) {
 }
 
 // ---------- underwater pool light: a stainless niche ring screwed over a fluted glass lens with its LED ring behind ----------
-// Origin on the pool wall's face at the lens centre, front (+z) into the water. o: on, power (cheap unshadowed: fixture, pool places only), d (lens, m).
+// Origin on the pool wall's face at the lens centre, front (+z) into the water. o: on, power (fixture, pool places only), d (lens, m).
 function poolLight(z, x, y, zc, ry = 0, o = {}) {
   const on = o.on !== false, d = o.d || .24, ss = M(z, 'chrome', { dirt: .5, dirtCol: [.62, .64, .58] }), A = (m, g, own) => add(m, put(g, x, y, zc, ry), own);
   const r = d / 2, ring = lathe([[r + .046, 0], [r + .042, .004], [r + .03, .007], [r + .004, .008], [r - .002, .004], [r - .004, -.002]], 64).rotateX(PI / 2);
