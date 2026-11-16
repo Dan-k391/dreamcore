@@ -29,7 +29,7 @@
   if (CFG.pre) await (0, eval)(CFG.pre); // --pre: an experiment set up before the views (a pass off, a size changed)
   const out = [];
   for (const v of CFG.views) {
-    const [x, z, yaw, pitch] = v.hash.split(',').map(Number); dev.reset(x, z, yaw, pitch); dev.lift = v.lift || 0; dev.step(60); sync();
+    const [x, z, yaw, pitch] = v.hash.split(",").map(Number); dev.reset(x, z, yaw, pitch); dev.lift = v.lift || 0; if (v.pre) await (0, eval)(v.pre); dev.step(60); sync(); // v.pre: a view's own set-up (a door open)
     const frames = []; let disjoint = 0, wall = [], cpuFrame = [], cpuComp = [];
     for (let f = 0; f < CFG.frames; f++) {
       segs = []; on = true; compCPU = 0; const t = performance.now(); dev.step(1); const c = performance.now() - t; on = false; sync(); wall.push(performance.now() - t);
