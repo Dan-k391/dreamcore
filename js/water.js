@@ -38,11 +38,20 @@ scene.onBeforeRender = function (r, s, c, ...args) {
   beforeScene.call(this, r, s, c, ...args);
 };
 // One mirror/lens pair for every pool: they share a plane, so a capture made for one is right for all (below the plane each pool
-// captures into it again just before it draws). Of its 1280 square only the part the water on screen can sample is drawn.
+// captures into it again just before it draws). Only the part the water on screen can sample is drawn.
+// The mirror is a 1280 square: it is read with four taps .0007 of its width apart (a real surface is never a perfect mirror), a blur fixed in
+// the picture, not on the screen, which a texel the size of a tap's step resolves; more pixels would only cost (tried at 1440p: 1.45x its pixels looked the same).
+// The underwater picture is shown unblurred: it spans OVER times the screen each way, so it is OVER times the drawing buffer's size (fit), a
+// texel a screen pixel, and what is seen through still water is as sharp as it is in air at any screen size (a 1280 square was 1.5x too coarse at 720p, 3x at 1440p).
 const size = { textureWidth: 1280, textureHeight: 1280, multisample: 0 };
 const mirror = new Reflector(new THREE.PlaneGeometry(), size), lens = new Refractor(new THREE.PlaneGeometry(), size), under = lens.getRenderTarget(), mirrorRT = mirror.getRenderTarget();
-under.depthTexture = new THREE.DepthTexture(1280, 1280, THREE.FloatType); // kept, so rays can be traced through what is under the water
+under.setSize(1, 1); under.depthTexture = new THREE.DepthTexture(1, 1, THREE.FloatType); // kept, so rays can be traced through what is under the water
+// Not multisampled: 4x would clean up fine geometry (a drain's 6 mm bars) for .3 ms at 1440p, but at OVER squared the screen's area its sample buffers take 370 MB there
 mirror.matrixAutoUpdate = lens.matrixAutoUpdate = false;
+const BUF = new THREE.Vector2(), fit = () => { // follow the drawing buffer (resize, pixel ratio, render scale): three resizes the depth texture with the target
+  renderer.getDrawingBufferSize(BUF); const w = Math.ceil(BUF.x * OVER), h = Math.ceil(BUF.y * OVER);
+  if (under.width !== w || under.height !== h) under.setSize(w, h);
+};
 const wideCam = new THREE.PerspectiveCamera(), gl = renderer.getContext(), P = new THREE.Vector3(), M4 = new THREE.Matrix4(), frustum = new THREE.Frustum(), LO = new THREE.Vector3(), HI = new THREE.Vector3();
 // Is this pool certainly hidden? Each frame its proxy, the water widened 1.5 m and raised 3 m, is drawn invisibly after everything opaque
 // inside an occlusion query. A result arrives a frame or more late, so it is trusted only while fresh (4 frames, no dev.reset since) and
@@ -68,9 +77,9 @@ const project = (lo, hi, c, r) => { // widen r (u0, v0, u1, v1 in the wide pictu
   }
   return true;
 };
-const scissor = (rt, r, flip) => { // 3 pixels past the bound: the mirror's four taps and bilinear filtering reach 2
-  const W = rt.width, c = v => Math.min(1, Math.max(0, v)), x0 = Math.max(0, Math.floor(c(flip ? 1 - r[2] : r[0]) * W) - 3), x1 = Math.min(W, Math.ceil(c(flip ? 1 - r[0] : r[2]) * W) + 3);
-  const y0 = Math.max(0, Math.floor(c(r[1]) * W) - 3), y1 = Math.min(W, Math.ceil(c(r[3]) * W) + 3);
+const scissor = (rt, r, flip) => { // past the bound by the mirror's four taps (.0007 of the width) and bilinear filtering, plus one
+  const W = rt.width, H = rt.height, m = Math.ceil(.0007 * W) + 2, c = v => Math.min(1, Math.max(0, v)), x0 = Math.max(0, Math.floor(c(flip ? 1 - r[2] : r[0]) * W) - m), x1 = Math.min(W, Math.ceil(c(flip ? 1 - r[0] : r[2]) * W) + m);
+  const y0 = Math.max(0, Math.floor(c(r[1]) * H) - m), y1 = Math.min(H, Math.ceil(c(r[3]) * H) + m);
   rt.scissor.set(x0, y0, Math.max(0, x1 - x0), Math.max(0, y1 - y0)); rt.scissorTest = true;
 };
 const scissors = (users, c) => { // the pair cut to what these pools' pixels can sample (waterFS): the lens is read along the bent ray, which
@@ -199,7 +208,7 @@ const ponds = pools.map(([x1, z1, x2, z2, floor, zid, seen, scatter]) => {
     const reuse = waterViews.reuse && c.matrixWorld.elements[13] > WY + .001;
     if ((reuse && captured) || hidden(w, c)) return;
     frustum.setFromProjectionMatrix(M4.multiplyMatrices(c.projectionMatrix, c.matrixWorldInverse));
-    scissors(reuse ? ponds.filter(q => q.visible && frustum.intersectsObject(q)) : [w], c); // a pool judged hidden still counts: the pair is made anyway
+    fit(); scissors(reuse ? ponds.filter(q => q.visible && frustum.intersectsObject(q)) : [w], c); // a pool judged hidden still counts: the pair is made anyway
     wideCam.copy(c); wideCam.projectionMatrix.elements[0] /= OVER; wideCam.projectionMatrix.elements[5] /= OVER; wideCam.projectionMatrixInverse.copy(wideCam.projectionMatrix).invert();
     const on = ponds.map(q => q.visible); // every pool is at the same level, so none belongs in another's mirror or underwater picture
     for (const q of ponds) q.visible = false;
