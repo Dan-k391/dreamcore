@@ -1,7 +1,7 @@
 // The player: controls, collision and the frame step.
 import * as THREE from 'three';
 import { renderer, camera, uTime, V, WY, zones, inR } from './core.js';
-import { colliders, emitters, warps, ladders, ends, side, across, carry, spin, behind, floorH, clear, out, near } from './build.js';
+import { colliders, emitters, warps, ladders, ends, side, across, carry, spin, behind, reveal, floorH, clear, out, near } from './build.js';
 import { setSky, sun } from './sky.js';
 import { ponds, ripple, resetWater } from './water.js';
 import { relight, zone0, lights, weights } from './lights.js';
@@ -179,7 +179,7 @@ const frame = dt => { // one game frame of dt seconds: the loop below passes the
   if (sfx && ((f !== foot && !air && sp > .5) || landed || splash)) sfx.step(pool ? ground < 0 ? 'water' : 'tile' : zone.step || 'carpet');
   foot = f;
 
-  const here = Object.values(zones).find(z => inR(p.x, p.z, ...z.box));
+  const here = ends.find(e => reveal(e, p.x, p.z))?.zone || Object.values(zones).find(z => inR(p.x, p.z, ...z.box)); // in a portal's reveal: its zone, whichever box holds it (or weights() would measure from the wrong space)
   if (here && here !== zone) { zone = here; sfx?.zone(zone); setSky(zone.sky || 'day'); }
   const wts = weights(p.x, p.z, zone);
   if (warp) relight(p, zone, 1, wts); // arrived somewhere else: the lamps come at once
@@ -224,7 +224,7 @@ const looseCost = { ms: 0 }; // what the loose things cost the last frame, in ms
 function resetAll(x, z, yaw, pitch) {
   for (const c in keys) keys[c] = 0; eye.lift = 0; uTime.value = 0; camera.fov = 72; camera.updateProjectionMatrix();
   place(x, z, yaw, pitch); stride = foot = vy = drop = simT = hitP = fallP = coy = buf = spaceWas = 0; grip = splashP = false; vel.set(0, 0);
-  zone = Object.values(zones).find(q => inR(x, z, ...q.box)) || zones.bA; // as lights.js picks zone0
+  zone = ends.find(e => reveal(e, x, z))?.zone || Object.values(zones).find(q => inR(x, z, ...q.box)) || zones.bA; // as lights.js picks zone0
   resetWater(); resetLoose();
   const wts = weights(x, z, zone); setSky(zone.sky || 'day'); relight(camera.position, zone, 1, wts); relight(camera.position, zone, 1, wts);
   for (const l of lights) l.shadow.needsUpdate = true; sun.shadow.needsUpdate = renderer.shadowMap.needsUpdate = true; // the loose things moved: every shadow is drawn again

@@ -45,6 +45,7 @@ function portal(a, b, w = 1, h = 2.24) {
 const side = (e, x, z) => (x - e.p.x) * e.n.x + (z - e.p.z) * e.n.z, across = (e, x, z) => (x - e.p.x) * e.r.x + (z - e.p.z) * e.r.z; // metres in front of its plane; along it from its middle
 const carry = (e, x, z) => { const dx = x - e.p.x, dz = z - e.p.z; return [e.to.p.x + e.c * dx + e.s * dz, e.to.p.z - e.s * dx + e.c * dz]; }; // a point taken through e
 const spin = (e, x, z) => [e.c * x + e.s * z, -e.s * x + e.c * z]; // a direction taken through e
+const reveal = (e, x, z, back = 0) => { const d = side(e, x, z); return d >= -back && d < 1 && Math.abs(across(e, x, z)) < e.w / 2; }; // in the 1 m strip in front of e's opening (its reveal, whichever zone's box holds it)
 const behind = (e, c) => Math.max(side(e, c[0], c[1]), side(e, c[2], c[1]), side(e, c[0], c[3]), side(e, c[2], c[3])) < 1e-3; // a solid's rectangle wholly at or behind e's plane
 function add(mat, g, ownUV = false) { // ownUV: keep the geometry's own UVs (a library material's `uv` option says how many metres one unit is)
   g = g.index ? g.toNonIndexed() : g;
@@ -202,9 +203,9 @@ function merge() { // once every place is built (level.js)
   scene.onBeforeRender = (r, s, cam) => {
     if (!cam.isPerspectiveCamera) cam.layers.enableAll();
     else { const x = cam.matrixWorld.elements[12], z = cam.matrixWorld.elements[14]; let m = cam.userData.mask ?? maskAt(x, z);
-      for (const e of ends) if (m !== -1 && side(e, x, z) >= -.01 && side(e, x, z) < 1 && Math.abs(across(e, x, z)) < e.w / 2) m |= e.mask; // in a portal's reveal (outside its zone's box, inside a neighbour's): see as its zone
+      for (const e of ends) if (m !== -1 && reveal(e, x, z, .01)) m |= e.mask; // in a portal's reveal (outside its zone's box, inside a neighbour's): see as its zone
       cam.layers.mask = m; }
   };
 }
 
-export { ends, portal, side, across, carry, spin, behind, colliders, emitters, flats, seeThrough, skyOnly, warps, pools, onSun, ladders, rings, loose, add, block, box, solid, round, turned, clear, out, near, flight, passage, slab, room, wall, fixture, tube, lit, put, spot, solidAt, floorH, sea, merge, maskAt, RoundedBoxGeometry };
+export { ends, portal, side, across, carry, spin, behind, reveal, colliders, emitters, flats, seeThrough, skyOnly, warps, pools, onSun, ladders, rings, loose, add, block, box, solid, round, turned, clear, out, near, flight, passage, slab, room, wall, fixture, tube, lit, put, spot, solidAt, floorH, sea, merge, maskAt, RoundedBoxGeometry };
