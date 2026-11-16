@@ -1,7 +1,7 @@
 // The player: controls, collision and the frame step.
 import * as THREE from 'three';
 import { renderer, camera, uTime, V, WY, zones, inR } from './core.js';
-import { colliders, emitters, warps, ladders, doors, ends, side, across, carry, spin, behind, reveal, floorH as bedH, pools, clear, out, near } from './build.js';
+import { colliders, emitters, warps, ladders, doors, ends, side, across, carry, spin, live, behind, reveal, floorH as bedH, pools, clear, out, near } from './build.js';
 import { setSky, sun } from './sky.js';
 import { ponds, ripple, resetWater } from './water.js';
 import { relight, zone0, lights, weights } from './lights.js';
@@ -101,7 +101,7 @@ const setFly = on => { const p = camera.position;
 };
 const place = (x, z, yaw, pitch) => { // teleport: stand at (x, z) facing that way, at rest
   camera.position.x = x; camera.position.z = z; camera.rotation.set(pitch, yaw, 0, 'YXZ');
-  feet = floorH(x, z); vy = lag = dip = dipV = fvy = 0; vel.set(0, 0); air = grip = fly = false; cue.hidden = true;
+  feet = floorH(x, z); camera.position.y = feet + 1.62 + eye.lift; vy = lag = dip = dipV = fvy = 0; vel.set(0, 0); air = grip = fly = false; cue.hidden = true; // the eye height too: the lamps are chosen from it before a frame runs (a room 200 m down got ground level's)
 };
 // ---------- doors (props/metalwork.js door() with o.openable): E swings the one you look at, within reach, open or shut ----------
 // The latch is drawn first (the open sound's latch and hinge lead the motion), then the leaf swings over SWING s, eased in and out like a
@@ -133,6 +133,11 @@ function stepDoors(dt, press) {
     if (!q.to && !q.thud && u * SWING <= .3) { q.thud = true; const r = mine(q), c = r.k[0][6]; sfx?.play(`door.${q.kind}.close`, c[0], r.y + 1.05, c[1]); } }
 }
 const eye = { lift: 0 }; // metres added to the eye height; only dev.lift (?dev) changes it
+// Where the body will be in t s at this speed (its place once a lamp swap, 1/3 s out and 1/3 s in, is done), taken through an open portal on the way, stopped in a shut one's plane
+const ahead = V(0, 0, 0), aheadOf = (p, t) => { let x = p.x + vel.x * t, z = p.z + vel.y * t, y = p.y;
+  for (const e of ends) { const a = side(e, p.x, p.z), b = side(e, x, z); if (!(a >= 0 && b < 0) || Math.abs(across(e, p.x + (x - p.x) * a / (a - b), p.z + (z - p.z) * a / (a - b))) > e.w / 2) continue;
+    if (!live(e)) return ahead.set(p.x + (x - p.x) * a / (a - b), y, p.z + (z - p.z) * a / (a - b)); [x, z] = carry(e, x, z); y += e.to.p.y - e.p.y; break; }
+  return ahead.set(x, y, z); };
 const frame = dt => { // one game frame of dt seconds: the loop below passes the real time, dev.step() a fixed one
   const p = camera.position, k = c => keys[c] ? 1 : 0, sp = vel.length();
   uTime.value += dt;
@@ -221,8 +226,9 @@ const frame = dt => { // one game frame of dt seconds: the loop below passes the
   const here = ends.find(e => reveal(e, p.x, p.z))?.zone || Object.values(zones).find(z => inR(p.x, p.z, ...z.box)); // in a portal's reveal: its zone, whichever box holds it (or weights() would measure from the wrong space)
   if (here && here !== zone) { zone = here; sfx?.zone(zone); setSky(zone.sky || 'day'); }
   const wts = weights(p.x, p.z, zone);
-  if (warp) relight(p, zone, 1, wts); // arrived somewhere else: the lamps come at once
-  relight(p, zone, warp ? 1 : dt * 3, wts);
+  aheadOf(p, 2 / 3);
+  if (warp) relight(p, zone, 1, wts, ahead); // arrived somewhere else: the lamps come at once
+  relight(p, zone, warp ? 1 : dt * 3, wts, ahead);
   for (const w of ponds) w.visible = wts.some(([z]) => w.seen.includes(z.id));
   sfx?.frame(camera, wts, zone, bod); // what you hear from here: sound.js // drawn from near a doorway of a zone that sees it, not only once through
   const wake = pool && ground < 0 && !air ? Math.min(Math.hypot(p.x - ox, p.z - oz) / dt, 4) * .006 : 0; // wading leaves a wake, by how far the body really moved (pressed against a wall it would heap the water on one spot); `drop` is a pending splash
@@ -271,4 +277,4 @@ function resetAll(x, z, yaw, pitch) {
   mood(wts, 1);
 }
 
-export { vel, eye, o, zone, feet, air, frame, place, looseCost, resetAll, mood };
+export { vel, eye, o, zone, feet, air, frame, place, looseCost, resetAll, mood, ahead };

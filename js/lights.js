@@ -32,14 +32,18 @@ function weights(x, z, zone) {
   let sum = 0; for (const v of r.values()) sum += v;
   return [...r].map(([q, v]) => [q, v / sum]);
 }
-function relight(pos, zone, fade, wts) { // fade: how far to move brightness this call (1 = snap); wts: weights() there, else the zone alone (the bakes)
+function relight(pos, zone, fade, wts, ahead) { // fade: how far to move brightness this call (1 = snap); wts: weights() there, else the zone alone (the bakes); ahead: where the body will be once a swap is done (player.js)
   const gw = {}; for (const [z, v] of wts || [[zone, 1]]) gw[z.grp] = (gw[z.grp] || 0) + v; // a fixture's group gives up its 8 m handicap as you near it
-  // a shut door's far side is lit for only within 3 m of its opening (not of its wall's plane: every door along it would count), so its lamps are settled before the leaf opens
-  // in play (wts given), a fixture in front of a portal's far end is also as near as it is from your place taken through that portal
-  const via = wts ? ends.filter(e => { const d = side(e, pos.x, pos.z); return d >= 0 && (live(e) ? d < 30 : Math.hypot(d, Math.max(0, Math.abs(across(e, pos.x, pos.z)) - e.w / 2)) < 3); }).map(e => { const [x, z] = carry(e, pos.x, pos.z); return [e.to, V(x, pos.y + e.to.p.y - e.p.y, z)]; }) : [];
-  // and through up to two more open portals beyond it (a room seen two or three openings down, the lift lobby from the vestibule across the hallway), each within 30 m of the place taken so far
-  for (let hop = 0, fr = via; hop < 2 && fr.length; hop++) { const nx = []; for (const [, q] of fr) for (const e of ends) if (live(e) && side(e, q.x, q.z) >= 0 && e.p.distanceTo(q) < 30) { const [x, z] = carry(e, q.x, q.z); nx.push([e.to, V(x, q.y + e.to.p.y - e.p.y, z)]); } via.push(...nx); fr = nx; }
-  const dist = e => { let d = e.p.distanceTo(pos); for (const [f, q] of via) if (side(f, e.p.x, e.p.z) > 0) d = Math.min(d, e.p.distanceTo(q)); return d; };
+  // in play (wts given), a fixture in front of a portal's far end is also as near as it is from your place taken through that portal: an open one within 30 m
+  // of its opening, and on through up to two more beyond by the same rule (the lift lobby seen from the vestibule across the hallway); a shut one within 3 m
+  // (so its lamps are settled before the leaf opens; not its wall's plane: every door along it would count). The rule is the same at every step, so the set is
+  // the same either side of a plane (a shut door counted only on the first step lost the lift lobby's lamps on entering the vestibule from the hallway).
+  // Ranked from where you will be too (`ahead`, player.js), so a swap (1/3 s out, 1/3 s in) is done by the time you get there; and a shut door only from
+  // there: its room is unseen, so walking away from one it gives up its lamps early to the room you go into (they were still coming up at the plane)
+  const reach = (q, shut) => ends.filter(e => { const d = side(e, q.x, q.z); return d >= 0 && Math.hypot(d, Math.max(0, Math.abs(across(e, q.x, q.z)) - e.w / 2)) < (live(e) ? 30 : shut ? 3 : -1); }).map(e => { const [x, z] = carry(e, q.x, q.z); return [e.to, V(x, q.y + e.to.p.y - e.p.y, z)]; });
+  const from = [pos, ahead || pos], via = [];
+  if (wts) from.forEach((p, shut) => { for (let hop = 0, fr = [[, p]]; hop < 3 && fr.length; hop++) { fr = fr.flatMap(([, q]) => reach(q, shut)); via.push(...fr); } });
+  const dist = e => { let d = Math.min(...from.map(p => e.p.distanceTo(p))); for (const [f, q] of via) if (side(f, e.p.x, e.p.z) > 0) d = Math.min(d, e.p.distanceTo(q)); return d; };
   const want = emitters.map(e => [dist(e) + 8 * (1 - Math.min(1, gw[e.zone.grp] || 0)) - (e.light ? 2 : 0), e]).sort((a, b) => a[0] - b[0]).slice(0, lights.length).map(a => a[1]);
   for (const l of lights) {
     const keep = want.includes(l.e);
