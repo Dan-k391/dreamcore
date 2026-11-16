@@ -10,7 +10,7 @@ import { renderer, scene, camera, uTime, sunDir, quadVS } from './core.js';
 import { seeThrough } from './build.js';
 import { sun } from './sky.js';
 import './water.js';
-import './portals.js'; // hooks the scene draws below: what is seen through a portal goes into the same buffers
+import { stats as seen } from './portals.js'; // hooks the scene draws below: what is seen through a portal goes into the same buffers
 
 import { zone0 as zone } from './lights.js'; // the starting zone: the look starts from it
 // ---------- post ----------
@@ -41,10 +41,10 @@ const ahead = []; // programs compiling in parallel, awaited together once the p
 const look = { exp: zone.exp, shaft: 0, sat: zone.sat, bloom: zone.bloom, tint: zone.tint.clone(), w: new Map([[zone, 1]]) }; // w: each zone's share of the mood where you stand (player.js mood)
 const atmos = new THREE.ShaderMaterial({ // distance fog per zone + sun shafts ray-marched through the sun's shadow map
   uniforms: { tDiffuse: { value: null }, tAO: { value: ao.pdRenderTarget.texture }, tDepth: { value: ao.depthTexture }, tShadow: { value: sun.shadow.map.texture }, uPI: { value: camera.projectionMatrixInverse }, uCW: { value: camera.matrixWorld },
-              uSM: { value: sun.shadow.matrix }, uCam: { value: camera.position }, uSun: { value: sunDir }, uFog: { value: [zone.fog.clone(), zone.fog.clone(), zone.fog.clone()] }, uFogW: { value: new THREE.Vector3(1, 0, 0) }, uShaft: { value: 0 }, t: uTime },
+              uSM: { value: sun.shadow.matrix }, uCam: { value: camera.position }, uSun: { value: sunDir }, uFog: { value: [zone.fog.clone(), zone.fog.clone(), zone.fog.clone()] }, uFogW: { value: new THREE.Vector3(1, 0, 0) }, uShaft: { value: 0 }, uPM: { value: new THREE.Matrix4() }, uPP: { value: new THREE.Vector4() }, uPN: { value: new THREE.Vector4() }, uPR: { value: new THREE.Vector4() }, t: uTime },
   vertexShader: quadVS,
   fragmentShader: `#include <packing>
-    uniform sampler2D tDiffuse, tAO, tDepth, tShadow; uniform mat4 uPI, uCW, uSM; uniform vec3 uCam, uSun, uFogW; uniform vec4 uFog[3]; uniform float uShaft, t; varying vec2 vUv;
+    uniform sampler2D tDiffuse, tAO, tDepth, tShadow; uniform mat4 uPI, uCW, uSM, uPM; uniform vec4 uPP, uPN, uPR; uniform vec3 uCam, uSun, uFogW; uniform vec4 uFog[3]; uniform float uShaft, t; varying vec2 vUv;
     void main() {
       vec3 col = texture2D(tDiffuse, vUv).rgb * texture2D(tAO, vUv).rgb; // the ambient occlusion (blend intensity 1)
       vec4 v = uPI * vec4(vUv * 2. - 1., texture2D(tDepth, vUv).x * 2. - 1., 1.);
@@ -55,16 +55,20 @@ const atmos = new THREE.ShaderMaterial({ // distance fog per zone + sun shafts r
       for (int i = 0; i < 3; i++) col += uFogW[i] * pow(max(mix(c0, uFog[i].rgb, 1. - exp(-len * uFog[i].a)), 0.), vec3(.7));
       col = pow(col, vec3(1. / .7));
       if (uShaft > .001) {
-        float lit = 0., n = fract(sin(dot(gl_FragCoord.xy + fract(t) * 37., vec2(12.9898, 78.233))) * 43758.5453);
-        for (int i = 0; i < 32; i++) { vec4 s = uSM * vec4(uCam + dir * len * (float(i) + n) / 32., 1.);
+        float lit = 0., n = fract(sin(dot(gl_FragCoord.xy + fract(t) * 37., vec2(12.9898, 78.233))) * 43758.5453), tc = 1e9; vec3 o2 = uCam, d2 = dir;
+        if (uPR.w > .5) { float dn = dot(dir, uPN.xyz), tt = dot(uPP.xyz - uCam, uPN.xyz) / dn; vec3 q = uCam + dir * tt - uPP.xyz; // a ray through the portal opening on screen: past the plane it goes on in the far space
+          if (dn < 0. && tt > -1e-4 && tt < length(ray) + .01 && abs(dot(q, uPR.xyz)) < uPP.w * .5 && q.y > 0. && q.y < uPN.w) { tc = tt; o2 = (uPM * vec4(uCam, 1.)).xyz; d2 = mat3(uPM) * dir; } }
+        for (int i = 0; i < 32; i++) { float x = len * (float(i) + n) / 32.; vec4 s = uSM * vec4(x < tc ? uCam + dir * x : o2 + d2 * x, 1.);
           if (s.x > 0. && s.x < 1. && s.y > 0. && s.y < 1. && s.z < 1.) lit += step(s.z, unpackRGBAToDepth(texture2D(tShadow, s.xy)) + .002); }
-        col += vec3(1., .93, .8) * uShaft * lit / 32. * len * (.003 + .05 * pow(max(dot(dir, uSun), 0.), 6.));
+        col += vec3(1., .93, .8) * uShaft * lit / 32. * len * (.003 + .05 * pow(max(dot(tc < 1e9 ? d2 : dir, uSun), 0.), 6.));
       }
       gl_FragColor = vec4(col, 1.);
     }`,
 });
 const atmosPass = new ShaderPass(atmos), atmosRender = atmosPass.render.bind(atmosPass);
-atmosPass.render = (r, w, read, ...x) => atmosRender(r, w, msaa, ...x); // reads the scene picture
+atmosPass.render = (r, w, read, ...x) => { const e = seen.top, U = atmos.uniforms; U.uPR.value.w = e ? 1 : 0; // the nearest opening drawn through: its shafts marched in the far space
+  if (e) { U.uPM.value.copy(e.M); U.uPP.value.set(e.p.x, e.p.y, e.p.z, e.w); U.uPN.value.set(e.n.x, e.n.y, e.n.z, e.h); U.uPR.value.set(e.r.x, e.r.y, e.r.z, 1); }
+  atmosRender(r, w, msaa, ...x); }; // reads the scene picture
 composer.addPass(atmosPass);
 const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), .3, .85, .95);
 composer.addPass(bloom);

@@ -37,7 +37,7 @@ const pocketMat = o => new THREE.ShaderMaterial({ uniforms: U, side: THREE.BackS
 const mark = pocketMat({ stencilZPass: THREE.IncrementStencilOp }), reset = pocketMat({ depthWrite: true, depthFunc: THREE.AlwaysDepth }), fill = pocketMat({ colorWrite: true, depthWrite: true });
 const pocket = new THREE.Scene(), pm = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1).translate(0, .5, -.5), mark); pm.frustumCulled = false; pm.matrixAutoUpdate = false; pocket.add(pm);
 // After an opening's picture (and those inside it) is drawn, its pixels (stencil above level, taken bit clear) become TAKEN | level: no later
-// opening's mark or picture (EQUAL, full mask) can match them, and the doors' draw (LEQUAL on the low bits) still reaches them from this level up only.
+// opening's mark or picture (EQUAL, full mask) can match them, and a door, drawn before its own opening's take (doorsIn), reaches its own picture only.
 const TAKEN = 0x80, take = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({ colorWrite: false, depthWrite: false, depthTest: false, stencilWrite: true,
   stencilFunc: THREE.LessStencilFunc, stencilFuncMask: 0x7f, stencilWriteMask: 0xff, stencilZPass: THREE.ReplaceStencilOp, stencilFail: THREE.KeepStencilOp, stencilZFail: THREE.KeepStencilOp,
   vertexShader: 'void main() { gl_Position = vec4(position.xy, 0., 1.); }', fragmentShader: 'void main() { gl_FragColor = vec4(0.); }' }));
@@ -77,11 +77,11 @@ function depthOf(f, v, r) {
 }
 const cropOf = (r, M) => M.set(2 / (r[2] - r[0]), 0, 0, -(r[0] + r[2]) / (r[2] - r[0]), 0, 2 / (r[3] - r[1]), 0, -(r[1] + r[3]) / (r[3] - r[1]), 0, 0, 1, 0, 0, 0, 0, 1);
 const crops = Array.from({ length: 64 }, () => new THREE.Matrix4());
-const stats = { drawn: 0, levels: 0, ends: [], blits: 0 }; // what the last main-camera frame drew through portals (ends: each opening ended by the fill, its pixel rectangle [x1, y1, x2, y2]) (tools/portals.mjs, tools/profile.mjs)
+const stats = { drawn: 0, levels: 0, ends: [], blits: 0, top: null }; // what the last main-camera frame drew through portals (ends: each opening ended by the fill, its pixel rectangle [x1, y1, x2, y2]; top: the nearest opening drawn through from the eye, whose rays post.js's shafts follow on into the far space) (tools/portals.mjs, tools/profile.mjs)
 
-let ref = -1, fn = gl.EQUAL, off = false; // while a far side is drawn, every material tests the stencil for this level, whatever its own settings say (a door drawn again over a picture and those inside it: LEQUAL)
+let ref = -1, fn = gl.EQUAL, off = false; // while a far side is drawn, every material tests the stencil for this level, whatever its own settings say (a door drawn again over its own picture and those inside it: LESS on the low bits)
 const setMaterial = st.setMaterial.bind(st);
-st.setMaterial = (m, cw) => { setMaterial(m, cw); if (ref >= 0) { sb.setTest(true); sb.setMask(0); sb.setFunc(fn, ref, fn === gl.LEQUAL ? 0x7f : 0xff); sb.setOp(gl.KEEP, gl.KEEP, gl.KEEP); } if (off) st.setPolygonOffset(true, -1, -4); }; // off: the far copy's faces win over this side's copy of them, drawn first at the same depth
+st.setMaterial = (m, cw) => { setMaterial(m, cw); if (ref >= 0) { sb.setTest(true); sb.setMask(0); sb.setFunc(fn, ref, fn === gl.LESS ? 0x7f : 0xff); sb.setOp(gl.KEEP, gl.KEEP, gl.KEEP); } if (off) st.setPolygonOffset(true, -1, -4); }; // off: the far copy's faces win over this side's copy of them, drawn first at the same depth
 
 function rectOf(e, cam, lim) { // the screen rectangle in NDC [x1, y1, x2, y2] of the pocket (what can mark the stencil: the opening and the box behind it, so it holds
   // with the eye in the plane), inside lim; null if none. Each face is cut at the near plane first: a corner behind the eye used to give all of
@@ -127,24 +127,28 @@ function pass(cam, level, lim, rt, out) {
     v.matrixWorld.multiplyMatrices(e.M, cam.matrixWorld); v.matrixWorld.decompose(v.position, v.quaternion, v.scale); v.updateMatrixWorld(true); v.userData.mask = e.to.mask;
     const was = clip.clone(); clip.normal.copy(e.to.n); clip.constant = -e.to.n.dot(e.to.p) + 1e-3; // keep what lies in front of the far end
     const fc = e.to.door?.meshes || []; for (const m of fc) m.visible = false; // the far copy of the door in this opening: drawn by this side's (below)
-    ref = level + 1; crop = cropOf(r, crops[level]); pv.multiplyMatrices(v.projectionMatrix, v.matrixWorldInverse); deep = depthOf(e.to, v, r); draw(scene, v); crop = null; ref = -1; if (!scene.overrideMaterial) stats.drawn++; stats.levels = Math.max(stats.levels, level + 1);
+    ref = level + 1; crop = cropOf(r, crops[level]); pv.multiplyMatrices(v.projectionMatrix, v.matrixWorldInverse); deep = depthOf(e.to, v, r); draw(scene, v); crop = null; ref = -1; if (!scene.overrideMaterial) { stats.drawn++; if (!level) stats.top ??= e; } stats.levels = Math.max(stats.levels, level + 1);
     pass(v, level + 1, r, rt, e.to);
-    for (const m of fc) m.visible = true; clip.copy(was); scissor(rt, r);
-    take.material.stencilRef = TAKEN | level; draw(taking, cam);
+    for (const m of fc) m.visible = true; clip.copy(was);
+    if (e.door && e.to.door) doorsIn([[0, e]], cam, level, lim, rt); // before the take: its own picture is still told apart from the others'
+    scissor(rt, r); take.material.stencilRef = TAKEN | level; draw(taking, cam);
   }
-  const ds = [...list.filter(([, e]) => e.door && e.to.door && !cut.has(e)), ...near];
-  if (ds.length) { // the leaf in each opening just drawn through, over the pictures (3. above)
-    lamps ??= (() => { const a = []; scene.traverse(o => o.isLight && a.push(o)); return a; })(); // all of them, so its programs are the scene's
-    one.fog = scene.fog; one.environment = scene.environment; one.overrideMaterial = scene.overrideMaterial;
-    const sm = renderer.shadowMap, nu = sm.needsUpdate; sm.needsUpdate = false; scissor(rt, level ? lim : null);
-    ref = level; fn = gl.LEQUAL;
-    try { for (const [, e] of ds) for (const [d, M, far] of [[e.door, null, false], [e.to.door, e.M, true]]) { // this side's copy whole; then the far copy's faces toward the far room, from the eye taken through
-      one.children = [...lamps, ...(far ? d.meshes.filter(m => faces(m, e.to, d)) : d.meshes)];
-      rc.projectionMatrix.copy(cam.projectionMatrix); rc.projectionMatrixInverse.copy(cam.projectionMatrixInverse); rc.near = cam.near; rc.far = cam.far;
-      rc.matrixWorld.copy(cam.matrixWorld); if (M) rc.matrixWorld.premultiply(M); rc.matrixWorld.decompose(rc.position, rc.quaternion, rc.scale); rc.updateMatrixWorld(true);
-      off = far; draw(one, rc); off = false; } }
-    finally { ref = -1; fn = gl.EQUAL; off = false; sm.needsUpdate = nu; one.children = []; }
-  }
+  if (near.length) doorsIn(near, cam, level, lim, rt);
+}
+// The leaf in an opening just drawn through, over the pictures (3. above): only on this level's own pixels (EQUAL level) and its opening's
+// picture and those inside it (low bits above level), never on another opening's picture (TAKEN | level): there the copy stands behind that
+// opening's plane, and with open sky past it (no wall to hide it by depth) it was drawn hanging in the picture (the terrace's sky door)
+function doorsIn(ds, cam, level, lim, rt) {
+  lamps ??= (() => { const a = []; scene.traverse(o => o.isLight && a.push(o)); return a; })(); // all of them, so its programs are the scene's
+  one.fog = scene.fog; one.environment = scene.environment; one.overrideMaterial = scene.overrideMaterial;
+  const sm = renderer.shadowMap, nu = sm.needsUpdate; sm.needsUpdate = false; scissor(rt, level ? lim : null);
+  ref = level;
+  try { for (const [, e] of ds) for (const [d, M, far] of [[e.door, null, false], [e.to.door, e.M, true]]) { // this side's copy whole; then the far copy's faces toward the far room, from the eye taken through
+    one.children = [...lamps, ...(far ? d.meshes.filter(m => faces(m, e.to, d)) : d.meshes)];
+    rc.projectionMatrix.copy(cam.projectionMatrix); rc.projectionMatrixInverse.copy(cam.projectionMatrixInverse); rc.near = cam.near; rc.far = cam.far;
+    rc.matrixWorld.copy(cam.matrixWorld); if (M) rc.matrixWorld.premultiply(M); rc.matrixWorld.decompose(rc.position, rc.quaternion, rc.scale); rc.updateMatrixWorld(true);
+    off = far; for (const f of [gl.EQUAL, gl.LESS]) { fn = f; draw(one, rc); } off = false; } }
+  finally { ref = -1; fn = gl.EQUAL; off = false; sm.needsUpdate = nu; one.children = []; }
 }
 // Which of a copy's leaf meshes (props/metalwork.js: userData.face) face the room in front of end f, whatever side the eye is on: a face by its
 // normal (it never turns past square, so its sign holds); the edges by where the leaf stands, on f's side of the plane (shut: the original's).
@@ -162,7 +166,7 @@ renderer.render = (s, c) => {
   if (!warm.has(s.overrideMaterial)) { warm.add(s.overrideMaterial); const t = tg.clone(); t.setSize(1, 1); if (t.depthTexture) { t.depthTexture = new THREE.DepthTexture(1, 1, tg.depthTexture.type); t.depthTexture.format = tg.depthTexture.format; } renderer.setRenderTarget(t); // its own 1 px depth: a clone shares the original's full-size one, which left the twin incomplete (every warm-up draw a GL error, and no warm-up) // drawn, not only compiled: ANGLE makes a program's variant for the target's formats on its first draw (2-3 ms on first sight of a portal), so once into a 1 px twin of each pass's target
     try { for (const m of [reset, fill, mark]) { pm.material = m; draw(pocket, c); } draw(taking, c); } finally { renderer.setRenderTarget(tg); t.depthTexture?.dispose(); t.dispose(); } }
   const rt = renderer.getRenderTarget(), auto = renderer.autoClear, upd = scene.matrixWorldAutoUpdate, on = ponds.map(w => w.visible);
-  if (!scene.overrideMaterial) { stats.drawn = stats.levels = 0; stats.ends = []; }
+  if (!scene.overrideMaterial) { stats.drawn = stats.levels = 0; stats.ends = []; stats.top = null; }
   renderer.autoClear = false; scene.matrixWorldAutoUpdate = false; for (const w of ponds) w.visible = false; // shortcut: no pool is drawn through a portal (its pictures are of the main view)
   held = true; // every render() ends by resolving a multisampled target (a full-size blit): 5 or 6 a level, 50 a frame in the gallery loop; one, after
   try { pass(c, 0, [-1, -1, 1, 1], rt, null); }
