@@ -253,9 +253,10 @@ function renderHeads() {
 // ---------- popovers ----------
 const pop = $('pop'); let popFor = null;
 function openPop(anchor, build) {
-  closePop(); popFor = anchor; anchor.setAttribute('aria-expanded', 'true'); pop.hidden = false; pop.replaceChildren(); build(pop);
-  const r = anchor.getBoundingClientRect(), w = pop.offsetWidth; pop.style.left = Math.max(8, Math.min(innerWidth - w - 8, r.left)) + 'px'; pop.style.top = r.bottom + 4 + 'px';
-  pop.style.maxHeight = (innerHeight - r.bottom - 16) + 'px'; (pop.querySelector('input,button'))?.focus(); }
+  closePop(); popFor = anchor; anchor.setAttribute('aria-expanded', 'true'); pop.hidden = false; pop.replaceChildren();
+  const at = () => { const r = anchor.getBoundingClientRect(), w = pop.offsetWidth; pop.style.left = Math.max(8, Math.min(innerWidth - w - 8, r.left)) + 'px'; pop.style.top = r.bottom + 4 + 'px';
+    pop.style.maxHeight = (innerHeight - r.bottom - 16) + 'px'; };
+  const p = build(pop); at(); (pop.querySelector('input,button'))?.focus(); Promise.resolve(p).then(() => { if (popFor === anchor) { at(); if (!pop.contains(document.activeElement)) pop.querySelector('input,button')?.focus(); } }); }
 function closePop() { if (popFor) popFor.setAttribute('aria-expanded', 'false'); popFor = null; pop.hidden = true; }
 addEventListener('pointerdown', e => { if (!pop.hidden && !pop.contains(e.target) && e.target !== popFor && !popFor?.contains(e.target)) closePop(); });
 function scenePicker(t, anchor) {
