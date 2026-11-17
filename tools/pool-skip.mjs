@@ -47,8 +47,8 @@ async function page(o) {
     for (let i = 0; i < p.n; i++) {
       if (p.zoom) dev.key('KeyC', p.zoom(i)); if (p.aspect) { camera.aspect = aspect0 * p.aspect(i); camera.updateProjectionMatrix(); }
       if (p.turn) camera.rotateOnWorldAxis(UP, p.turn(i));
-      captures = 0; dev.step(1); gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, a); const c = captures; // the game's frame
-      waterViews.cull = false; captures = 0; composer.render(0); gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, b); waterViews.cull = true; // the same, every picture whole
+      captures = 0; camera.userData.cut = true; dev.step(1); gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, a); const c = captures; // the game's frame
+      waterViews.cull = false; captures = 0; camera.userData.cut = true; composer.render(0); gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, b); waterViews.cull = true; // the same, every picture whole; both from fresh AO history (js/ao.js), or they differ by its sample sequence
       let m = 0, n = 0; for (let j = 0; j < a.length; j++) { const d = Math.abs(a[j] - b[j]); if (d > m) m = d; if (d > 2) n++; }
       frames++; if (c < captures) skipped++;
       if (m > 2) { const q = bad.find(q => q.name === p.name) || bad[bad.push({ name: p.name, frames: [], max: 0, px: 0 }) - 1]; q.frames.push(i + (c < captures ? '*' : '')); q.max = Math.max(q.max, m); q.px = Math.max(q.px, n); }
