@@ -31,6 +31,7 @@ Two kinds of per-zone parameters:
 | `light.strength` | mul | 0.3 – 2 | surface | the zone's lamps (spot intensity), its fixtures (`uLampCol`), its materials' `envMapIntensity` (ambient and reflections), its pools' plan picture and scatter |
 | `light.warmth` | add | -0.5 – 1 | surface | lamp and fixture colour: + amber, - paler (still warm at -0.5); the baked ambient keeps its colour |
 | `light.ambient` | mul | 0 – 2 | surface | `envMapIntensity` alone: shadow depth / fill |
+| `light.bounce` | mul | 0 – 2 | surface | the zone's ambient grid's share (`uAGk`, mat.js agLight): 0 the room's capture alone (flat fill, no corners, no colour from nearby surfaces), 1 as baked, 2 its deviations doubled |
 | `light.sun` | mul | 0 – 3 | view | `sun.intensity` (one sun per sky) |
 | `exposure` | add (stops) | -1.5 – 1.5 | view | the zone's `exp` |
 | `mat.rough` | mul | 0.3 – 2 | surface | every zone material's `roughness` |

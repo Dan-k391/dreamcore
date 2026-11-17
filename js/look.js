@@ -24,7 +24,7 @@ function set(look) {
     const v = {}; let any = false; for (const p of params) if (p.perZone) { v[p.id] = val(L, z.id, p); any ||= v[p.id] !== p.neutral; }
     const u = fixU(z); if (u && !fix0.has(z)) fix0.set(z, u.value.clone());
     for (const m of z.mats) if (!base.has(m)) base.set(m, { r: m.roughness, c: m.color.clone(), k: m.envMapIntensity });
-    if (!any) { delete z.lk; for (const m of z.mats) { const b = base.get(m); m.roughness = b.r; m.color.copy(b.c); m.envMapIntensity = b.k; } if (u) u.value.copy(fix0.get(z)); continue; }
+    if (!any) { delete z.lk; for (const m of z.mats) { const b = base.get(m); m.roughness = b.r; m.color.copy(b.c); m.envMapIntensity = b.k; } if (u) u.value.copy(fix0.get(z)); if (z.ag) z.ag.u.uAGk.value = 1; continue; }
     const t = v['grade.temp'], g = v['grade.tint'], warmC = lampC(v['light.warmth']), wet = v['mat.wet'];
     z.lk = { exp: z.exp * 2 ** v.exposure, shaft: z.shaft * v.shafts, sat: z.sat * v['grade.sat'], bloom: z.bloom * v['bloom.strength'],
       tint: z.tint.clone().multiply(new THREE.Vector3((1 + .1 * t) * (1 - .04 * g), (1 + .01 * t) * (1 + .06 * g), (1 - .16 * t) * (1 - .04 * g))),
@@ -32,6 +32,7 @@ function set(look) {
       con: .4 + v['grade.contrast'], vig: .7 * v['grade.vignette'], sun: v['light.sun'], light: v['light.strength'], warmC };
     for (const m of z.mats) { const b = base.get(m); m.roughness = b.r * v['mat.rough'] * (1 - .7 * wet); m.color.copy(b.c).multiplyScalar(1 - .3 * wet); m.envMapIntensity = b.k * v['light.strength'] * v['light.ambient']; }
     if (u) u.value.copy(fix0.get(z)).multiply(warmC).multiplyScalar(v['light.strength']);
+    if (z.ag) z.ag.u.uAGk.value = v['light.bounce']; // the ambient grid's share (lights.js, mat.js agLight)
   }
   for (const w of ponds) { const p = w.material.uniforms, z = w.zone.id; if (!scat0.has(w)) scat0.set(w, p.uScatter.value.clone());
     const v = id => val(L, z, params.find(p => p.id === id));
