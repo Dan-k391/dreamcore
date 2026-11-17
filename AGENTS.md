@@ -65,5 +65,5 @@ Read the one your job touches; the brief will say which.
 - [docs/building.md](docs/building.md): code layout, adding a place, making things solid, loose things.
 - [docs/materials.md](docs/materials.md): the material library, its names and options, the showroom.
 - [docs/testing.md](docs/testing.md): the test tools and dev hooks in full.
-- [docs/look.md](docs/look.md): the look layer: the art-tuning parameters, `dev.look`, the applied look and the server's look endpoints.
+- [docs/look.md](docs/look.md): the look layer: the art-tuning parameters, `dev.look`, the applied look, the server's look endpoints and the tuning workspace `tune.html`.
 - [docs/props.md](docs/props.md): the prop kits, the kit function convention, the dev yard and its addresses, the inventory of objects and where each is built today.

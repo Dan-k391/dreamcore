@@ -19,7 +19,7 @@ const AREAS = { // area: [check count (a full run warns when it differs), runs a
   water: [9, 0, 'pool pictures, optics, mirror reflections, skipped pool pictures'],
   solid: [11, 0, 'what stops you: benches, doors, arches, the flume; coplanar faces; nothing pops at an opening'],
   light: [2, 0, 'shadow maps: every caster, the loose-things cache'],
-  look: [10, 0, 'zone culling, mood at openings and passages, settings panel, grass viewport, look layer'],
+  look: [11, 0, 'zone culling, mood at openings and passages, settings panel, grass viewport, look layer, tuning workspace'],
   loose: [14, 0, 'balls, rings, the pit and what they do'],
   sound: [1, 0, 'music'],
 };
@@ -236,6 +236,10 @@ if (on('water')) { const f = run(base + '?dev&bare', `(async () => (await import
 
 if (on('look')) { const f = run(base + '?dev&bare', `(async () => (await import('/tools/grass-viewport.js')).grassViewport(dev))()`);
   check('stationary narrow-to-wide resize shows the same grass as a freshly rebuilt view', f.result?.samePose && f.result.width === 1280 && f.result.height === 720 && f.result.maxDelta <= 1 && f.result.meanDelta <= .01 && f.result.glError === 0 && !f.errors.length, JSON.stringify(f.result || f)); }
+// The tuning workspace (tune.html, docs/look.md): two tiles load, and a change on "All rooms" reaches both pictures (and the look of both games)
+if (on('look')) { const f = run(base + 'tune.html?tiles=2', `(() => { const W = dev.tune, a = [0, 1].map(W.grab); W.target('all'); W.set('exposure', .8);
+    const b = [0, 1].map(W.grab), r = { states: W.T.slice(0, 2).map(t => t.state), diff: a.map((x, i) => W.diff(x, b[i])), looks: W.T.slice(0, 2).map(t => t.d.look.get().all.exposure) }; W.setLook({}); return r; })()`, '--wait', '240000');
+  check('tuning workspace: two tiles load and a change on all rooms reaches both', f.result?.states.every(s => s === 'ready') && f.result.diff.every(d => d > 3) && f.result.looks.every(v => v === .8) && !f.errors.length, JSON.stringify(f.result || f)); }
 // The look layer (docs/look.md): a look set on every parameter and then cleared gives back the same frame, pixel for pixel, and the film pass its built values
 if (on('look')) { const f = run(base + '?dev&bare', `(() => { const gl = dev.renderer.getContext(), n = gl.drawingBufferWidth * gl.drawingBufferHeight * 4, u = dev.composer.passes.at(-1).material.uniforms;
     const shot = L => { dev.look.set(L); dev.reset(7.5, -3, .75, -.18); dev.step(20); const a = new Uint8Array(n); gl.readPixels(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight, gl.RGBA, gl.UNSIGNED_BYTE, a); return a; };

@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>dreamcore · look tuning</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="tune.css">
+</head>
+<body>
+<!-- The look-tuning workspace (docs/look.md, The tuning workspace). Not part of the game's bundle: tools/bundle.mjs follows js/main.js only. -->
+<header id="bar">
+  <div class="seg" role="group" aria-label="Tiles">
+    <span class="lab">Tiles</span>
+    <button data-layout="1" title="One scene">1</button><button data-layout="2" title="Two scenes">2</button><button data-layout="4" title="Four scenes">4</button>
+  </div>
+  <div class="seg" id="targets" role="radiogroup" aria-label="What the controls edit (keys 0 to 4)"></div>
+  <div class="seg">
+    <button id="presetsBtn" aria-haspopup="dialog" aria-expanded="false">Presets</button>
+    <button id="applyBtn" aria-haspopup="dialog" aria-expanded="false">Game look</button>
+  </div>
+  <div class="seg" role="group" aria-label="Compare">
+    <button id="beforeBtn" title="Hold (or hold B): every tile shows the game without the working look">Before <kbd>B</kbd></button>
+    <button id="cmpBtn" title="Hold (or hold N): every tile shows the chosen look instead of the working one">Against <kbd>N</kbd></button>
+    <select id="cmpSel" aria-label="Look to compare against"></select>
+  </div>
+  <div class="seg" role="group" aria-label="History">
+    <button id="undoBtn" title="Undo (Ctrl+Z)" aria-label="Undo">Undo</button><button id="redoBtn" title="Redo (Ctrl+Shift+Z or Ctrl+Y)" aria-label="Redo">Redo</button>
+    <button id="resetAllBtn" title="Clear the whole working look: all rooms and every room's own changes">Clear all</button>
+  </div>
+  <div id="msg" role="status" aria-live="polite"></div>
+</header>
+<main>
+  <section id="tiles" aria-label="Scenes"></section>
+  <aside id="panel" aria-label="Look controls"></aside>
+</main>
+<div id="pop" role="dialog" hidden></div>
+<input type="file" id="importFile" accept=".json,application/json" hidden>
+<script type="module" src="tune.js"></script>
+</body>
+</html>
