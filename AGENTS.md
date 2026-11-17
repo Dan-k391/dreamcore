@@ -17,7 +17,7 @@ When the two pull against each other, quality wins: one place finished properly 
   - Opus 5.5 for the tough work: shared systems (rendering, shaders, materials, physics, collision), building or rebuilding a place or its objects, art review, and review of that code.
   - Sonnet 5.5 for the easier work: test runs and photo comparisons, audit photos and contact sheets, mechanical edits, small well-specified fixes, merges, tool edits.
 - **For GPT leads, use these subagent replacements:**
-  - GPT-6.1 Sol (`gpt-6.1-sol`) at max effort replaces Opus 5.5 medium for the tough work listed above.
+  - GPT-6 Astra (`gpt-6-astra`) at high effort replaces Opus 5.5 medium for the tough work listed above.
   - GPT-6.1 Terra (`gpt-6.1-terra`) at high effort replaces Sonnet 5.5 medium for the easier work listed above.
 - **One subagent for a straightforward change.** It runs its own tests and looks at its own result; nobody re-checks it.
 - **Independent reviewers only where complexity or risk justifies them:** shared systems, anything that could break the controls or let the player leave the level, and art that sets the look for many places. A reviewer gets one question and the diff, and two reviewers never check the same thing. After a fix, verification re-runs the failing cases and reads the fix's diff; it does not repeat the review.
