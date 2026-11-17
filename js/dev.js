@@ -45,7 +45,7 @@ if (new URLSearchParams(location.search).has('dev')) {
     balls: (k = 0) => groups[k].p, // one group's ball positions, x y z each
     view(x, y, z, yaw, pitch = 0) { // draw one picture from somewhere else without moving the player (for photos of what the player does)
       const p = camera.position.clone(), q = camera.quaternion.clone(); camera.position.set(x, y, z); camera.rotation.set(pitch, yaw, 0, 'YXZ'); camera.updateMatrixWorld();
-      composer.render(0); camera.position.copy(p); camera.quaternion.copy(q); },
+      camera.userData.cut = true; composer.render(0); camera.position.copy(p); camera.quaternion.copy(q); camera.userData.cut = true; }, // cut: a picture of its own, the same each time (js/ao.js keeps no history across it)
     physics(n = 60) { let t = 0; for (let i = 0; i < n; i++) { frame(1 / 60); t += looseCost.ms; } return +(t / n).toFixed(3); }, // ms a frame the loose things cost, over n frames
     // the effects: render({ secs, path, at, music }) offline (audio.js); start() the live sound without the click; play(name, x, y, z) and
     // loop(name, x, y, z) through the live one (doors: play('door.wood.open', x, y, z)); voices: the one-shot writers (voices.js)

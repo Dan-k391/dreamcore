@@ -100,7 +100,10 @@ const setFly = on => { const p = camera.position;
     if (inside(p.x, p.z, feet) || feet < fl - .05 || top?.[5] > fl && top[4] > fl + TALL || !Object.values(zones).some(q => inR(p.x, p.z, ...q.box))) { p.x = from.x; p.z = from.z; feet = from.feet; } } // the last: you'd land on a roof or a ceiling
   fly = on; cue.hidden = !on; fvy = vy = 0; grip = false; vel.set(0, 0);
 };
+// A camera cut, for what carries pictures over frames (js/ao.js): true drops them; a Matrix4 is how the world moved across (warp, portal)
+const cutBy = M => { const c = camera.userData.cut; if (c !== true) camera.userData.cut = c ? M.clone().multiply(c) : M.clone(); };
 const place = (x, z, yaw, pitch) => { // teleport: stand at (x, z) facing that way, at rest
+  camera.userData.cut = true;
   camera.position.x = x; camera.position.z = z; camera.rotation.set(pitch, yaw, 0, 'YXZ');
   feet = floorH(x, z); camera.position.y = feet + 1.62 + eye.lift; vy = lag = dip = dipV = fvy = duck = 0; vel.set(0, 0); air = grip = fly = false; cue.hidden = true; // the eye height too: the lamps are chosen from it before a frame runs (a room 200 m down got ground level's)
 };
@@ -179,13 +182,13 @@ const frame = dt => { // one game frame of dt seconds: the loop below passes the
   let roomy = fly || collide(p, fb); // false: squeezed somewhere a teleport put you, so any move is allowed until you are out
   for (let i = 0; i < n; i++) { // in steps of 10 cm at most, so nothing thin is run through and no passage warp strip is stepped over
     const sx = p.x, sz = p.z; p.x += mx / n; p.z += mz / n; const stop = !fly && !collide(p, fb) && roomy; if (stop) { p.x = sx; p.z = sz; }
-    if (!fly && !warp && (warp = warps.find(w => inR(p.x, p.z, w[0], w[1], w[2], w[3])))) { p.x += warp[4]; p.z += warp[5]; ox += warp[4]; oz += warp[5]; }
+    if (!fly && !warp && (warp = warps.find(w => inR(p.x, p.z, w[0], w[1], w[2], w[3])))) { p.x += warp[4]; p.z += warp[5]; ox += warp[4]; oz += warp[5]; cutBy(new THREE.Matrix4().makeTranslation(warp[4], 0, warp[5])); }
     // a portal: the centre went from in front of its plane to behind it, through the opening (the eye within its height). Everything that
     // has a place or a direction is taken through exactly: where you are, where the frame started, the move left, the speed, the facing
     if (!gate && (gate = ends.find(e => { const a = side(e, sx, sz), b = side(e, p.x, p.z), y = feet + 1.62 + eye.lift - e.p.y; if (!(a >= 0 && b < 0) || y < 0 || y > e.h) return false;
       const t = a / (a - b); return Math.abs(across(e, sx + (p.x - sx) * t, sz + (p.z - sz) * t)) < e.w / 2; }))) {
       [p.x, p.z] = carry(gate, p.x, p.z); [ox, oz] = carry(gate, ox, oz); [mx, mz] = spin(gate, mx, mz); const [vx, vz] = spin(gate, vel.x, vel.y); vel.set(vx, vz);
-      camera.rotateOnWorldAxis(UP, gate.turn); feet += gate.to.p.y - gate.p.y; }
+      camera.rotateOnWorldAxis(UP, gate.turn); feet += gate.to.p.y - gate.p.y; cutBy(gate.M); }
     if (stop) break; }
   if (hang) { // held between the rails: within 10 cm of the ladder's middle, and inside its zone
     const cx = (lad[0] + lad[2]) / 2, cz = (lad[1] + lad[3]) / 2, [dx, dz] = [lad[4], lad[5]], a0 = (p.x - cx) * -dz + (p.z - cz) * dx, a = a0 - (a0 - Math.max(-.1, Math.min(.1, a0))) * Math.min(1, dt * 8), b = Math.max(-.6, Math.min(.6, (p.x - cx) * dx + (p.z - cz) * dz));

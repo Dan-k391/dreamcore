@@ -24,7 +24,7 @@
   const pools = [], mirrors = new Set(), lenses = new Set(), depths = new Set(); scene.traverse(o => { if (o.material?.uniforms?.tMirror) { pools.push(o); mirrors.add(o.material.uniforms.tMirror.value); lenses.add(o.material.uniforms.tUnder.value); depths.add(o.material.uniforms.tDeep.value); } });
   wrap(renderer.shadowMap, 'render', (lights) => 'shadows');
   const aoP = composer.passes[1];
-  wrap(renderer, 'render', (s, c) => s !== scene ? (s.material === aoP.gtaoMaterial ? 'ao.gtao' : s.material === aoP.pdMaterial ? 'ao.denoise' : stack.length ? null : 'water.sim') : s.overrideMaterial ? (stack.at(-1) === 'post.ao' ? 'ao.normals' : 'override')
+  wrap(renderer, 'render', (s, c) => s !== scene ? (s.material === aoP.gtaoMaterial ? 'ao.gtao' : s.material === aoP.pdMaterial ? 'ao.denoise' : s.material?.name?.startsWith('ao.') ? s.material.name : stack.length ? null : 'water.sim') : s.overrideMaterial ? (stack.at(-1) === 'post.ao' ? 'ao.normals' : 'override')
     : c === camera ? null : c.isOrthographicCamera ? 'pool.plan' : mirrors.has(renderer.getRenderTarget()?.texture) ? 'pool.mirror' : lenses.has(renderer.getRenderTarget()?.texture) ? 'pool.lens' : depths.has(renderer.getRenderTarget()?.texture) ? 'pool.deep' : 'scene.other');
   const px = new Uint8Array(4), sync = () => gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
   const results = async list => { gl.finish(); for (let i = 0; i < 200 && !gl.getQueryParameter(list.at(-1).q, gl.QUERY_RESULT_AVAILABLE); i++) await new Promise(r => setTimeout(r, 10));
