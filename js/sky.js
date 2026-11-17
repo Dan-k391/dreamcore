@@ -36,6 +36,10 @@ const skies = { // sun direction, strength, colour; middle and half-size of the 
   dusk: { dir: [.8, .1, .55], light: 9, color: 0xffb27a, at: [695, 650], r: [60, 16], sky: [[.3, .32, .85], [2.3, 1.05, .7], [3, 1.5, .7], .25], show: [dome, ...skyOnly.dusk] },
   night: { dir: [.4, .45, -.6], light: 1.3, color: 0x9db4ff, at: [712, 15], r: [46, 30], sky: [[.004, .007, .018], [.02, .03, .06], [.5, .55, .7], 1], show: [dome, ...skyOnly.night] },
 };
+// Optional enclosed reference room: its own native sun/shadow volume and sky.
+// No changes to the ordinary skies or their shadow coverage.
+if (zones.prism) skies.prism = { dir: [.34, .28, -1], light: 22, color: 0xfff3df,
+  at: [2400, 2404], r: [11, 9], sky: [[1.35, 2., 2.4], [3.5, 3.4, 2.9], [2., 1.9, 1.6], 0], show: [dome, ...skyOnly.prism] };
 // Every place is drawn only under its own sky, in every pass (main, AO, pond pictures, shadow maps, bakes): a mesh in a material
 // of zones of one sky (P(), a zone's mats), or else reaching only into boxes of zones of one sky, is hidden under the others.
 // Looked up at every switch, so things made later (physics.js) are included. The show lists above and the ponds (their own seen-from lists) are left alone.

@@ -27,6 +27,8 @@ import './zones/glasshouse.js';
 import './zones/baths.js';
 const q = new URLSearchParams(location.search); if (q.has('dev') && !q.has('bare')) { await import('./zones/showroom.js'); await import('./zones/yard.js'); } // the material showroom and the prop yard: test builds only
 
+if (q.get('scene') === 'prism') await import('./zones/prismroom.js');
+
 performance.mark('load: places built'); // the load's phases, for a profile or performance.getEntriesByType('mark')
 merge();
 // every library texture the places asked for, on the GPU before anything is drawn: started here and awaited by lights.js before
