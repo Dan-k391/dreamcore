@@ -16,7 +16,7 @@ const AREAS = { // area: [check count (a full run warns when it differs), runs a
   seen: [1, 0, 'js/seen.js covers what each zone can see (tools/pvs.mjs --check, the longest single check)'],
   move: [51, 0, 'walks between places, jumping and hopping, ladders, passage warps, portals, doors, noclip, the flume'],
   load: [13, 0, 'page loads, draw-call and shader-compile guards, frame ceilings, the single file, other hosts, production'],
-  water: [9, 0, 'pool pictures, optics, mirror reflections, skipped pool pictures'],
+  water: [10, 0, 'pool pictures, optics, mirror reflections, skipped pool pictures, sky visibility'],
   solid: [11, 0, 'what stops you: benches, doors, arches, the flume; coplanar faces; nothing pops at an opening'],
   light: [2, 0, 'shadow maps: every caster, the loose-things cache'],
   look: [11, 0, 'zone culling, mood at openings and passages, settings panel, grass viewport, look layer, tuning workspace'],
@@ -192,9 +192,15 @@ if (on('load')) for (const [name, hash, calls, tris] of [['gallery-pool', '23.2,
 }
 // The pool's underwater picture is taken from the eye: a scene hook calling getWorldPosition() once reset three's Refractor camera
 // to the origin, and the arcade's water showed the sea under it instead of its basin.
-if (on('water')) { const f = run(base + '?dev&bare#10.5,-12,-1.5708,-0.05', `(() => { dev.hold = true; dev.step(3); const P = new dev.THREE.Vector3(), e = dev.camera.getWorldPosition(new dev.THREE.Vector3()); let d = -1;
-    dev.scene.traverse(o => { if (o.lens && o.rect.x < e.x && e.x < o.rect.z && o.rect.y < e.z && e.z < o.rect.w) d = P.setFromMatrixPosition(o.lens.camera.matrixWorld).distanceTo(e); }); return { d: +d.toFixed(3) }; })()`);
-  check('the arcade water\'s underwater picture is taken from the eye', f.result?.d >= 0 && f.result.d < .01, JSON.stringify(f.result)); }
+if (on('water')) { const f = run(base + '?dev&bare#10.5,-12,-1.5708,-0.05', `(async () => { dev.hold = true; dev.step(3); const P = new dev.THREE.Vector3(), e = dev.camera.getWorldPosition(new dev.THREE.Vector3()); let d = -1;
+    dev.scene.traverse(o => { if (o.lens && o.rect.x < e.x && e.x < o.rect.z && o.rect.y < e.z && e.z < o.rect.w) d = P.setFromMatrixPosition(o.lens.camera.matrixWorld).distanceTo(e); });
+    const { sky } = await import('./js/sky.js'), { ponds, waterViews } = await import('./js/water.js'), old = sky.visible, cull = waterViews.cull, states = [];
+    waterViews.cull = false;
+    for (const visible of [false, true]) { sky.visible = visible; ponds[0].drawPlan(ponds[0].zone); const plan = sky.visible;
+      sky.visible = visible; dev.step(1); states.push(plan === visible && sky.visible === visible); }
+    sky.visible = old; waterViews.cull = cull; return { d: +d.toFixed(3), preserved: states.every(Boolean) }; })()`);
+  check('the arcade water\'s underwater picture is taken from the eye', f.result?.d >= 0 && f.result.d < .01, JSON.stringify(f.result));
+  check('water plan and live captures preserve hidden and visible sky states', f.result?.preserved && !f.errors.length, JSON.stringify(f.result || f)); }
 // The water's pictures against direct renders (dev.waterCheck, surface flat): the lens must carry what pierces the surface (the steps'
 // rail, a column under water) and show no band; it once fell back to the pool's top-down plan there (seam 16, mean 6.0; now 0.6, 4.6).
 if (on('water')) { const f = run(base + '?dev&bare', `({ steps: dev.waterCheck(0.5, -5.3, 0, -0.95), column: dev.waterCheck(28, -4.5, 0, -0.7) })`);

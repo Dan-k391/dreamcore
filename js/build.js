@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { RoundedBoxGeometry as RoundedBox } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { renderer, scene, camera, V, H, inR, zones } from './core.js';
-import seen from './seen.js';
+import generatedSeen from './seen.js';
 import { seaMat, noCast, voidMat, aisle } from './mat.js';
 
 // ---------- level builder: boxes and cut-out wall slabs with world-space UVs, merged into one mesh per material ----------
@@ -172,6 +172,11 @@ let sea;
 // Shadow cameras always draw everything; a cube camera (a zone's ambient bake) draws what seen.js says its probe's zone sees.
 // Only 31 bits: zones seen from exactly the same zones (a place and its passage, say) share one, which culls exactly as well; past
 // 31 such groups the two whose viewers differ least are merged, so a few zones are drawn from a little further, never from everywhere.
+// This optional study is fully enclosed: it sees only itself. Feed it through the same
+// layer allocator (including the 31-bit limit), without modifying generated PVS data
+// or any normal-game masks. Keep the all-layer shadow rendering below unchanged.
+const seen = new URLSearchParams(location.search).get('scene') === 'prism'
+  ? { ...generatedSeen, prism: [] } : generatedSeen;
 const ids = Object.keys(seen), groups = [];
 for (const q of ids) { const by = new Set(ids.filter(c => c === q || seen[c].includes(q))), g = groups.find(g => g.by.size === by.size && [...by].every(c => g.by.has(c)));
   g ? g.ids.push(q) : groups.push({ ids: [q], by }); }

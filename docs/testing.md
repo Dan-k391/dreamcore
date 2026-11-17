@@ -11,6 +11,8 @@ All tools are dependency-free (Node 22; the two image tools use Python 3 with Pi
 - `?dev` in the address turns on the test hooks (`window.dev`, in `js/dev.js`). Without it none of them exist. Plain `?dev` also loads the two test-only areas far away at x below -500 (the material showroom and the prop yard); they are drawn in every view, which adds about a million triangles and several hundred draw calls and bakes every material set (texMem 420 MB against 322 MB). `?dev&bare` loads the same hooks without them: it is what the real game costs. Which tool uses which: `perf.mjs` and `test.mjs` use `?dev&bare` (`perf.mjs --full` the plain load; `test.mjs` keeps its cost-and-tour check on plain `?dev`, which needs the showroom shaders); `shots.mjs` uses `?dev&bare` unless a view of the run has x below -500, then plain `?dev` (`FULL=1` forces it); `browse.mjs` loads whatever address you give it.
 - `#x,z,yaw,pitch` starts the player there.
 
+The optional prism-room reference study loads with `?scene=prism#2395.6335,2405.9226,-0.70081,-0.04917` (add `&dev&bare` before the hash for test hooks). It uses existing glazed pool tiles, native sunlight through solid glass, 1.08 m deep water and a west-side exit ladder in an enclosed room at x/z 2400; without `scene=prism` the room is not loaded. The same address suffix works with the standalone `dreamcore.html` bundle. Its matched reference camera was composed at 1824×1372; wider windows show more of the room.
+
 ### `window.dev`
 
 - `dev.ready`: level built, baked and one frame drawn.
@@ -40,13 +42,13 @@ Loads the page in a private headless browser on the real GPU, waits for `dev.rea
 
 The regression suite: the page loads with and without `?dev` with no console errors or failed asserts; walks between places land where they should; solids, the ball pit, rings and loose balls behave; physics stays within its cost. Prints one line per area (seconds, passed / failed), then only the failed checks and a final `N passed, M failed (total seconds)`; `--all` prints every line. Run the areas your change touches while working (`--only move,solid`), the whole suite once on the final result; it must be green. `--list` prints the areas with their check counts; an unknown area is an error (exit 2).
 
-Areas (118 checks; every check is in exactly one; alone, in seconds on the lead's machine):
+Areas (119 checks; every check is in exactly one; alone, in seconds on the lead's machine):
 
 - `perf` (5, 36 s): the checks that measure time (library bake, ready, first sign, openings, the two physics budgets). It runs alone, first: other browsers on the GPU would change its numbers.
 - `seen` (1, 217 s): `tools/pvs.mjs --check`, js/seen.js covers what each zone sees; the longest single check, so the full run is about as long as it.
 - `move` (51, 116 s): the walks between places, solid ends of walks, jumping, hopping, passage warps, portals (`tools/portals.mjs --only 0,1`), the flume run, noclip, every ladder.
 - `load` (13, 74 s): page loads without errors, draw calls at the lookout, no late shader compile, frame ceilings, packed material mip energy, `dreamcore.html`, no other host, production.
-- `water` (9, 68 s): pool pictures against direct renders, shared pictures, optics, the mall floor's reflection, skipped pool pictures.
+- `water` (10, 68 s): pool pictures against direct renders, shared pictures, optics, the mall floor's reflection, skipped pool pictures, sky visibility restored after plan and live captures.
 - `solid` (11, 48 s): what stops you (benches, door leaf, shelter, arch, flume deck), coplanar faces, nothing pops at an opening.
 - `light` (2, 41 s): every shadow map has every caster; the loose-things shadow cache.
 - `look` (11, about 30 s): zone culling, mood at openings and passage warps, settings panel, stationary grass viewport, the look layer (a look set and cleared gives the same frame back).
