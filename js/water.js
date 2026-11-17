@@ -30,7 +30,7 @@ const OVER = 1.45;
 // Reuse a capture only within this scene render; a second render at the same time may have moved the
 // camera, changed the lights, or changed the scene (dev.waterCheck does all three). reuse false (every pool
 // captures again) stays for diagnostic A/B pictures and timings.
-const waterViews = { reuse: true, cull: true, depth: true }; // cull false (?dev): pictures every frame, unscissored, for the no-pop A/B (tools/pool-skip.js)
+const waterViews = { reuse: true, cull: true, depth: true, mask: true }; // cull false (?dev): pictures every frame, unscissored, for the no-pop A/B (tools/pool-skip.js); depth false: no lens pre-pass; mask false: the deep picture shaded whole
 let captured = false, frameNo = 0, epoch = 0;
 const beforeScene = scene.onBeforeRender;
 scene.onBeforeRender = function (r, s, c, ...args) {
@@ -38,7 +38,8 @@ scene.onBeforeRender = function (r, s, c, ...args) {
   beforeScene.call(this, r, s, c, ...args);
 };
 // One mirror/lens pair for every pool: they share a plane, so a capture made for one is right for all (below the plane each pool
-// captures into it again just before it draws). Only the part the water on screen can sample is drawn.
+// captures into it again just before it draws). Only the part the water on screen can sample is drawn (scissors: clipped to the eye and the picture, and for
+// the two under-water pictures to where a refracted ray from the water on screen can go, reach), and the deep picture only where the lens cannot answer.
 // The mirror is a 1280 square: it is read with four taps .0007 of its width apart (a real surface is never a perfect mirror), a blur fixed in
 // the picture, not on the screen, which a texel the size of a tap's step resolves; more pixels would only cost (tried at 1440p: 1.45x its pixels looked the same).
 // The underwater picture is shown unblurred: it spans OVER times the screen each way, so it is OVER times the drawing buffer's size (fit), a
@@ -56,26 +57,39 @@ mirror.matrixAutoUpdate = lens.matrixAutoUpdate = false;
 const SQUASH = .12, deep = new THREE.WebGLRenderTarget(1, 1, { type: under.texture.type }), deepCam = new THREE.PerspectiveCamera();
 deep.depthTexture = new THREE.DepthTexture(1, 1, THREE.FloatType); deepCam.matrixAutoUpdate = false;
 const uDeep = { value: new THREE.Matrix4() }, uDeepW = { value: new THREE.Vector4() }, SQ = new THREE.Matrix4().makeTranslation(0, WY, 0).multiply(new THREE.Matrix4().makeScale(1, SQUASH, 1)).multiply(new THREE.Matrix4().makeTranslation(0, -WY, 0));
-const captureUnder = capture => {
-  if (!waterViews.depth || under.scissorTest) { capture(); return; }
-  const draw = renderer.render, materials = new Map();
-  scene.traverse(object => {
-    for (const material of object.material ? [].concat(object.material) : []) if (!materials.has(material)) materials.set(material, [material.colorWrite, material.visible]);
-  });
+// Most of the deep picture shows what the eye's picture already holds (the treads it can see, squashed): there it is not shaded. A depth-only pass draws the deep
+// picture's depth (deepZ); a full-screen pass copies it into the deep picture's own depth, a hair nearer wherever the eye's picture sees the same point
+// (the same eye and light, so the same colour), and the shading pass that follows fails the depth test there and leaves those pixels clear (alpha 0).
+// The water takes the eye's picture's colour for whatever share of a deep lookup is clear. Only the strips the eye cannot see are shaded twice.
+const deepZ = new THREE.WebGLRenderTarget(1, 1, { format: THREE.RedFormat, type: THREE.UnsignedByteType }); deepZ.depthTexture = new THREE.DepthTexture(1, 1, THREE.FloatType);
+const uLensCut = { value: new THREE.Vector4(0, 0, 1, 1) }, uMaskCut = { value: new THREE.Vector4(0, 0, 1, 1) }, seenGLSL = `float seen(vec2 u) { // distance to the nearest underwater surface at that place. The underwater picture's projection is skewed so its near
+      float d = texture2D(tUnderZ, u).x; vec2 q = u * 2. - 1.; // plane lies on the water (that is how it clips), so depth is undone with that matrix's own third row
+      return d > .999999 || any(lessThan(u, uLensCut.xy)) || any(greaterThan(u, uLensCut.zw)) ? 1e4 : -uLens[3][2] / (uLens[0][2] * q.x / uLens[0][0] + uLens[1][2] * q.y / uLens[1][1] - uLens[2][2] - (d * 2. - 1.)); }`; // outside the cut: not drawn this frame
+const maskMat = new THREE.ShaderMaterial({ uniforms: { tDeepZ: { value: deepZ.depthTexture }, tUnderZ: { value: under.depthTexture }, uLens: { value: lens.camera.projectionMatrix }, uLensCut: uMaskCut, uDeepInv: { value: new THREE.Matrix4() }, uView: { value: new THREE.Matrix4() } },
+  vertexShader: quadVS, colorWrite: false, depthFunc: THREE.AlwaysDepth, fragmentShader: `uniform sampler2D tDeepZ, tUnderZ; uniform mat4 uLens, uDeepInv, uView; uniform vec4 uLensCut; varying vec2 vUv;
+    ${seenGLSL}
+    void main() { float d = texture2D(tDeepZ, vUv).x; gl_FragDepth = d; if (d > .999999) return;
+      vec4 p = uDeepInv * vec4(vUv * 2. - 1., d * 2. - 1., 1.), c = uLens * uView * vec4(p.xyz / p.w, 1.); vec2 u = c.xy / c.w * .5 + .5; // the real point, in the eye's picture
+      vec2 h = .5 / vec2(textureSize(tUnderZ, 0)); float e = .01 + .003 * c.w; // all four texels a lookup there blends: so no edge of the eye's picture runs through it
+      if (abs(seen(u + h) - c.w) < e && abs(seen(u - h) - c.w) < e && abs(seen(u + vec2(h.x, -h.y)) - c.w) < e && abs(seen(u - vec2(h.x, -h.y)) - c.w) < e) gl_FragDepth = d - 4e-7; }` }), maskQuad = new FullScreenQuad(maskMat); // seen there: nudged nearer, so not shaded
+const depthOnly = draw => { // every material depth only, see-through ones not at all
+  const materials = new Map();
+  scene.traverse(object => { for (const material of object.material ? [].concat(object.material) : []) if (!materials.has(material)) materials.set(material, [material.colorWrite, material.visible]); });
+  for (const [material] of materials) { material.colorWrite = false; if (material.transparent || !material.depthWrite) material.visible = false; }
+  try { draw(); } finally { for (const [material, [colorWrite, visible]] of materials) { material.colorWrite = colorWrite; material.visible = visible; } }
+};
+const captureUnder = capture => { // the lens picture after a depth pre-pass (fewer shaded pixels where things overlap)
+  if (!waterViews.depth) { capture(); return; }
+  const draw = renderer.render;
   renderer.render = function (world, view) {
-    if (world !== scene || world.overrideMaterial || (view !== lens.camera && view !== deepCam)) return draw.call(this, world, view);
-    for (const [material] of materials) {
-      material.colorWrite = false;
-      if (material.transparent || !material.depthWrite) material.visible = false;
-    }
-    try { draw.call(this, world, view); }
-    finally { for (const [material, [colorWrite, visible]] of materials) { material.colorWrite = colorWrite; material.visible = visible; } }
+    if (world !== scene || world.overrideMaterial || view !== lens.camera) return draw.call(this, world, view);
+    depthOnly(() => draw.call(this, world, view));
     const autoClear = this.autoClear; this.autoClear = false;
     try { return draw.call(this, world, view); } finally { this.autoClear = autoClear; }
   };
   try { capture(); } finally { renderer.render = draw; }
 };
-const row = (m, r, v) => v.set(m.elements[r], m.elements[4 + r], m.elements[8 + r], m.elements[12 + r]), C = new THREE.Vector4(), Cc = new THREE.Vector4(), Q = new THREE.Vector4(), R4 = new THREE.Vector4(), INV = new THREE.Matrix4(), INVT = new THREE.Matrix4();
+const row = (m, r, v) => v.set(m.elements[r], m.elements[4 + r], m.elements[8 + r], m.elements[12 + r]), C = new THREE.Vector4(), Cc = new THREE.Vector4(), Q = new THREE.Vector4(), R4 = new THREE.Vector4(), INV = new THREE.Matrix4(), INVT = new THREE.Matrix4(), CLEAR = new THREE.Color();
 const drawDeep = c => { // c: the wide camera. Its projection times the squash (in view space), with the near plane on the water (Lengyel's oblique frustum, general form)
   const Pm = deepCam.projectionMatrix.multiplyMatrices(c.projectionMatrix, c.matrixWorldInverse).multiply(SQ).multiply(c.matrixWorld), e = Pm.elements;
   C.set(0, -1, 0, WY).applyMatrix4(INVT.copy(c.matrixWorld).transpose()); // the water's plane in view space, positive below
@@ -83,13 +97,18 @@ const drawDeep = c => { // c: the wide camera. Its projection times the squash (
   row(Pm, 3, R4); const a = 2 * R4.dot(Q) / C.dot(Q); e[2] = a * C.x - R4.x; e[6] = a * C.y - R4.y; e[10] = a * C.z - R4.z; e[14] = a * C.w - R4.w;
   deepCam.projectionMatrixInverse.copy(Pm).invert(); row(deepCam.projectionMatrixInverse, 3, uDeepW.value); // 1 / its dot with (ndc, 1) is the squashed point's view depth
   deepCam.matrixWorld.copy(c.matrixWorld); deepCam.matrixWorldInverse.copy(c.matrixWorldInverse); uDeep.value.multiplyMatrices(Pm, c.matrixWorldInverse);
-  deep.scissor.copy(under.scissor); deep.scissorTest = under.scissorTest;
-  const t = renderer.getRenderTarget(), au = renderer.shadowMap.autoUpdate; renderer.shadowMap.autoUpdate = false;
-  renderer.setRenderTarget(deep); renderer.clear(); renderer.render(scene, deepCam); renderer.setRenderTarget(t); renderer.shadowMap.autoUpdate = au;
+  const t = renderer.getRenderTarget(), au = renderer.shadowMap.autoUpdate, ac = renderer.autoClear, al = renderer.getClearAlpha(); renderer.getClearColor(CLEAR); renderer.shadowMap.autoUpdate = false;
+  try {
+    if (!waterViews.mask) { renderer.setRenderTarget(deep); renderer.clear(); renderer.render(scene, deepCam); return; } // plain: every pixel shaded (diagnostic A/B)
+    deepZ.scissor.copy(deep.scissor); deepZ.scissorTest = deep.scissorTest; renderer.autoClear = false;
+    renderer.setRenderTarget(deepZ); renderer.clear(); depthOnly(() => renderer.render(scene, deepCam));
+    maskMat.uniforms.uDeepInv.value.copy(uDeep.value).invert(); maskMat.uniforms.uView.value.copy(c.matrixWorldInverse);
+    renderer.setRenderTarget(deep); renderer.setClearColor(0, 0); renderer.clear(); maskQuad.render(renderer); renderer.render(scene, deepCam);
+  } finally { renderer.setClearColor(CLEAR, al); renderer.autoClear = ac; renderer.setRenderTarget(t); renderer.shadowMap.autoUpdate = au; }
 };
 const BUF = new THREE.Vector2(), fit = () => { // follow the drawing buffer (resize, pixel ratio, render scale): three resizes the depth texture with the target
   renderer.getDrawingBufferSize(BUF); const w = Math.ceil(BUF.x * OVER), h = Math.ceil(BUF.y * OVER);
-  if (under.width !== w || under.height !== h) { under.setSize(w, h); deep.setSize(w, h); renderer.initRenderTarget(deep); const t = renderer.getRenderTarget(); renderer.initRenderTarget(under); renderer.setRenderTarget(t); } // init leaves no framebuffer bound, and this runs inside the frame's render
+  if (under.width !== w || under.height !== h) { under.setSize(w, h); deep.setSize(w, h); deepZ.setSize(w, h); renderer.initRenderTarget(deep); renderer.initRenderTarget(deepZ); const t = renderer.getRenderTarget(); renderer.initRenderTarget(under); renderer.setRenderTarget(t); } // init leaves no framebuffer bound, and this runs inside the frame's render
 };
 const wideCam = new THREE.PerspectiveCamera(), gl = renderer.getContext(), P = new THREE.Vector3(), M4 = new THREE.Matrix4(), frustum = new THREE.Frustum(), LO = new THREE.Vector3(), HI = new THREE.Vector3();
 // Is this pool certainly hidden? Each frame its proxy, the water widened 1.5 m and raised 3 m, is drawn invisibly after everything opaque
@@ -106,13 +125,27 @@ const hidden = (w, c) => {
   return (e.inside || (e.quat.angleTo(c.quaternion) < 1e-5 && p[0] === e.p0 && p[5] === e.p5))
     && !colliders.some(k => Math.hypot(Math.max(k[0] - P.x, 0, P.x - k[2]), Math.max(k[4] - P.y, 0, P.y - k[5]), Math.max(k[1] - P.z, 0, P.z - k[3])) < .4);
 };
-const project = (lo, hi, c, r) => { // widen r (u0, v0, u1, v1 in the wide pictures) by the box lo..hi seen from c; false if any of it lies behind the eye
-  const m = M4.multiplyMatrices(c.projectionMatrix, c.matrixWorldInverse).elements;
-  for (let i = 0; i < 8; i++) {
-    const x = i & 1 ? hi.x : lo.x, y = i & 2 ? hi.y : lo.y, z = i & 4 ? hi.z : lo.z, cw = m[3] * x + m[7] * y + m[11] * z + m[15];
-    if (cw < .01) return false;
-    const u = (m[0] * x + m[4] * y + m[8] * z + m[12]) / cw * .5 / OVER + .5, v = (m[1] * x + m[5] * y + m[9] * z + m[13]) / cw * .5 / OVER + .5;
-    r[0] = Math.min(r[0], u); r[1] = Math.min(r[1], v); r[2] = Math.max(r[2], u); r[3] = Math.max(r[3], v);
+const FACES = [[0, 1, 3, 2], [4, 5, 7, 6], [0, 1, 5, 4], [2, 3, 7, 6], [0, 2, 6, 4], [1, 3, 7, 5]], CV = Array.from({ length: 8 }, () => new THREE.Vector4()), EYE = new THREE.Vector3();
+const NEAR = [[0, 0, 1, -.01]], WIDE = [...NEAR, [-1, 0, OVER, 0], [1, 0, OVER, 0], [0, -1, OVER, 0], [0, 1, OVER, 0]], SCREEN = [...NEAR, [-1, 0, 1, 0], [1, 0, 1, 0], [0, -1, 1, 0], [0, 1, 1, 0]]; // (x, y, w, 1) in clip space: in front of the eye, inside the wide pictures, on the screen
+const clip = (poly, planes) => { // a convex polygon of [x, y, w, ...] (clip space, then anything carried along) cut to the kept side of every plane (Sutherland-Hodgman)
+  for (const [a, b, k, d] of planes) {
+    const out = [], s = q => a * q[0] + b * q[1] + k * q[2] + d;
+    poly.forEach((p, i) => { const q = poly[(i + 1) % poly.length], sp = s(p), sq = s(q), t = sp / (sp - sq); if (sp >= 0) out.push(p); if ((sp >= 0) !== (sq >= 0)) out.push(p.map((v, j) => v + (q[j] - v) * t)); });
+    poly = out;
+  }
+  return poly;
+};
+const project = (lo, hi, c, r, cut = 0, xz) => { // widen r (u0, v0, u1, v1 in the wide pictures), and xz (x0, z0, x1, z1 in the world) if given, by the box lo..hi seen from c.
+  const m = M4.multiplyMatrices(c.projectionMatrix, c.matrixWorldInverse); // cut 0: false if any of it lies behind the eye; else by its part in front of the eye (NEAR), in the wide pictures (WIDE) or on the screen (SCREEN)
+  for (let i = 0; i < 8; i++) if (CV[i].set(i & 1 ? hi.x : lo.x, i & 2 ? hi.y : lo.y, i & 4 ? hi.z : lo.z, 1).applyMatrix4(m).w < .01 && !cut) return false;
+  EYE.setFromMatrixPosition(c.matrixWorld); // within 5 cm of the box the near plane's own cut through it could be missed below: take all
+  if (cut && EYE.x > lo.x - .05 && EYE.x < hi.x + .05 && EYE.y > lo.y - .05 && EYE.y < hi.y + .05 && EYE.z > lo.z - .05 && EYE.z < hi.z + .05) { r[0] = r[1] = 0; r[2] = r[3] = 1; if (xz) { xz[0] = Math.min(xz[0], lo.x); xz[1] = Math.min(xz[1], lo.z); xz[2] = Math.max(xz[2], hi.x); xz[3] = Math.max(xz[3], hi.z); } return true; }
+  for (const f of FACES) { // each face clipped (Sutherland-Hodgman) to the kept side of every plane: the bound of what is left is the bound of the box's kept part
+    for (const [x, y, w, X, Z] of clip(f.map(i => [CV[i].x, CV[i].y, CV[i].w, i & 1 ? hi.x : lo.x, i & 4 ? hi.z : lo.z]), cut || [])) {
+      const u = x / w * .5 / OVER + .5, v = y / w * .5 / OVER + .5;
+      r[0] = Math.min(r[0], u); r[1] = Math.min(r[1], v); r[2] = Math.max(r[2], u); r[3] = Math.max(r[3], v);
+      if (xz) { xz[0] = Math.min(xz[0], X); xz[1] = Math.min(xz[1], Z); xz[2] = Math.max(xz[2], X); xz[3] = Math.max(xz[3], Z); }
+    }
   }
   return true;
 };
@@ -121,15 +154,49 @@ const scissor = (rt, r, flip) => { // past the bound by the mirror's four taps (
   const y0 = Math.max(0, Math.floor(c(r[1]) * H) - m), y1 = Math.min(H, Math.ceil(c(r[3]) * H) + m);
   rt.scissor.set(x0, y0, Math.max(0, x1 - x0), Math.max(0, y1 - y0)); rt.scissorTest = true;
 };
-const scissors = (users, c) => { // the pair cut to what these pools' pixels can sample (waterFS): the lens is read along the bent ray, which
-  // ends inside the basin; the mirror at a point 9 m along the mirrored ray (below the surface), eased toward the picture's edge, never past it
-  const m = [1, 1, 0, 0], l = [1, 1, 0, 0]; let mOK = waterViews.cull, lOK = mOK;
-  for (const q of users) {
-    lOK = lOK && project(LO.set(q.rect.x, q.floor, q.rect.y), HI.set(q.rect.z, WY, q.rect.w), c, l);
-    mOK = mOK && project(LO.set(q.rect.x - 9, WY - 9, q.rect.y - 9), HI.set(q.rect.z + 9, WY, q.rect.w + 9), c, m);
+// Where a refracted ray can go (waterFS holds it there): seen from above, flat water bends it away from the eye's foot by A0 metres per metre down (tan of the
+// refracted angle, up to 1.13 at a grazing view) and no way sideways. Ripples turn it by at most SLACK[0] outward or inward and SLACK[1] sideways per metre down
+// (measured: a run and a jump into the pool hall's water reach .27 and .15); only steeper splashes are held to that.
+const SLACK = [.4, .3], A0 = (l, h) => { const s = .75 * l / Math.hypot(l, h); return s / Math.sqrt(1 - s * s); }; // l: from the eye's foot, h: the eye over the surface
+const reach = (o, c, floor, squash, r) => { // widen r by every point a ray from this pool's surface on screen can reach, to the sheet's deepest floor (and 10 cm past it, the
+  // deep march's overshoot), squashed for the deep picture; false if that cannot be bounded so (some of it near or behind the eye)
+  const m = M4.multiplyMatrices(c.projectionMatrix, c.matrixWorldInverse), H = WY - floor + .1, ex = c.matrixWorld.elements[12], ez = c.matrixWorld.elements[14];
+  const e = m.elements, cl = (x, y, z) => [e[0] * x + e[4] * y + e[8] * z + e[12], e[1] * x + e[5] * y + e[9] * z + e[13], e[3] * x + e[7] * y + e[11] * z + e[15]];
+  const put = (x, y, z) => { const [X, Y, w] = cl(x, WY - (WY - y) * squash, z); if (w < .01) return false; // y squashed toward the surface
+    const u = X / w * .5 / OVER + .5, v = Y / w * .5 / OVER + .5; r[0] = Math.min(r[0], u); r[1] = Math.min(r[1], v); r[2] = Math.max(r[2], u); r[3] = Math.max(r[3], v); return true; };
+  const poly = clip([[o.x, o.y], [o.z, o.y], [o.z, o.w], [o.x, o.w]].map(([x, z]) => [...cl(x, WY, z), x, z]), SCREEN);
+  if (!poly.length) return true; // none of it on screen
+  const hy = c.matrixWorld.elements[13] - WY, D = Math.hypot(A0(.3, hy) + SLACK[0], SLACK[1]) * H + .02; // right under the eye the outward direction is any: a square that holds every way
+  if (Math.min(...poly.map(p => p[3])) < ex + .3 && Math.max(...poly.map(p => p[3])) > ex - .3 && Math.min(...poly.map(p => p[4])) < ez + .3 && Math.max(...poly.map(p => p[4])) > ez - .3)
+    for (const [x, z] of [[ex, ez], ...poly.map(p => [p[3], p[4]]).filter(([x, z]) => Math.hypot(x - ex, z - ez) < .3)]) for (let i = 0; i < 5; i++) if (!put(x + (i & 1 ? D : -D) * (i < 4), WY - H * (i < 4), z + (i & 2 ? D : -D) * (i < 4))) return false;
+  for (let i = 0; i < poly.length; i++) { // along the surface's outline, finely enough that the outward direction turns under .03 rad a step, each point's
+    const [, , , x0, z0] = poly[i], [, , , x1, z1] = poly[(i + 1) % poly.length]; // cone (a pyramid down to the floor): their hull holds every ray of the inside too
+    const n = Math.min(128, Math.ceil(Math.abs(Math.atan2((x0 - ex) * (z1 - ez) - (z0 - ez) * (x1 - ex), (x0 - ex) * (x1 - ex) + (z0 - ez) * (z1 - ez))) / .03) + 1);
+    for (let j = 0; j < n; j++) {
+      const x = x0 + (x1 - x0) * j / n, z = z0 + (z1 - z0) * j / n, l = Math.hypot(x - ex, z - ez); if (!put(x, WY, z)) return false;
+      if (l < .3) continue; const ax = (x - ex) / l, az = (z - ez) / l, a0 = A0(l, hy);
+      for (const [a, b] of [[a0 - SLACK[0] - .02, -SLACK[1] - .02], [a0 - SLACK[0] - .02, SLACK[1] + .02], [a0 + SLACK[0] + .02, -SLACK[1] - .02], [a0 + SLACK[0] + .02, SLACK[1] + .02]]) if (!put(x + H * (a * ax - b * az), WY - H, z + H * (a * az + b * ax))) return false;
+    }
   }
-  if (mOK) scissor(mirrorRT, m, true); else mirrorRT.scissorTest = false;
-  if (lOK) scissor(under, l, false); else under.scissorTest = false;
+  return true;
+};
+const scissors = (users, c) => { // the pictures cut to what these pools' pixels can sample (waterFS). The lens is read along the bent ray, from a bit of surface on
+  // screen to its end (reach); the deep picture along the same ray squashed. Only from above: below the plane the pictures are whole. The mirror at a point
+  // 9 m along the mirrored ray (below the surface, further from the eye than the surface), eased toward the picture's edge one axis at a time, never past it:
+  // so there the whole box in front of the eye counts, unclipped by the picture's sides
+  const m = [1, 1, 0, 0], l = [1, 1, 0, 0], d = [1, 1, 0, 0];
+  const above = c.matrixWorld.elements[13] > WY + .001;
+  for (const { rect: o, sheet: { rect, floor } } of users) {
+    if (above && !(reach(o, c, floor, 1, l) && reach(o, c, floor, SQUASH, d))) { // near the eye: the sheet's box, cut to the wide picture
+      project(LO.set(rect.x, floor - .1, rect.y), HI.set(rect.z, WY, rect.w), c, l, WIDE);
+      project(LO.set(rect.x, WY - SQUASH * (WY - floor + .1), rect.y), HI.set(rect.z, WY, rect.w), c, d, WIDE);
+    }
+    project(LO.set(o.x - 9, WY - 9, o.y - 9), HI.set(o.z + 9, WY, o.w + 9), c, m, NEAR);
+  }
+  if (!above) { l.splice(0, 4, 0, 0, 1, 1); d.splice(0, 4, 0, 0, 1, 1); }
+  scissor(mirrorRT, m, true); scissor(under, l, false); scissor(deep, d, false);
+  const u = under.scissor, W = under.width, H = under.height; uMaskCut.value.set(u.x / W, u.y / H, (u.x + u.z) / W, (u.y + u.w) / H); // the deep picture leans on the lens only inside its cut, cut or not (so cull off changes nothing)
+  if (waterViews.cull) uLensCut.value.copy(uMaskCut.value); else { uLensCut.value.set(0, 0, 1, 1); mirrorRT.scissorTest = under.scissorTest = deep.scissorTest = false; }
 };
 const proxyMat = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false, transparent: true, side: THREE.DoubleSide });
 const uTest = { value: 0 }; // ?dev measurement (dev.waterCheck): 1 the lens picture alone, 2 the mirror alone, both with the surface flat; 3 a mask
@@ -150,13 +217,11 @@ const simMat = new THREE.ShaderMaterial({ uniforms: { tSim: { value: null }, uPx
 const simQuad = new FullScreenQuad(simMat);
 const waterVS = 'varying vec3 vW; void main() { vec4 w = modelMatrix * vec4(position, 1.); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }';
 const waterFS = `uniform sampler2D tMirror, tUnder, tUnderZ, tDeep, tDeepZ, tPlan, tGround, tNormalMap0, tNormalMap1, tSim;
-    uniform mat4 projectionMatrix, uLens, uDeep; uniform vec4 uDeepW; uniform vec4 uPond; uniform vec2 uPx; uniform vec3 uScatter, uCausDir; uniform float uFloor, uTime, uMain, uCaus, uTest; uniform vec4 uLook; varying vec3 vW;
+    uniform mat4 projectionMatrix, uLens, uDeep; uniform vec4 uDeepW, uLensCut; uniform vec4 uPond; uniform vec2 uPx; uniform vec3 uScatter, uCausDir; uniform float uFloor, uTime, uMain, uCaus, uTest; uniform vec4 uLook; varying vec3 vW;
     ${causticsGLSL}
     vec4 clip(vec3 p) { return projectionMatrix * viewMatrix * vec4(p, 1.); } // .w is the distance from the camera
     vec2 wide(vec4 c) { return c.xy / c.w * ${(.5 / OVER).toFixed(5)} + .5; } // a clip position's place in the two wider pictures
-    float seen(vec2 u) { // distance to the nearest underwater surface at that place. The underwater picture's projection is skewed so its near
-      float d = texture2D(tUnderZ, u).x; vec2 q = u * 2. - 1.; // plane lies on the water (that is how it clips), so depth is undone with that matrix's own third row
-      return d > .999999 ? 1e4 : -uLens[3][2] / (uLens[0][2] * q.x / uLens[0][0] + uLens[1][2] * q.y / uLens[1][1] - uLens[2][2] - (d * 2. - 1.)); }
+    ${seenGLSL}
     float deepSeen(vec2 u) { float d = texture2D(tDeepZ, u).x; return d > .999999 ? 1e4 : 1. / dot(uDeepW, vec4(u * 2. - 1., d * 2. - 1., 1.)); } // the same for the deep picture
     bool off(vec2 u) { return any(lessThan(u, vec2(0.))) || any(greaterThan(u, vec2(1.))); }
     vec2 plan(vec2 xz) { vec2 s = (xz - uPond.xy) / (uPond.zw - uPond.xy); return vec2(s.x, 1. - s.y); } // a world position's place in the pool's top-down picture
@@ -176,6 +241,10 @@ const waterFS = `uniform sampler2D tMirror, tUnder, tUnderZ, tDeep, tDeepZ, tPla
       vec2 ru = onScreen(here, wide(clip(vW + R * 9.))), o = vec2(.0007, 0.); ru.x = 1. - ru.x; // four taps: a real surface is never a perfect mirror
       vec3 refl = (texture2D(tMirror, ru + o.xy).rgb + texture2D(tMirror, ru - o.xy).rgb + texture2D(tMirror, ru + o.yx).rgb + texture2D(tMirror, ru - o.yx).rgb) * .25;
       vec3 T = refract(-V, n, uTest == 1. ? 1. : .75); // air to water (?dev measurement: straight through)
+      if (uTest != 1.) { vec2 ra = vW.xz - cameraPosition.xz; float rl = length(ra), y = max(-T.y, .001); ra = rl > 1e-4 ? ra / rl : vec2(1., 0.); vec2 si = vec2(-ra.y, ra.x); // held to where reach() looks for it:
+        vec3 T0 = refract(-V, vec3(0., 1., 0.), .75); float a0 = dot(T0.xz, ra) / -T0.y, a = dot(T.xz, ra), b = dot(T.xz, si); // within SLACK per metre down of the flat surface's ray
+        float ac = clamp(a, (a0 - ${SLACK[0].toFixed(3)}) * y, (a0 + ${SLACK[0].toFixed(3)}) * y), bc = clamp(b, -${SLACK[1].toFixed(3)} * y, ${SLACK[1].toFixed(3)} * y);
+        if (ac != a || bc != b || T.y > -.001) { vec2 h = ra * ac + si * bc; T = normalize(vec3(h.x, -y, h.y)); } }
       vec2 tw = mix(vW.xz - uPond.xy, uPond.zw - vW.xz, step(0., T.xz)) / (abs(T.xz) + 1e-5);
       float t = clamp(min((uFloor - vW.y) / min(T.y, -.001), min(tw.x, tw.y)), 0., 30.); // furthest the ray can go: the basin's floor or wall. Never negative, or exp() below overflows
       { float lo = 0., hi = t; bool found = false; // stop where the ray goes under the floor, a step or into a column
@@ -196,7 +265,7 @@ const waterFS = `uniform sampler2D tMirror, tUnder, tUnderZ, tDeep, tDeepZ, tPla
         for (int i = 1; i <= 16; i++) { float ti = st * float(i); vec4 cq = uDeep * vec4(vW + T * ti, 1.); vec2 uq = cq.xy / cq.w * .5 + .5; float dz = off(uq) ? -1. : cq.w - deepSeen(uq);
           if (dz > 0. && dz < .1 + st) { float hi = ti; for (int k = 0; k < 5; k++) { float tm = .5 * (lo + hi); vec4 cm = uDeep * vec4(vW + T * tm, 1.); if (cm.w > deepSeen(cm.xy / cm.w * .5 + .5)) hi = tm; else lo = tm; }
             vec4 c2 = uDeep * vec4(vW + T * hi, 1.); vec2 u2 = c2.xy / c2.w * .5 + .5;
-            dl = off(u2) ? 0. : 1. - smoothstep(.05 + .02 * c2.w, .14 + .05 * c2.w, abs(c2.w - deepSeen(u2))); dc = texture2D(tDeep, u2).rgb;
+            dl = off(u2) ? 0. : 1. - smoothstep(.05 + .02 * c2.w, .14 + .05 * c2.w, abs(c2.w - deepSeen(u2))); vec4 dd = texture2D(tDeep, u2); dc = dd.rgb + (1. - dd.a) * texture2D(tUnder, wide(clip(vW + T * hi))).rgb; // what is clear there the eye's picture holds
             t = mix(hi, t, live); hit = vW + T * t; break; }
           lo = ti; }
       }
@@ -255,10 +324,10 @@ const ponds = pools.map(([x1, z1, x2, z2, floor, zid, seen, scatter]) => {
   const g = new THREE.PlaneGeometry(x2 - x1, z2 - z1), rect = new THREE.Vector4(x1, z1, x2, z2);
   const planCam = new THREE.OrthographicCamera((x1 - x2) / 2, (x2 - x1) / 2, (z2 - z1) / 2, (z1 - z2) / 2, .001, Math.max(1.6, WY - floor + .5)); // looking straight down from the surface, to below its deepest floor
   planCam.position.set((x1 + x2) / 2, WY, (z1 + z2) / 2); planCam.up.set(0, 0, -1); planCam.lookAt((x1 + x2) / 2, WY - 1, (z1 + z2) / 2);
-  const U = { uCaus: zones[zid].tileU.uCaus, uCausDir: zones[zid].tileU.uCausDir, tMirror: { value: mirrorRT.texture }, tPlan: { value: planRT.texture }, tGround: { value: S.ground }, tUnder: { value: under.texture }, tUnderZ: { value: under.depthTexture }, tDeep: { value: deep.texture }, tDeepZ: { value: deep.depthTexture }, uDeep, uDeepW, uLens: { value: lens.camera.projectionMatrix }, tNormalMap0: { value: wn0 }, tNormalMap1: { value: wn1 },
+  const U = { uCaus: zones[zid].tileU.uCaus, uCausDir: zones[zid].tileU.uCausDir, tMirror: { value: mirrorRT.texture }, tPlan: { value: planRT.texture }, tGround: { value: S.ground }, tUnder: { value: under.texture }, tUnderZ: { value: under.depthTexture }, tDeep: { value: deep.texture }, tDeepZ: { value: deep.depthTexture }, uDeep, uDeepW, uLensCut, uLens: { value: lens.camera.projectionMatrix }, tNormalMap0: { value: wn0 }, tNormalMap1: { value: wn1 },
               tSim: { value: sim[0].texture }, uPond: { value: S.rect }, uPx: { value: px }, uFloor: { value: S.floor }, uScatter: { value: V(...scatter) }, uLook: { value: new THREE.Vector4(1, 1, 1, 1) }, uMain: { value: 0 }, uTest, uTime }; // uPond, uFloor: the sheet's box and deepest floor, which its field, height map and plan span
   const w = new THREE.Mesh(g, new THREE.ShaderMaterial({ uniforms: U, vertexShader: waterVS, fragmentShader: waterFS, transparent: true }));
-  Object.assign(w, { lens, mirror, seen, rect, floor, q: { pending: [], last: null }, sheet: S, tileU: zones[zid].tileU, zone: zones[zid], twin: S.twin });
+  Object.assign(w, { lens, mirror, deep, seen, rect, floor, q: { pending: [], last: null }, sheet: S, tileU: zones[zid].tileU, zone: zones[zid], twin: S.twin });
   S.ponds.push(w);
   w.drawPlan = z => { // once per zone, while that zone's lamps are lit for its bake: the part of this pool that lies in its room, into this pool's part of the sheet's plan
     const c1 = Math.max(x1, z.box[0]), d1 = Math.max(z1, z.box[1]), c2 = Math.min(x2, z.box[2]), d2 = Math.min(z2, z.box[3]); if (c1 >= c2 || d1 >= d2) return; // so where a pool runs on into the next room (a channel into a pool hall) it is drawn under that room's lamps, as the live view shows it

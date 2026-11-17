@@ -37,7 +37,7 @@ async function page(o) {
       paths.push({ name: `${w.a} hall`, at: X ? [x1 + .3, (z1 + z2) / 2] : [(x1 + x2) / 2, z1 + .3], yaw: X ? face(1, 0) : face(0, 1), keys: ['KeyW', 'ShiftLeft'], n: Math.min(400, Math.round(len / .1) + 20) }); }
   }
   const [W, H] = [gl.drawingBufferWidth, gl.drawingBufferHeight], a = new Uint8Array(W * H * 4), b = new Uint8Array(a.length);
-  const pair = [ponds[0].mirror.getRenderTarget(), ponds[0].lens.getRenderTarget()], magenta = new dev.THREE.Color(1, 0, 1);
+  const pair = [ponds[0].mirror.getRenderTarget(), ponds[0].lens.getRenderTarget(), ponds[0].deep], magenta = new dev.THREE.Color(1, 0, 1);
   const poison = () => { const c = r.getClearColor(new dev.THREE.Color()), al = r.getClearAlpha(); r.setClearColor(magenta, 1);
     for (const t of pair) { const s = t.scissorTest; t.scissorTest = false; r.setRenderTarget(t); r.clear(); t.scissorTest = s; } r.setRenderTarget(null); r.setClearColor(c, al); };
   let captures = 0; const draw = r.render; r.render = function (s, c) { if (s === dev.scene && c !== camera) captures++; return draw.call(this, s, c); };
