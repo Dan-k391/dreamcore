@@ -95,7 +95,7 @@ const parse = h => h.split(',').map(Number);
 let queue = Promise.resolve();
 function buildTiles() {
   const box = $('tiles'); box.className = 'n' + S.layout;
-  for (const t of T) if (t.i >= S.layout && t.frame) { t.frame.remove(); t.frame = t.d = null; t.state = 'off'; t.cell?.remove(); t.cell = null; } // unloaded: its GPU memory is given back
+  for (const t of T) if (t.i >= S.layout && t.frame) { t.frame.remove(); t.frame = t.d = null; t.state = 'off'; t.cell?.remove(); t.cell = t.head = null; t.zone = null; } // unloaded: its GPU memory is given back
   for (const t of visible()) if (!t.cell) {
     t.head = el('div', { class: 'head' }); t.status = el('div', { class: 'status' });
     t.cell = el('div', { class: 'tile' }, t.head, el('div', { class: 'pic' }, t.status));
@@ -188,8 +188,8 @@ function buildPanel() {
       const num = el('input', { type: 'number', step: +(p.step * U.k).toFixed(4), min: +(p.min * U.k).toFixed(4), max: +(p.max * U.k).toFixed(4), 'aria-label': p.label + ' value' + (U.u ? ' in ' + (U.u === '%' ? 'percent' : U.u) : '') });
       const rst = el('button', { class: 'rst', title: 'Reset to neutral (or double-click the slider)', 'aria-label': 'Reset ' + p.label }, '↺');
       const val = el('span', { class: 'val', 'aria-hidden': 'true' }), base = el('span', { class: 'base' }), note = el('div', { class: 'note', id: hid }, p.help);
-      const mark = el('i', { class: 'mark' }), track = el('div', { class: 'track' }, range, mark);
-      const row = el('div', { class: 'row', title: p.help }, el('label', { id: lid, class: 'name' }, p.label), val, track, num, el('span', { class: 'unit' }, U.u === 'stops' ? 'st' : U.u), rst, base, note);
+      const unit = el('span', { class: 'unit' }), mark = el('i', { class: 'mark' }), track = el('div', { class: 'track' }, range, mark);
+      const row = el('div', { class: 'row', title: p.help }, el('label', { id: lid, class: 'name' }, p.label), val, track, num, unit, rst, base, note);
       const live = v => { setVal(S.target, p.id, v); S.look = sanitize(S.look); persist(); push(); renderRow(p.id); };
       range.addEventListener('input', () => live(+range.value));
       range.addEventListener('change', () => commit());
@@ -199,7 +199,7 @@ function buildPanel() {
         live(+range.value + dir * p.step * (e.shiftKey ? .2 : 1)); range.value = entry(S.look, S.target)[p.id] ?? p.neutral; clearTimeout(range.t); range.t = setTimeout(commit, 350); });
       num.addEventListener('change', () => { const v = parseFloat(num.value); if (Number.isFinite(v)) { setVal(S.target, p.id, v / U.k); commit(); } else renderRow(p.id); });
       rst.addEventListener('click', () => { setVal(S.target, p.id, p.neutral); commit(p.label + ' reset'); });
-      rows[p.id] = { p, row, range, num, rst, val, base, mark, note };
+      rows[p.id] = { p, row, range, num, rst, val, base, mark, note, unit };
       sec.append(row); }
     panel.append(sec); }
   panel.append(el('div', { class: 'keys' }, 'Keys: 0 all rooms · 1–4 a tile’s room · hold B before · hold N against · Ctrl+Z undo · Ctrl+Shift+Z redo · arrows step, Shift+arrows fine · double-click a slider to reset · click a picture to walk, Esc to stop'));
@@ -208,9 +208,9 @@ function renderRow(id) {
   const r = rows[id], p = r.p, t = S.target, off = t !== 'all' && !p.perZone, v = entry(S.look, t)[id] ?? p.neutral, a = S.look.all[id] ?? p.neutral;
   r.range.value = off ? a : v; if (document.activeElement !== r.num) r.num.value = +((off ? a : v) * UNIT(id).k).toFixed(UNIT(id).d + 2);
   r.range.disabled = r.num.disabled = r.rst.disabled = off; r.row.classList.toggle('off', off); r.row.classList.toggle('set', !off && v !== p.neutral);
-  r.val.textContent = fmt(id, off ? a : v); r.rst.style.visibility = !off && v !== p.neutral ? '' : 'hidden';
+  r.val.textContent = fmt(id, off ? a : v); { const U = UNIT(id), x = off ? a : v; r.unit.textContent = U.w ? (x ? U.w[x > 0 ? 1 : 0] : '') : U.u === 'stops' ? 'stops' : U.u; } r.rst.style.visibility = !off && v !== p.neutral ? '' : 'hidden';
   const showBase = t !== 'all' && p.perZone && a !== p.neutral; // on a room target: what all rooms already add
-  r.base.textContent = off ? 'one for the whole game: set it on All rooms' : showBase ? 'all rooms ' + fmt(id, a) + (v !== p.neutral ? ' · together ' + fmt(id, p.kind === 'mul' ? a * v : a + v) : '') : '';
+  r.base.textContent = off ? 'one for the whole game: set on All rooms' : showBase ? 'all rooms ' + fmt(id, a) + (v !== p.neutral ? ' · together ' + fmt(id, p.kind === 'mul' ? a * v : a + v) : '') : '';
   r.mark.hidden = !showBase; if (showBase) r.mark.style.left = `calc(${(a - p.min) / (p.max - p.min)} * (100% - 12px) + 6px)`;
   r.neutralPos = r.neutralPos || (r.range.parentElement.style.setProperty('--n', (p.neutral - p.min) / (p.max - p.min)), 1); }
 function render() {
@@ -239,16 +239,16 @@ function render() {
   renderHeads(); }
 function renderHeads() {
   const tg = targets();
-  for (const t of visible()) { if (!t.head) continue; const v = S.views[t.i], shared = t.zone && tg.get(t.zone)?.length > 1;
+  for (const t of visible()) { if (!t.cell) continue; const v = S.views[t.i], shared = t.zone && tg.get(t.zone)?.length > 1;
     t.cell.classList.toggle('tgt', t.zone && t.zone === S.target || S.target === 'all');
-    t.head.replaceChildren(
+    t.head.replaceChildren(...[
       el('b', {}, String(t.i + 1)),
-      el('button', { class: 'scene', 'aria-haspopup': 'dialog', title: 'Change the scene', onclick: e => scenePicker(t, e.currentTarget) }, (t.zone ? place(t.zone) : '…') + ' ', el('small', {}, v.name === 'walked' ? 'walked view' : v.name), ' ▾'),
+      el('button', { class: 'scene', 'aria-haspopup': 'dialog', title: 'Change the scene', onclick: e => scenePicker(t, e.currentTarget) }, (t.zone ? place(t.zone) : '…') + ' ', v.name === 'walked' ? el('small', {}, 'walked view') : t.zone && slug(place(t.zone)) === v.name ? null : el('small', {}, v.name.replace(/-/g, ' ')), ' ▾'),
       t.zone && S.look.zones[t.zone] ? el('span', { class: 'dot', title: 'This room has its own changes' }) : null,
       shared ? el('small', {}, 'shares its room with ' + tg.get(t.zone).filter(n => n !== t.i + 1).join(', ')) : null,
       el('span', { class: 'sp' }),
       el('small', {}, t.state === 'ready' ? (t.walking ? 'walking · Esc to stop' : 'click to walk') : t.state === 'failed' ? 'failed' : t.state === 'loading' ? 'loading' : 'waiting'),
-      el('button', { 'aria-pressed': S.motion[t.i] ? 'true' : 'false', title: 'Let time run in this tile (water, waves, shimmer); off, it draws only when a value changes', onclick: () => setMotion(t.i, !S.motion[t.i]) }, 'Motion')); } }
+      el('button', { 'aria-pressed': S.motion[t.i] ? 'true' : 'false', title: 'Let time run in this tile (water, waves, shimmer); off, it draws only when a value changes', onclick: () => setMotion(t.i, !S.motion[t.i]) }, 'Motion')].filter(Boolean)); } }
 
 // ---------- popovers ----------
 const pop = $('pop'); let popFor = null;

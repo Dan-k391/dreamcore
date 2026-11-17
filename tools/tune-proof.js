@@ -1,5 +1,5 @@
 // End-to-end proof of the tuning workspace (docs/look.md): node tools/browse.mjs --url "http://127.0.0.1:<port>/tune.html" --size 1920x1080 --wait 400000 --eval-file tools/tune-proof.js
-// Needs tools/serve.mjs (presets, apply). Prints numbers; restores the empty applied look and removes its test preset (js/look.applied.js
+// Needs tools/serve.mjs (presets, apply). Its one error line, a 400 for /looks/presets/proof-junk, is the junk check being refused. Prints numbers; restores the empty applied look and removes its test preset (js/look.applied.js
 // is rewritten as {"all":{},"zones":{}}: `git checkout js/look.applied.js` gives back the committed literal).
 (async () => {
   const W = dev.tune, T = W.T, out = {}, sleep = ms => new Promise(r => setTimeout(r, ms)), frames = () => requestAnimationFrame && new Promise(r => requestAnimationFrame(() => r()));
