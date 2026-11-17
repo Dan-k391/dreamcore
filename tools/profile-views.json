@@ -1,0 +1,444 @@
+[
+ {
+  "name": "backrooms",
+  "hash": "1.9,20,0,0",
+  "zone": "bA",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "pillar-hall",
+  "hash": "-10.5,4.5,1.2,0",
+  "zone": "bB",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "corridor",
+  "hash": "10.5,10.8,-1.5708,0",
+  "zone": "bC",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "pool-hall",
+  "hash": "7.5,-3,0.75,-0.18",
+  "zone": "pH",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "sea-colonnade",
+  "hash": "-2,-21.5,-1.35,0.02",
+  "zone": "pH",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "arcade",
+  "hash": "10.5,-12,-1.5708,-0.05",
+  "zone": "pC",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "night-hall",
+  "hash": "26.5,-12,-1.75,0.1",
+  "zone": "pN",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "night-hall-flume",
+  "hash": "43.6,-13,2.63,0.22",
+  "zone": "pN",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "night-hall-platform",
+  "hash": "41.8,-1.2,0.6,-0.3",
+  "lift": 3.6,
+  "zone": "pN",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "shore-pool-steps",
+  "hash": "0.5,-5.3,0,-0.95",
+  "zone": "pH",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "shore-arcade-entrance",
+  "hash": "8.3,-12,-1.5708,-0.4",
+  "zone": "pH",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "gallery-pool",
+  "hash": "23.2,14.2,3.14159,-0.08",
+  "zone": "pG",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "vault-hall",
+  "hash": "23.2,42,3.14159,0",
+  "zone": "pV",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "hotel-hallway",
+  "hash": "3.8,23,3.14159,0",
+  "zone": "hT",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "mall",
+  "hash": "0.5,45,1.2,0.12",
+  "zone": "mL",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "soft-play",
+  "hash": "-28,36,1.5708,-0.15",
+  "zone": "sP",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "cinema",
+  "hash": "6.2,31,-1.5708,-0.1",
+  "zone": "cN",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "parking-level",
+  "hash": "38,11,-1.4,0",
+  "zone": "pK",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "dark-passage",
+  "hash": "3.8,53.5,3.14159,-0.1",
+  "zone": "t0",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "field",
+  "hash": "3.8,667,3.14159,0.1",
+  "zone": "fD",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "field-playground",
+  "hash": "-8,698,1.9,0",
+  "zone": "fD",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "car-park",
+  "hash": "684,12,-2.3,0.02",
+  "zone": "nL",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "car-park-shelter",
+  "hash": "692.5,35.5,0.6435,0",
+  "zone": "nL",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "terrace",
+  "hash": "652,649.4,-1.5708,0.05",
+  "zone": "sK",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "terrace-court",
+  "hash": "666,649.4,-1.9,0.12",
+  "zone": "sK",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "terrace-lookout",
+  "hash": "702.5,649.4,1.5708,-0.2",
+  "zone": "sK",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "hotel-open-doors",
+  "hash": "3.2,40.3,-2.3,-0.05",
+  "zone": "hT",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "hotel-open-door-front",
+  "hash": "3.5,42,-1.5708,-0.08",
+  "zone": "hT",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "hotel-open-door-from-passage",
+  "hash": "7.6,42,1.5708,-0.05",
+  "zone": "t3",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "laundromat-arrival",
+  "hash": "597,-605,3.1416,-0.04",
+  "zone": "lW",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "laundromat",
+  "hash": "602.9,-603.3,2.78,-0.06",
+  "zone": "lW",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "metro-arrival",
+  "hash": "702,-596.5,-1.0,0",
+  "zone": "mT",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "metro",
+  "hash": "729,-597.6,1.42,-0.02",
+  "zone": "mT",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "glasshouse-arrival",
+  "hash": "831,-600,-1.5708,0",
+  "zone": "gH",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "glasshouse",
+  "hash": "848.6,-599.2,1.75,-0.04",
+  "zone": "gH",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "hotel-portal-west",
+  "hash": "4.2,34.8,1.5708,0",
+  "zone": "hT",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "vestibule-back",
+  "hash": "302.6,301.6,1.5708,0",
+  "zone": "hV",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "baths-reveal",
+  "hash": "-1405,1416,-1.5708,0",
+  "zone": "pE",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "baths-axis",
+  "hash": "-1398.5,1416,-1.5708,0.05",
+  "zone": "pB",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "baths-gallery",
+  "hash": "-1358.5,1411,1.25,-0.18",
+  "lift": 4.5,
+  "zone": "pB",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "baths-waterline",
+  "hash": "-1380,1412,-1.2,-0.03",
+  "zone": "pB",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "baths-door",
+  "hash": "4,24.2,-1.5708,0",
+  "zone": "hT",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "gallery-length",
+  "hash": "333.6,300.5,1.45,0.05",
+  "zone": "hG",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "gallery-bench",
+  "hash": "327.6,300.4,-2.356,-0.1",
+  "zone": "hG",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "lobby-lifts",
+  "hash": "359.2,299.6,-2.356,0",
+  "zone": "hL",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "lobby-west-lift",
+  "hash": "360.8,301,1.5708,0",
+  "zone": "hL",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "laundromat-street",
+  "hash": "600,-590,0,0",
+  "zone": "lX",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "terrace-sky-stair",
+  "hash": "737,635,1.5708,0",
+  "zone": "sK",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "terrace-court-door",
+  "hash": "672.5,649.4,-1.5708,0",
+  "zone": "sK",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "hotel-portal-east",
+  "hash": "3.6,38.4,-1.5708,0",
+  "zone": "hT",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "passage-t0",
+  "hash": "3.800,52.600,0,0",
+  "zone": "t0",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "passage-u0",
+  "hash": "3.800,664.600,3.14159,0",
+  "zone": "u0",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "passage-t1",
+  "hash": "68.000,14.000,1.5708,0",
+  "zone": "t1",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "passage-u1",
+  "hash": "680.000,14.000,-1.5708,0",
+  "zone": "u1",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "passage-t2",
+  "hash": "37.400,49.400,1.5708,0",
+  "zone": "t2",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "passage-u2",
+  "hash": "649.400,649.400,-1.5708,0",
+  "zone": "u2",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "passage-t3",
+  "hash": "6.400,42.000,1.5708,0",
+  "zone": "t3",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "passage-u3",
+  "hash": "595.300,-608.550,-1.5708,0",
+  "zone": "u3",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "passage-t4",
+  "hash": "6.400,45.600,1.5708,0",
+  "zone": "t4",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "passage-u4",
+  "hash": "700.200,-593.000,-1.5708,0",
+  "zone": "u4",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "passage-t5",
+  "hash": "6.400,49.000,1.5708,0",
+  "zone": "t5",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "passage-u5",
+  "hash": "827.400,-600.000,-1.5708,0",
+  "zone": "u5",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "passage-j3",
+  "hash": "597.000,-608.550,3.14159,0",
+  "zone": "j3",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "passage-j4",
+  "hash": "702.000,-593.000,0,0",
+  "zone": "j4",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "hotel-portal-west-open",
+  "hash": "4.2,34.8,1.5708,0",
+  "zone": "hT",
+  "eval": "await (async()=>{const {doors}=await import('/js/build.js');for(const d of doors)if(!d.of){d.set(1);d.u=d.to=1;}})(); dev.step(60);",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "hotel-portal-east-open",
+  "hash": "3.6,38.4,-1.5708,0",
+  "zone": "hT",
+  "eval": "await (async()=>{const {doors}=await import('/js/build.js');for(const d of doors)if(!d.of){d.set(1);d.u=d.to=1;}})(); dev.step(60);",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "vestibule-back-open",
+  "hash": "302.6,301.6,1.5708,0",
+  "zone": "hV",
+  "eval": "await (async()=>{const {doors}=await import('/js/build.js');for(const d of doors)if(!d.of){d.set(1);d.u=d.to=1;}})(); dev.step(60);",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "gallery-length-open",
+  "hash": "333.6,300.5,1.45,0.05",
+  "zone": "hG",
+  "eval": "await (async()=>{const {doors}=await import('/js/build.js');for(const d of doors)if(!d.of){d.set(1);d.u=d.to=1;}})(); dev.step(60);",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "lobby-lifts-open",
+  "hash": "359.2,299.6,-2.356,0",
+  "zone": "hL",
+  "eval": "await (async()=>{const {doors}=await import('/js/build.js');for(const d of doors)if(!d.of){d.set(1);d.u=d.to=1;}})(); dev.step(60);",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "terrace-court-door-open",
+  "hash": "672.5,649.4,-1.5708,0",
+  "zone": "sK",
+  "eval": "await (async()=>{const {doors}=await import('/js/build.js');for(const d of doors)if(!d.of){d.set(1);d.u=d.to=1;}})(); dev.step(60);",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "terrace-sky-stair-open",
+  "hash": "737,635,1.5708,0",
+  "zone": "sK",
+  "eval": "await (async()=>{const {doors}=await import('/js/build.js');for(const d of doors)if(!d.of){d.set(1);d.u=d.to=1;}})(); dev.step(60);",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ },
+ {
+  "name": "baths-door-open",
+  "hash": "4,24.2,-1.5708,0",
+  "zone": "hT",
+  "eval": "await (async()=>{const {doors}=await import('/js/build.js');for(const d of doors)if(!d.of){d.set(1);d.u=d.to=1;}})(); dev.step(60);",
+  "pre": "(async()=>{for(const d of (await import('/js/build.js')).doors)if(!d.of){d.set(0);d.u=d.to=0;}})()"
+ }
+]

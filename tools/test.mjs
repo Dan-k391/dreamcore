@@ -210,24 +210,31 @@ if (on('water')) { const f = run(base + '?dev&bare', `(async () => {
       [8.3, .5, -12, -1.5708, -.4], [10.5, 2.46, .4, Math.PI, 1.1],
       [16, -.122, -12, -1.5708, -.1], [16, -.12, -12, -1.5708, -.1], [16, -.118, -12, -1.5708, -.1]
     ];
-    let captures = 0, maxCaptures = 0, maxMean = 0, maxDelta = 0, count = 0;
-    r.render = function (s, c) { if (s === dev.scene && c !== dev.camera) captures++; return draw.call(this, s, c); };
+    let captures = 0, depthCaptures = 0, maxCaptures = 0, maxDepthCaptures = 0, maxMean = 0, maxDelta = 0, count = 0;
+    r.render = function (s, c) {
+      if (s === dev.scene && c !== dev.camera) {
+        let color = false;
+        s.traverse(object => { if (object.material && [].concat(object.material).some(material => material.visible && material.colorWrite)) color = true; });
+        if (color) captures++; else depthCaptures++;
+      }
+      return draw.call(this, s, c);
+    };
     dev.reset(10.5, 10.8, -1.5708); dev.step(90);
     try { for (let q = 0; q < 3; q++) {
       dev.settings.s.q = q; dev.settings.load();
       const size = r.getDrawingBufferSize(new dev.THREE.Vector2()), a = new Uint8Array(size.x * size.y * 4), b = new Uint8Array(a.length);
       for (const v of cases) {
-        waterViews.reuse = false; dev.view(...v); gl.readPixels(0, 0, size.x, size.y, gl.RGBA, gl.UNSIGNED_BYTE, a);
-        captures = 0; waterViews.reuse = true; dev.view(...v); gl.readPixels(0, 0, size.x, size.y, gl.RGBA, gl.UNSIGNED_BYTE, b);
-        maxCaptures = Math.max(maxCaptures, captures); let sum = 0;
+        waterViews.depth = false; waterViews.reuse = false; dev.view(...v); gl.readPixels(0, 0, size.x, size.y, gl.RGBA, gl.UNSIGNED_BYTE, a);
+        captures = depthCaptures = 0; waterViews.depth = true; waterViews.reuse = true; dev.view(...v); gl.readPixels(0, 0, size.x, size.y, gl.RGBA, gl.UNSIGNED_BYTE, b);
+        maxCaptures = Math.max(maxCaptures, captures); maxDepthCaptures = Math.max(maxDepthCaptures, depthCaptures); let sum = 0;
         for (let i = 0; i < a.length; i++) { const d = Math.abs(a[i] - b[i]); sum += d; maxDelta = Math.max(maxDelta, d); }
         maxMean = Math.max(maxMean, sum / a.length); count++;
       }
-    } } finally { r.render = draw; waterViews.reuse = true; dev.settings.s.q = 2; dev.settings.load(); }
-    return { count, maxCaptures, maxMean, maxDelta };
+    } } finally { r.render = draw; waterViews.depth = true; waterViews.reuse = true; dev.settings.s.q = 2; dev.settings.load(); }
+    return { count, maxCaptures, maxDepthCaptures, maxMean, maxDelta };
   })()`);
   check('shared pool pictures match per-pool captures across qualities and same-clock camera changes', f.result?.count === 27 && f.result.maxMean < .05 && f.result.maxDelta <= 8 && !f.errors.length, JSON.stringify(f));
-  check('at most one set of pool pictures (mirror, lens, deep) is rendered per main scene render', f.result?.maxCaptures === 3 && !f.errors.length, JSON.stringify(f.result)); }
+  check('at most one set of pool pictures (mirror, lens, deep) is rendered per main scene render', f.result?.maxCaptures === 3 && f.result.maxDepthCaptures <= 2 && !f.errors.length, JSON.stringify(f.result)); }
 
 if (on('water')) { const f = run(base + '?dev&bare', `(async () => (await import('/tools/water-optics.js')).waterOptics(dev))()`);
   check('pool focusing is bounded, balanced, animated, depth-filtered and responds to disturbances', f.result && Object.values(f.result.field).every(Boolean) && !f.errors.length, JSON.stringify(f.result || f));

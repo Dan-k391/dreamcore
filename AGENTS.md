@@ -34,6 +34,7 @@ When the two pull against each other, quality wins: one place finished properly 
 - 16 texture units is the hard limit per material: 9 lamp shadow maps and 1 sun shadow map are always bound, leaving 6.
 - Look at what you built, from several angles and up close, before calling it done. A change that was not looked at is not finished.
 - Screenshots go under `screenshots/` (ignored by git, never committed). The local branch `with-screenshots` is never pushed.
+- The repository holds the game, its tools and its docs, nothing else. A job's own reports, measurement dumps, logs and experiment data go under `reports/` (ignored by git, never committed); what a later reader needs from them goes into a commit message or a few lines of an existing doc.
 
 ## Working economically
 

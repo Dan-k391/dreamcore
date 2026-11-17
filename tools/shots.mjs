@@ -21,7 +21,7 @@ if (only && views.length !== only.length) { console.error('unknown view in --onl
 mkdirSync(out, { recursive: true });
 
 let last = false; // --fresh: the final, sequential pass
-const dev = process.env.FULL || views.some(v => +v.hash.split(",")[0] < -500) ? "?dev" : "?dev&bare"; // test areas (showroom, yard) lie at x < -500: load them only for views there (FULL=1 forces them)
+const dev = process.argv.includes('--bare') ? '?dev&bare' : process.env.FULL || views.some(v => +v.hash.split(",")[0] < -500) ? "?dev" : "?dev&bare"; // --bare explicitly excludes test areas, including at the distant baths (x < -500).
 const browse = fileURLToPath(new URL('./browse.mjs', import.meta.url));
 const shoot = v => new Promise(done => {
   const p = spawn(process.execPath, [browse, '--url', `http://127.0.0.1:${port}/${dev}#${v.hash}`, '--shot', join(out, v.name + '.png'), '--size', `${W}x${H}`,
@@ -29,10 +29,10 @@ const shoot = v => new Promise(done => {
     '--eval', `(async () => { const c = dev.renderer.domElement, size = () => c.width === ${W} && c.height === ${H} && innerWidth === ${W} && innerHeight === ${H};
       for (let i = 0; i < 100 && !size(); i++) await new Promise(r => setTimeout(r, 50));
       await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-      dev.hold = true; dev.lift = ${+v.lift || 0}; dev.uTime.value = 0; dev.step(90, 1 / 60);
+      dev.hold = true; dev.lift = ${+v.lift || 0}; dev.uTime.value = 0; ${v.pre ? `await (0, eval)(${JSON.stringify(v.pre)});` : ""} dev.step(90, 1 / 60);
       ${v.eval ? `await (async () => { ${v.eval} })(); dev.step(3, 1 / 60);` : ''}
       await new Promise(r => requestAnimationFrame(r));
-      if (!size()) throw new Error('canvas is ' + c.width + 'x' + c.height + ', window ' + innerWidth + 'x' + innerHeight); return true; })()`], { stdio: ['ignore', 'pipe', 'pipe'] });
+      if (${JSON.stringify(v.zone || '')} && dev.state().zone !== ${JSON.stringify(v.zone || '')}) throw new Error('wrong zone'); if (${!!v.zone} && (dev.settings.s.q !== 2 || !dev.settings.s.vsync || devicePixelRatio !== 1)) throw new Error('Expected High VSync DPR1'); if (!size()) throw new Error('canvas is ' + c.width + 'x' + c.height + ', window ' + innerWidth + 'x' + innerHeight); return true; })()`], { stdio: ['ignore', 'pipe', 'pipe'] });
   let log = ''; p.stdout.on('data', d => log += d); p.stderr.on('data', d => log += d);
   p.on('close', code => { const bad = !code && wrapped(join(out, v.name + '.png')); if (bad) { code = 1; log += bad + '\n'; }
     // every failure's log is printed, also one that is retried: a real error that shows only now and then must still be seen
@@ -103,10 +103,10 @@ const photo = async v => { // the same steps as the fresh load's eval, after dev
   await run(`(async () => { const c = dev.renderer.domElement, size = () => c.width === ${W} && c.height === ${H} && innerWidth === ${W} && innerHeight === ${H};
       for (let i = 0; i < 100 && !size(); i++) await new Promise(r => setTimeout(r, 50));
       await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-      dev.reset(${x}, ${z}, ${yaw}, ${pitch}); dev.lift = ${+v.lift || 0}; dev.step(90, 1 / 60);
+      dev.reset(${x}, ${z}, ${yaw}, ${pitch}); dev.lift = ${+v.lift || 0}; ${v.pre ? `await (0, eval)(${JSON.stringify(v.pre)});` : ""} dev.step(90, 1 / 60);
       ${v.eval ? `await (async () => { ${v.eval} })(); dev.step(3, 1 / 60);` : ''}
       await new Promise(r => requestAnimationFrame(r));
-      if (!size()) throw new Error('canvas is ' + c.width + 'x' + c.height + ', window ' + innerWidth + 'x' + innerHeight); return true; })()`);
+      if (${JSON.stringify(v.zone || '')} && dev.state().zone !== ${JSON.stringify(v.zone || '')}) throw new Error('wrong zone'); if (${!!v.zone} && (dev.settings.s.q !== 2 || !dev.settings.s.vsync || devicePixelRatio !== 1)) throw new Error('Expected High VSync DPR1'); if (!size()) throw new Error('canvas is ' + c.width + 'x' + c.height + ', window ' + innerWidth + 'x' + innerHeight); return true; })()`);
   const file = join(out, v.name + '.png');
   writeFileSync(file, Buffer.from((await send('Page.captureScreenshot', { format: 'png' })).data, 'base64'));
   return wrapped(file);

@@ -8,7 +8,7 @@
 // --eval / --eval-file: an expression (may be async, may use await) evaluated after the page is ready; its value is printed as JSON.
 // The page counts as ready when window.dev.ready is true (the game sets it in ?dev mode once the level is built), else after --settle ms.
 // Output: one JSON object {result, errors, ready, ms, requests} (requests: every URL the page asked for, data: and blob: left out). Exit code 1 if the page threw, logged an error, or the expression failed.
-import { spawn, execSync } from 'node:child_process';
+import { spawn, execSync, execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -22,7 +22,7 @@ const exe = [process.env.BROWSER, 'C:/Program Files (x86)/Microsoft/Edge/Applica
 if (!exe) { console.error('no Edge or Chrome found; set BROWSER to its path'); process.exit(2); }
 
 const profile = mkdtempSync(join(tmpdir(), 'dc-browse-')), sleep = ms => new Promise(r => setTimeout(r, ms)), t0 = Date.now();
-const child = spawn(exe, ['--headless=new', '--remote-debugging-port=0', `--user-data-dir=${profile}`, '--no-first-run', '--disable-extensions', '--enable-gpu', '--ignore-gpu-blocklist',
+const child = spawn(exe, [...(process.argv.includes('--headed') ? ['--start-maximized', '--window-position=0,0', '--inprivate', '--disable-sync', '--force-device-scale-factor=1'] : ['--headless=new']), '--remote-debugging-port=0', `--user-data-dir=${profile}`, '--no-first-run', '--disable-extensions', '--enable-gpu', '--ignore-gpu-blocklist',
   '--autoplay-policy=no-user-gesture-required', '--mute-audio', `--window-size=${w},${h}`, 'about:blank'], { stdio: 'ignore' });
 const quit = code => { try { process.platform === 'win32' ? execSync(`taskkill /PID ${child.pid} /T /F`, { stdio: 'ignore' }) : child.kill('SIGKILL'); } catch {}
   for (let i = 0; i < 5; i++) try { rmSync(profile, { recursive: true, force: true }); break; } catch { execSync(process.platform === 'win32' ? 'ping -n 2 127.0.0.1 > NUL' : 'sleep 1'); }
@@ -51,8 +51,16 @@ const run = async (expression, timeout = wait) => { // evaluate in the page; awa
 await send('Runtime.enable'); await send('Log.enable'); await send('Page.enable'); await send('Network.enable');
 await send('Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: 1, mobile: false });
 await send('Page.navigate', { url });
+if (process.argv.includes('--headed')) {
+  // Edge may open its OS-account sync prompt even with --no-first-run. Only this private process's prompt is closed.
+  await sleep(1000);
+  const { targetInfos } = await send('Target.getTargets');
+  for (const t of targetInfos) if (t.url === 'edge://sync-confirmation-dialog/') await send('Target.closeTarget', { targetId: t.targetId });
+  await send('Page.bringToFront');
+  if (process.platform === 'win32') execFileSync('powershell', ['-NoProfile', '-Command', `Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public class BenchmarkWindow { [DllImport("user32.dll")] public static extern bool ShowWindowAsync(IntPtr h, int n); [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h); }'; $benchmarkHandle = (Get-Process -Id ${child.pid}).MainWindowHandle; [BenchmarkWindow]::ShowWindowAsync($benchmarkHandle, 3) | Out-Null; [BenchmarkWindow]::SetForegroundWindow($benchmarkHandle) | Out-Null`], { stdio: 'ignore' });
+}
 let ready = false, result, failed = false;
-for (const end = Date.now() + wait; Date.now() < end && !ready && !errors.length; await sleep(250)) ready = await run('document.readyState === "complete" && !!(window.dev && window.dev.ready)', 5000).catch(() => false);
+for (const end = Date.now() + (process.argv.includes('--headed') ? Math.min(wait, 30000) : wait); Date.now() < end && !ready && !errors.length; await sleep(250)) ready = await run('document.readyState === "complete" && !!(window.dev && window.dev.ready)', 5000).catch(() => false);
 if (!ready) await sleep(settle); // not the game's dev mode: just give the page time
 try { if (expr) result = await run(expr); } catch (e) { errors.push(String(e.message || e)); failed = true; }
 if (shot) writeFileSync(shot, Buffer.from((await send('Page.captureScreenshot', { format: 'png' })).data, 'base64'));

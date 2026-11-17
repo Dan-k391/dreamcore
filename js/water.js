@@ -30,7 +30,7 @@ const OVER = 1.45;
 // Reuse a capture only within this scene render; a second render at the same time may have moved the
 // camera, changed the lights, or changed the scene (dev.waterCheck does all three). reuse false (every pool
 // captures again) stays for diagnostic A/B pictures and timings.
-const waterViews = { reuse: true, cull: true }; // cull false (?dev): pictures every frame, unscissored, for the no-pop A/B (tools/pool-skip.js)
+const waterViews = { reuse: true, cull: true, depth: true }; // cull false (?dev): pictures every frame, unscissored, for the no-pop A/B (tools/pool-skip.js)
 let captured = false, frameNo = 0, epoch = 0;
 const beforeScene = scene.onBeforeRender;
 scene.onBeforeRender = function (r, s, c, ...args) {
@@ -56,6 +56,25 @@ mirror.matrixAutoUpdate = lens.matrixAutoUpdate = false;
 const SQUASH = .12, deep = new THREE.WebGLRenderTarget(1, 1, { type: under.texture.type }), deepCam = new THREE.PerspectiveCamera();
 deep.depthTexture = new THREE.DepthTexture(1, 1, THREE.FloatType); deepCam.matrixAutoUpdate = false;
 const uDeep = { value: new THREE.Matrix4() }, uDeepW = { value: new THREE.Vector4() }, SQ = new THREE.Matrix4().makeTranslation(0, WY, 0).multiply(new THREE.Matrix4().makeScale(1, SQUASH, 1)).multiply(new THREE.Matrix4().makeTranslation(0, -WY, 0));
+const captureUnder = capture => {
+  if (!waterViews.depth || under.scissorTest) { capture(); return; }
+  const draw = renderer.render, materials = new Map();
+  scene.traverse(object => {
+    for (const material of object.material ? [].concat(object.material) : []) if (!materials.has(material)) materials.set(material, [material.colorWrite, material.visible]);
+  });
+  renderer.render = function (world, view) {
+    if (world !== scene || world.overrideMaterial || (view !== lens.camera && view !== deepCam)) return draw.call(this, world, view);
+    for (const [material] of materials) {
+      material.colorWrite = false;
+      if (material.transparent || !material.depthWrite) material.visible = false;
+    }
+    try { draw.call(this, world, view); }
+    finally { for (const [material, [colorWrite, visible]] of materials) { material.colorWrite = colorWrite; material.visible = visible; } }
+    const autoClear = this.autoClear; this.autoClear = false;
+    try { return draw.call(this, world, view); } finally { this.autoClear = autoClear; }
+  };
+  try { capture(); } finally { renderer.render = draw; }
+};
 const row = (m, r, v) => v.set(m.elements[r], m.elements[4 + r], m.elements[8 + r], m.elements[12 + r]), C = new THREE.Vector4(), Cc = new THREE.Vector4(), Q = new THREE.Vector4(), R4 = new THREE.Vector4(), INV = new THREE.Matrix4(), INVT = new THREE.Matrix4();
 const drawDeep = c => { // c: the wide camera. Its projection times the squash (in view space), with the near plane on the water (Lengyel's oblique frustum, general form)
   const Pm = deepCam.projectionMatrix.multiplyMatrices(c.projectionMatrix, c.matrixWorldInverse).multiply(SQ).multiply(c.matrixWorld), e = Pm.elements;
@@ -283,7 +302,7 @@ const ponds = pools.map(([x1, z1, x2, z2, floor, zid, seen, scatter]) => {
     mirror.matrixWorld.copy(w.matrixWorld); mirror.onBeforeRender(r, s, wideCam);
     // three's Refractor sets only its camera's matrixWorld; a scene hook calling getWorldPosition() rebuilds that from .matrix (identity), so keep .matrix the same
     lens.camera.matrix.copy(wideCam.matrixWorld);
-    sky.visible = false; lens.matrixWorld.copy(w.matrixWorld); lens.onBeforeRender(r, s, wideCam); drawDeep(wideCam); sky.visible = true; // the sky ignores the clip and would fill the gaps
+    sky.visible = false; lens.matrixWorld.copy(w.matrixWorld); captureUnder(() => { lens.onBeforeRender(r, s, wideCam); drawDeep(wideCam); }); sky.visible = true; // the sky ignores the clip and would fill the gaps
     ponds.forEach((q, i) => q.visible = on[i]);
     captured = true;
   };

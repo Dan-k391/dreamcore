@@ -7,6 +7,11 @@
   if (!ext) throw new Error('no EXT_disjoint_timer_query_webgl2: no GPU times');
   const info = renderer.info.render, med = a => { const s = [...a].sort((x, y) => x - y); return s.length ? s[s.length >> 1] : 0; }, r2 = v => +v.toFixed(2);
   const W = renderer.domElement.width, H = renderer.domElement.height;
+  const stats = a => { const s = [...a].sort((a,b)=>a-b); return {n:s.length, mean:r2(a.reduce((a,b)=>a+b,0)/a.length), p50:r2(s[Math.floor(s.length*.5)]), p95:r2(s[Math.min(s.length-1,Math.floor(s.length*.95))])}; };
+  const debug = gl.getExtension('WEBGL_debug_renderer_info');
+  const metadata = {settings:{...dev.settings.s}, quality:dev.settings.levels[dev.settings.s.q], userAgent:navigator.userAgent, renderer:debug && gl.getParameter(debug.UNMASKED_RENDERER_WEBGL), vendor:debug && gl.getParameter(debug.UNMASKED_VENDOR_WEBGL), context:gl.getContextAttributes(), viewport:[innerWidth,innerHeight], protocol:'manual-step-serialized-timer-queries', frames:CFG.frames};
+  if (dev.settings.s.q !== 2 || !dev.settings.s.vsync || devicePixelRatio !== 1 || renderer.getPixelRatio() !== 1) throw new Error('Expected High / VSync on / DPR 1');
+  const portalStats = (await import('/js/portals.js')).stats;
   // ---------- the instrument: a stack of labels, one GPU query open at a time ----------
   let on = false, stack = [], cur = null, segs = [];
   const begin = label => { cur = { label, q: gl.createQuery(), calls: info.calls, tris: info.triangles, t: performance.now() }; gl.beginQuery(ext.TIME_ELAPSED_EXT, cur.q); };
@@ -16,11 +21,11 @@
   const wrap = (o, k, label) => { const f = o[k]; o[k] = function (...a) { const l = typeof label === 'function' ? label(...a) : label, e = l && enter(l); try { return f.apply(this, a); } finally { if (e) leave(); } }; };
   const names = ['scene', 'post.ao', 'post.atmos', 'post.bloom', 'post.output', 'post.film'];
   composer.passes.forEach((p, i) => wrap(p, 'render', names[i] || 'post.' + i));
-  const pools = [], mirrors = new Set(); scene.traverse(o => { if (o.material?.uniforms?.tMirror) { pools.push(o); mirrors.add(o.material.uniforms.tMirror.value); } });
+  const pools = [], mirrors = new Set(), lenses = new Set(), depths = new Set(); scene.traverse(o => { if (o.material?.uniforms?.tMirror) { pools.push(o); mirrors.add(o.material.uniforms.tMirror.value); lenses.add(o.material.uniforms.tUnder.value); depths.add(o.material.uniforms.tDeep.value); } });
   wrap(renderer.shadowMap, 'render', (lights) => 'shadows');
   const aoP = composer.passes[1];
   wrap(renderer, 'render', (s, c) => s !== scene ? (s.material === aoP.gtaoMaterial ? 'ao.gtao' : s.material === aoP.pdMaterial ? 'ao.denoise' : stack.length ? null : 'water.sim') : s.overrideMaterial ? (stack.at(-1) === 'post.ao' ? 'ao.normals' : 'override')
-    : c === camera ? null : c.isOrthographicCamera ? 'pool.plan' : mirrors.has(renderer.getRenderTarget()?.texture) ? 'pool.mirror' : 'pool.under');
+    : c === camera ? null : c.isOrthographicCamera ? 'pool.plan' : mirrors.has(renderer.getRenderTarget()?.texture) ? 'pool.mirror' : lenses.has(renderer.getRenderTarget()?.texture) ? 'pool.lens' : depths.has(renderer.getRenderTarget()?.texture) ? 'pool.deep' : 'scene.other');
   const px = new Uint8Array(4), sync = () => gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
   const results = async list => { gl.finish(); for (let i = 0; i < 200 && !gl.getQueryParameter(list.at(-1).q, gl.QUERY_RESULT_AVAILABLE); i++) await new Promise(r => setTimeout(r, 10));
     const bad = gl.getParameter(ext.GPU_DISJOINT_EXT); for (const s of list) { s.gpu = gl.getQueryParameter(s.q, gl.QUERY_RESULT) / 1e6; gl.deleteQuery(s.q); } return !bad; };
@@ -29,7 +34,7 @@
   if (CFG.pre) await (0, eval)(CFG.pre); // --pre: an experiment set up before the views (a pass off, a size changed)
   const out = [];
   for (const v of CFG.views) {
-    const [x, z, yaw, pitch] = v.hash.split(",").map(Number); dev.reset(x, z, yaw, pitch); dev.lift = v.lift || 0; if (v.pre) await (0, eval)(v.pre); dev.step(60); sync(); // v.pre: a view's own set-up (a door open)
+    const [x, z, yaw, pitch] = v.hash.split(",").map(Number); dev.reset(x, z, yaw, pitch); dev.lift = v.lift || 0; if (v.pre) await (0, eval)(v.pre); dev.step(90); if(v.eval) { await new (Object.getPrototypeOf(async function(){}).constructor)(v.eval)(); dev.step(3); } sync(); if(v.zone && dev.state().zone !== v.zone) throw new Error(v.name + ': expected ' + v.zone + ', got ' + dev.state().zone); // v.pre: a view's own set-up (a door open)
     const frames = []; let disjoint = 0, wall = [], cpuFrame = [], cpuComp = [];
     for (let f = 0; f < CFG.frames; f++) {
       segs = []; on = true; compCPU = 0; const t = performance.now(); dev.step(1); const c = performance.now() - t; on = false; sync(); wall.push(performance.now() - t);
@@ -40,9 +45,9 @@
     }
     const labels = [...new Set(frames.flatMap(Object.keys))], pass = {};
     for (const l of labels) { const g = k => frames.map(fr => fr[l]?.[k] || 0); const busy = frames.filter(fr => fr[l]?.calls > 0).map(fr => fr[l]);
-      pass[l] = { gpu: r2(med(g('gpu'))), cpu: r2(med(g('cpu'))), calls: med(g('calls')), tris: med(g('tris')), busy: busy.length, busyGpu: r2(med(busy.map(b => b.gpu))), busyCpu: r2(med(busy.map(b => b.cpu))), busyCalls: med(busy.map(b => b.calls)) }; }
+      pass[l] = { gpu: r2(med(g('gpu'))), cpu: r2(med(g('cpu'))), calls: med(g('calls')), tris: med(g('tris')), busy: busy.length, busyGpu: r2(med(busy.map(b => b.gpu))), busyCpu: r2(med(busy.map(b => b.cpu))), busyCalls: med(busy.map(b => b.calls)), stats:Object.fromEntries(['gpu','cpu','calls','tris'].map(k=>[k,stats(g(k))])) }; }
     const total = frames.map(fr => Object.values(fr).reduce((a, s) => a + s.gpu, 0));
-    const o = { name: v.name, zone: dev.state().zone, gpu: r2(med(total)), wall: r2(med(wall)), cpuFrame: r2(med(cpuFrame)), cpuComposer: r2(med(cpuComp)), disjoint, pass };
+    const o = { name: v.name, zone: dev.state().zone, gpu: r2(med(total)), wall: r2(med(wall)), cpuFrame: r2(med(cpuFrame)), cpuComposer: r2(med(cpuComp)), disjoint, pass, state:dev.state(), portals:{drawn:portalStats.drawn,levels:portalStats.levels}, stats:{gpu:stats(total),wall:stats(wall),cpuFrame:stats(cpuFrame),cpuComposer:stats(cpuComp),cpuTotal:stats(cpuFrame.map((v,i)=>v+cpuComp[i]))}, raw:{gpu:total,wall,cpuFrame,cpuComposer:cpuComp,passes:frames} };
     { const ls = []; scene.traverse(l => { if (l.castShadow && l.shadow) ls.push(l); }); for (const l of ls) l.shadow.needsUpdate = true; renderer.shadowMap.needsUpdate = true; // every map redrawn once, as a lamp move or reset does
       segs = []; on = true; dev.step(1); on = false; await results(segs); const sh = segs.filter(s => s.label === 'shadows'); o.shadowsAll = { maps: ls.length, gpu: r2(sh.reduce((a, s) => a + s.gpu, 0)), calls: sh.reduce((a, s) => a + s.calls, 0), tris: sh.reduce((a, s) => a + s.tris, 0) }; }
     if (CFG.waste) o.waste = await waste();
@@ -51,7 +56,7 @@
   // ---------- waste: what the main pass draws, judged against the frustum, the picture and the lamps ----------
   async function waste() {
     const drawn = [], rec = Object.getPrototypeOf(THREE.Mesh.prototype).onBeforeRender; let grab = false; // what three really draws in the scene pass
-    THREE.Object3D.prototype.onBeforeRender = function (r, s, c, g, m) { if (grab && c === camera && !s.overrideMaterial) drawn.push(this); };
+    THREE.Object3D.prototype.onBeforeRender = function (r, s, c, g, m) { if (grab && this.geometry?.attributes?.position && c === camera && !s.overrideMaterial) drawn.push(this); };
     grab = true; dev.step(1); grab = false; THREE.Object3D.prototype.onBeforeRender = rec;
     for (const w of pools) if (w.visible) drawn.push(w); // a pool draws through its own hook: in, so its pixels count (and hide the floor under it)
     const meshes = [...new Set(drawn)], fr = new THREE.Frustum().setFromProjectionMatrix(new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
@@ -116,5 +121,5 @@
       zonesNoPixel: Object.entries(byZone).filter(([, b]) => !b.px).map(([z, b]) => z + ':' + b.tris), chunks: Object.fromEntries(cells.map((s, i) => [s + 'm', chunk[i]])), shaded, depth,
       lampsOn: lamps.filter(l => l.intensity > 0).length, lampsPerPx: hist.map(h => Math.round(100 * h / Math.max(geo, 1))) };
   }
-  return { W, H, dpr: devicePixelRatio, pr: renderer.getPixelRatio(), views: out };
+  return { metadata, W, H, dpr: devicePixelRatio, pr: renderer.getPixelRatio(), views: out };
 })()

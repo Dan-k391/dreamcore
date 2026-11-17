@@ -8,18 +8,20 @@
 // --waste: share of main-pass triangles outside the frustum and in meshes with no pixel on screen, grid-chunk counts, overdraw, lamps per pixel.
 // --load n: n fresh page loads, the load marks of each (ms from page start).
 import { execFileSync } from 'node:child_process';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const argv = process.argv.slice(2), arg = (k, d) => { const i = argv.indexOf('--' + k); return i < 0 ? d : argv[i + 1]; };
 const port = arg('port', '8200'), sizes = arg('size', '1280x720').split(','), json = arg('json'), frames = +arg('frames', 30), loads = +arg('load', 0);
 const all = JSON.parse(readFileSync(arg('views') || new URL('./views.json', import.meta.url), 'utf8')); // --views f.json: other views ({name, hash, lift, pre}), --only then names them
-const only = (arg('only') || 'night-hall-platform,corridor,arcade,gallery-pool,field,night-hall,hotel-hallway,mall,terrace').split(',');
+const only = (arg('only') || (arg('views') ? all.map(v => v.name).join(',') : 'night-hall-platform,corridor,arcade,gallery-pool,field,night-hall,hotel-hallway,mall,terrace')).split(',');
 const views = only.map(n => all.find(v => v.name === n)); if (views.some(v => !v)) { console.error('unknown view in --only'); process.exit(2); }
 const here = p => fileURLToPath(new URL(p, import.meta.url)), browse = here('./browse.mjs'), page = readFileSync(here('./profile.js'), 'utf8');
-const run = (size, expr, hash = views[0].hash) => { let o; try { o = execFileSync(process.execPath, [browse, '--url', `http://127.0.0.1:${port}/?dev&bare#${hash}`, '--size', size, '--eval', expr], { encoding: 'utf8', maxBuffer: 1 << 26 }); } catch (e) { o = e.stdout; }
+const run = (size, expr, hash = views[0].hash) => { const dir = mkdtempSync(join(tmpdir(), 'dc-profile-')), file = join(dir, 'eval.js'); writeFileSync(file,expr); let o; try { o = execFileSync(process.execPath, [browse, '--url', `http://127.0.0.1:${port}/?dev&bare#${hash}`, '--size', size, '--wait', arg('wait', '600000'), '--eval-file', file], { encoding: 'utf8', maxBuffer: 1 << 28 }); } catch (e) { o = e.stdout; } finally { rmSync(dir,{recursive:true,force:true}); }
   const r = JSON.parse(o); if (r.errors.length) throw new Error(r.errors.join('\n')); return r.result; };
-const f = (v, n = 6) => String(v).padStart(n), report = { sizes: {} };
+const f = (v, n = 6) => String(v).padStart(n), report = { baselineSha: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(), recordedAt: new Date().toISOString(), sizes: {} };
 for (const size of sizes) {
   const r = run(size, `(() => { const CFG = ${JSON.stringify({ views, frames, waste: argv.includes('--waste'), pre: arg('pre') })};\nreturn (\n${page}\n); })()`); report.sizes[size] = r;
   console.log(`\n== ${r.W}x${r.H} (pixel ratio ${r.pr}) — GPU ms / calls / tris per row, median of ${frames} frames`);
