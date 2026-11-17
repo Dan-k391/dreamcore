@@ -119,7 +119,24 @@ const pass2B = new THREE.ShaderMaterial({ glslVersion: THREE.GLSL3, vertexShader
       vec3 nn = normalize(vec3(-g / (128. * uMM), 1.));
       n += nn.xy; rm += texelFetch(t1, p % uN, 0).rg; }
     o0 = vec4(n / k2 * .5 + .5, rm / k2); }` });
-compileEarly(pass2A); compileEarly(pass2B);
+// The normal map's mips, made here instead of by the hardware: each level the mean of the four below for the normal and the
+// metalness, and for the roughness the slopes lost by that averaging (their variance) folded into it (GGX alpha^2 + variance,
+// Toksvig): far or grazing, a bumpy glossy surface (tiles, grout shoulders, a wet floor) broadens its highlight as it should
+// instead of sparkling and crawling. Same channels, same texture: no extra unit or tap.
+const passMip = new THREE.ShaderMaterial({ glslVersion: THREE.GLSL3, vertexShader: quadVS, uniforms: { t0: { value: null }, uL: { value: 0 } },
+  fragmentShader: `uniform highp sampler2D t0; uniform int uL; layout(location = 0) out highp vec4 o0;
+  void main() { ivec2 p = ivec2(gl_FragCoord.xy) * 2; vec2 m = vec2(0), q = vec2(0); float r = 0., met = 0.;
+    for (int i = 0; i < 4; i++) { vec4 c = texelFetch(t0, p + ivec2(i & 1, i >> 1), uL); vec2 xy = c.xy * 2. - 1.; m += xy; q += xy * xy; r += c.z; met += c.w; }
+    m *= .25; float v = max(0., (q.x + q.y) * .25 - dot(m, m));
+    r *= .25; o0 = vec4(m * .5 + .5, sqrt(sqrt(min(1., r * r * r * r + v))), met * .25); } // the roughness averaged as the hardware does, widened by the slopes` });
+compileEarly(pass2A); compileEarly(pass2B); compileEarly(passMip);
+function mipChain(s, tmp) { // s.B's levels 1.. from passMip, each drawn into tmp and copied into place (the level above is read, never drawn to)
+  const gl = renderer.getContext(), tex = renderer.properties.get(s.B.texture).__webglTexture; quad.material = passMip; passMip.uniforms.t0.value = s.B.texture;
+  for (let k = 1, w = s.b >> 1; w >= 1; k++, w >>= 1) {
+    passMip.uniforms.uL.value = k - 1; tmp.viewport.set(0, 0, w, w); renderer.setRenderTarget(tmp); quad.render(renderer);
+    renderer.state.bindTexture(gl.TEXTURE_2D, tex); gl.copyTexSubImage2D(gl.TEXTURE_2D, k, 0, 0, 0, 0, w, w);
+  }
+}
 
 async function bakeLibrary() { // run once, after every place has asked for its materials and before anything is drawn (level.js)
   if (!queue.length) return;
@@ -128,9 +145,9 @@ async function bakeLibrary() { // run once, after every place has asked for its 
   // D3D11 compiles a program ahead (compileAsync, in parallel) only for its first output, so a two-output program was compiled
   // again, one after another, on its first draw (30-250 ms a set). Drawing it twice costs a few ms; the texels are the same.
   const sc0 = () => new THREE.WebGLRenderTarget(N, N, { type: THREE.FloatType, depthBuffer: false, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
-  const scratch = [sc0(), sc0()];
+  const scratch = [sc0(), sc0()], tmp = new THREE.WebGLRenderTarget(N >> 1, N >> 1, { depthBuffer: false, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, generateMipmaps: false });
   const sc = new THREE.Scene(); // the programs were handed to the GPU as each set was first asked for (compileEarly): this waits for them
-  for (const m of [...list.map(s => s.p1), pass2A, pass2B]) { const q = new THREE.Mesh(quad._mesh.geometry, m); q.frustumCulled = false; sc.add(q); }
+  for (const m of [...list.map(s => s.p1), pass2A, pass2B, passMip]) { const q = new THREE.Mesh(quad._mesh.geometry, m); q.frustumCulled = false; sc.add(q); }
   renderer.setRenderTarget(scratch[0]); // the programs must be made for drawing into a target, as they will be
   await renderer.compileAsync(sc, new THREE.Camera()); // all at once, in parallel where the browser can
   libStats.compileMs += performance.now() - t0; performance.mark('load: library compiled');
@@ -141,10 +158,11 @@ async function bakeLibrary() { // run once, after every place has asked for its 
     u.uN.value = n; u.uMM.value = s.m * 1000 / n; u.uCav.value = s.cav;
     if (s.A) { u.uK.value = n / s.a; renderer.setRenderTarget(s.A); quad.material = pass2A; quad.render(renderer); }
     u.uK.value = n / s.b; renderer.setRenderTarget(s.B); quad.material = pass2B; quad.render(renderer);
+    if (s.name !== 'detail') mipChain(s, tmp); // (the detail set's blue is a roughness offset, not a roughness)
     s.p1.dispose(); delete s.p1;
     libStats.bytes += ((s.a * s.a) + s.b * s.b) * 4 * 1.33; libStats.sets++;
   }
-  renderer.setRenderTarget(null); for (const t of scratch) t.dispose(); pass2A.dispose(); pass2B.dispose(); quad.dispose(); preRT.dispose(); // three remakes them if a later bake needs them
+  renderer.setRenderTarget(null); for (const t of [...scratch, tmp]) t.dispose(); pass2A.dispose(); pass2B.dispose(); passMip.dispose(); quad.dispose(); preRT.dispose(); // three remakes them if a later bake needs them
   libStats.programs += list.length + 2;
   libStats.ms += performance.now() - t0;
 }

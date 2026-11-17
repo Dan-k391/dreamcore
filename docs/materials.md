@@ -7,7 +7,7 @@ Everything is generated; nothing is downloaded. Textures are GPU-baked once at l
 - `js/tex/<family>.js`: one file per family of materials, holding its texture sets and the materials made from them. A family agent edits only its own file.
 - `js/tex/blocks.js`: the GLSL every set is written with (noise and the building blocks below). Shared: change it only for all families.
 - `js/tex/registry.js`: `set()` and `mat()`, and the two registries they fill.
-- `js/tex.js`: the bake engine (two passes per set, mipmapped, anisotropic), the shared 10 cm `detail` set, and the imports of the family files, in showroom order.
+- `js/tex.js`: the bake engine (two passes per set, anisotropic; the normal/roughness map's mips made by its own pass, below), the shared 10 cm `detail` set, and the imports of the family files, in showroom order.
 - `js/mat.js`: the one shader all library materials share (macro variation, grime, dirt, wear, moire fade), `M()`, `libMat()` and the helpers (`wallMat`, `poolMats`, `lampOn` / `lampOff`, `P`).
 
 | Family file | Materials (texture set, where it is not the material's own name) |
@@ -53,6 +53,10 @@ Lengths in mm are true sizes on the surface. No block makes an edge sharper than
 - `pits(uv, k, r, density, seed)`: round pits, many small, few big.
 - `chip(cell, uv, r, prob, seed)`: a chip out of a cell's corner.
 - `stain(uv, k, cover, seed)`: a soaked blotch (`x`) and its darker tide mark (`y`).
+
+## Mips and sparkle
+
+The normal/roughness map (B) of every set but `detail` gets its mips from `passMip` in `js/tex.js`, not the hardware: per level the normal and metalness are the mean of the four texels below, and the roughness is the mean roughness widened by the variance of those four normals (GGX alpha^2 + variance, Toksvig; same channel, no extra unit or tap). Far or grazing, relief finer than the pixel (grout shoulders, mosaic, orange peel, a wet floor's grain) then broadens the highlight instead of sparkling. Measured with `tools/crawl.mjs` (shimmer against a 2x2 supersampled walk): pool hall far floor 0.88 -> 0.75, baths 1.51 -> 1.15, gallery pool 1.38 -> 1.27, the rest unchanged; arm's-length close-ups unchanged; far detail no softer; bake no slower. The `detail` set's blue is a roughness offset, not a roughness, so it keeps hardware mips. Tried and dropped: a per-pixel normal-spread term (pool hall worse), a weaker `fine` bias (no sharper, pool hall worse). Library textures already filter at the hardware's 16x anisotropy.
 
 ## Getting a material
 
