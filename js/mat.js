@@ -81,18 +81,21 @@ const fixPars = `
     uniform sampler2D tFix;
   #endif
   #ifdef AG
-    // the zone's ambient grid (lights.js ambientGrid): per cell, how open each of the six axis directions is within 2 m (1: open,
-    // the probe's own light; less in corners, under tables, in alcoves). Two RGB tiles a layer (+x+y+z, -x-y-z), filtered in x and z by
-    // the hardware, in y here. uAG0: origin (a cell centre), 1 / cell. uAG1: cells x, y, z, tiles a row. uAG2: the grid's first texel, 1 / atlas size.
-    uniform vec4 uAG0, uAG1, uAG2;
-    vec3 agTap(float t, vec2 c) { return texture2D(tFix, (uAG2.xy + vec2(mod(t, uAG1.w), floor(t / uAG1.w)) * uAG1.xz + c + .5) * uAG2.zw).rgb; }
-    float agOpen(vec3 p, vec3 n) {
+    // the zone's ambient grid (lights.js ambientGrid): per cell, the coloured bounced light a surface facing each of the six axis directions
+    // receives there, as a share of the room's mean, times how open that way is (the probe's own light where plain). Six RGBA tiles a layer
+    // (+x -x +y -y +z -z), filtered in x and z by the hardware, in y here; alpha is 1 in an open cell, 0 (rgb too) in a solid one, so the taps are
+    // weighted by openness and renormalised: a wall's cells lend nothing, nothing reaches through it. Two taps per axis the normal leans along
+    // (a wall or floor: 2). uAG0: origin (a cell centre), 1 / cell. uAG1: cells x, y, z, tiles a row. uAG2: the grid's first texel, 1 / atlas size.
+    // uAGk: how much of it (look.js light.bounce; 0 the plain capture)
+    uniform vec4 uAG0, uAG1, uAG2; uniform float uAGk;
+    vec4 agTap(float t, vec2 c) { return texture2D(tFix, (uAG2.xy + vec2(mod(t, uAG1.w), floor(t / uAG1.w)) * uAG1.xz + c + .5) * uAG2.zw); }
+    vec3 agLight(vec3 p, vec3 n) {
       vec3 g = (p + n * .3 - uAG0.xyz) * uAG0.w, c = clamp(g, vec3(0.), uAG1.xyz - 1.); // .3 m off the surface: the cells beside it, not in it
-      float e = length(g - c); if (e > 2.) return 1.; float k = floor(c.y), f = c.y - k, k1 = min(k + 1., uAG1.y - 1.); // well past the edge: plain, no reads
-      vec3 n2 = n * n, sP = step(0., n); float wP = dot(n2, sP), a = 0.; // a wall, floor or ceiling faces one side only: skip the other side's two reads
-      if (wP > 1e-3) a += dot(n2 * sP, mix(agTap(2. * k, c.xz), agTap(2. * k1, c.xz), f));
-      if (wP < .999) a += dot(n2 * (1. - sP), mix(agTap(2. * k + 1., c.xz), agTap(2. * k1 + 1., c.xz), f));
-      return mix(a, 1., clamp(e - 1., 0., 1.)); } // past the grid's edge: the plain capture
+      float e = length(g - c); if (e > 2.) return vec3(1.); float k = floor(c.y), f = c.y - k, dk = 6. * (min(k + 1., uAG1.y - 1.) - k); // well past the edge: plain, no reads
+      vec3 n2 = n * n; vec4 s = vec4(0.);
+      for (int a = 0; a < 3; a++) if (n2[a] > 1e-3) { float t = 6. * k + float(2 * a) + (n[a] < 0. ? 1. : 0.); s += n2[a] * mix(agTap(t, c.xz), agTap(t + dk, c.xz), f); }
+      vec3 r = s.a > .02 ? s.rgb / s.a : vec3(1.); // every cell around solid: plain
+      return mix(mix(vec3(1.), r, uAGk), vec3(1.), clamp(e - 1., 0., 1.)); } // past the grid's edge: the plain capture
   #endif
   #ifdef NL
     uniform vec4 uLamp[NL], uFixT[NL]; uniform vec3 uLampCol; uniform float uFixBase;
@@ -149,7 +152,7 @@ function envBox(s, u) {
       return t > 0. ? vEW + d * t - uEP : d; } // a point outside the box (a shop behind its glass): the plain lookup
   ${fixPars}` + s.fragmentShader.replace('#include <lights_fragment_begin>', begin + fixMain).replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
     #ifdef AG
-      reflectedLight.indirectDiffuse *= agOpen(vEW, inverseTransformDirection(normal, viewMatrix)); // the room's light reaches a corner less (reflections untouched)
+      reflectedLight.indirectDiffuse *= agLight(vEW, inverseTransformDirection(normal, viewMatrix)); // the room's bounced light where it falls, in its colours (reflections untouched)
     #endif`).replace('#include <envmap_physical_pars_fragment>', THREE.ShaderChunk.envmap_physical_pars_fragment.replace(
     'reflectVec = inverseTransformDirection( reflectVec, viewMatrix );', 'reflectVec = eBox( inverseTransformDirection( reflectVec, viewMatrix ) );'));
 }

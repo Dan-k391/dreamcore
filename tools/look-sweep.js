@@ -4,7 +4,7 @@
 // one zone into another, the difference in the screen's left and right halves. Time is held: the same frame is drawn each time.
 (async () => {
   const V = { hall: [3.8, 23, Math.PI, 0], back: [1.9, 20, 0, 0], pool: [7.5, -3, .75, -.18], shore: [.5, -5.3, 0, -.95], night: [26.5, -12, -1.75, .1], mall: [.5, 45, 1.2, .12], field: [3.8, 667, Math.PI, .1], gal: [23.2, 14.2, Math.PI, -.08] };
-  const where = { 'light.strength': 'back', 'light.warmth': 'hall', 'light.ambient': 'back', 'light.sun': 'field', exposure: 'back', 'mat.rough': 'mall', 'mat.wet': 'mall',
+  const where = { 'light.strength': 'back', 'light.warmth': 'hall', 'light.ambient': 'back', 'light.bounce': 'back', 'light.sun': 'field', exposure: 'back', 'mat.rough': 'mall', 'mat.wet': 'mall',
     'water.scatter': 'gal', 'water.clarity': 'shore', 'water.reflect': 'pool', 'water.waves': 'pool', 'fog.density': 'night', 'fog.color': 'night', 'bloom.strength': 'night',
     'bloom.threshold': 'night', 'bloom.radius': 'night', shafts: 'pool', 'grade.sat': 'mall', 'grade.temp': 'mall', 'grade.tint': 'mall', 'grade.contrast': 'mall', 'grade.vignette': 'mall', 'grade.grain': 'mall' };
   const gl = dev.renderer.getContext(), W = gl.drawingBufferWidth, H = gl.drawingBufferHeight;

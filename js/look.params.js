@@ -6,6 +6,7 @@ const params = [
   P('light.strength', 'light', 'Room light', 'mul', .3, 2, .05, "All of a room's light together: its lamps, its ceiling fixtures and its ambient (bounce light and reflections), so the room stays consistent."),
   P('light.warmth', 'light', 'Lamp warmth', 'add', -.5, 1, .05, 'Colour of the lamps and fixtures: up is amber, down is paler (never pure white).'),
   P('light.ambient', 'light', 'Ambient fill', 'mul', 0, 2, .05, "The room's captured bounce light and reflections alone: lower gives deeper shadows, higher fills them."),
+  P('light.bounce', 'light', 'Bounce light', 'mul', 0, 2, .05, "How much the baked bounce shapes the room's fill: where it falls, its colour from the surfaces near it, the corners. 0 is the room's capture alone, flat; up exaggerates it."),
   P('light.sun', 'light', 'Sun', 'mul', 0, 3, .05, "The sun's strength, in places under a sky. One sun lights a whole sky, so it follows the zone you stand in (mixed near openings)."),
   P('exposure', 'exposure', 'Exposure', 'add', -1.5, 1.5, .1, 'Exposure in stops (+1 doubles). Follows the zone you stand in, mixed near openings.'),
   P('mat.rough', 'materials', 'Roughness', 'mul', .3, 2, .05, "Every surface's roughness in the room: lower is glossier, sharper reflections."),
