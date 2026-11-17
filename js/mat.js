@@ -18,7 +18,7 @@ const dirt = { aoMap: grime, aoMapIntensity: .7 };
 // (dirtCol multiplies); wear: lightening toward edgeCol on rounded convex edges; vary: break up the repeat (isotropic sets
 // only); sheen: velvet-like grazing light; back: back-face albedo factor; emit: emissive colour and level (the set's pattern
 // modulates it); everything else is a material property.
-const libKeys = ['detail', 'dm', 'macro', 'grime', 'fine', 'dirt', 'wear', 'dirtCol', 'edgeCol', 'vary', 'sheen', 'back', 'emit', 'tri', 'uv', 'swap', 'floor', 'roughness'];
+const libKeys = ['detail', 'dm', 'macro', 'grime', 'fine', 'dirt', 'wear', 'dirtCol', 'edgeCol', 'vary', 'sheen', 'back', 'emit', 'tri', 'uv', 'swap', 'floor', 'roughness', 'shade'];
 // The shader every library material shares (one program, whatever the material): maps sampled by the geometry's UVs in metres
 // (build.js box-projects them) or triplanar in world space, a micro detail, macro variation, dirt and edge wear from the geometry.
 const libPars = `uniform sampler2D tLA, tLB, tLD; uniform vec4 uL0, uL1, uL2, uL3, uL4; uniform vec3 uLDirt, uLEdge; varying vec3 vLW, vLN; varying vec2 vLUv;
@@ -135,13 +135,19 @@ const fixMain = `
 // A light on the ceiling then shows in the floor where a mirror puts it, from anywhere in the room. No box (outdoors): the plain lookup.
 // lights.js's bake fills the uniforms from the zone. Every material a zone lights runs this (library ones inside libCompile).
 const envBoxU = () => ({ uEMin: { value: V(1, 1, 1) }, uEMax: { value: V(-1, -1, -1) }, uEP: { value: V(0, 0, 0) } }); // min > max: no box
+// A library material made with a shade offset (M's option shade: [x, y, z]) is lit as if it stood that far back: every lookup by world
+// position (the sun's and lamps' shadows, the lamps, fixtures, ambient grid, reflection box, and the library's world-space pattern) takes
+// the point minus uShade. The far copy of a door on a portal with no turn, and the floor just past it, are then lit as the near end is.
 function envBox(s, u) {
   Object.assign(s.uniforms, u);
-  s.vertexShader = 'varying vec3 vEW;\n' + s.vertexShader.replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvEW = worldPosition.xyz;');
-  s.fragmentShader = `varying vec3 vEW; uniform vec3 uEMin, uEMax, uEP;
+  const sh = u.uShade ? 'uniform vec3 uShade;\n' : '', LB = THREE.ShaderChunk.lights_fragment_begin, at = 'vec3 geometryPosition = - vViewPosition;';
+  if (sh && !LB.includes(at)) throw new Error("shade: three's lights_fragment_begin changed");
+  const begin = sh ? LB.replace(at, 'vec3 geometryPosition = - vViewPosition - (viewMatrix * vec4(uShade, 0.)).xyz;') : '#include <lights_fragment_begin>';
+  s.vertexShader = sh + 'varying vec3 vEW;\n' + s.vertexShader.replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\n' + (sh && 'worldPosition.xyz -= uShade;\n') + 'vEW = worldPosition.xyz;');
+  s.fragmentShader = sh + `varying vec3 vEW; uniform vec3 uEMin, uEMax, uEP;
     vec3 eBox(vec3 d) { if (uEMax.x < uEMin.x) return d; vec3 m = max((uEMax - vEW) / d, (uEMin - vEW) / d); float t = min(min(m.x, m.y), m.z);
       return t > 0. ? vEW + d * t - uEP : d; } // a point outside the box (a shop behind its glass): the plain lookup
-  ${fixPars}` + s.fragmentShader.replace('#include <lights_fragment_begin>', '#include <lights_fragment_begin>' + fixMain).replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
+  ${fixPars}` + s.fragmentShader.replace('#include <lights_fragment_begin>', begin + fixMain).replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
     #ifdef AG
       reflectedLight.indirectDiffuse *= agOpen(vEW, inverseTransformDirection(normal, viewMatrix)); // the room's light reaches a corner less (reflections untouched)
     #endif`).replace('#include <envmap_physical_pars_fragment>', THREE.ShaderChunk.envmap_physical_pars_fragment.replace(
@@ -155,7 +161,7 @@ function libCompile(s) {
     #ifdef USE_INSTANCING
       lw = instanceMatrix * lw; ln = mat3(instanceMatrix) * ln;
     #endif
-    vLW = (modelMatrix * lw).xyz; vLN = normalize(mat3(modelMatrix) * ln); vLUv = uv; }`);
+    vLW = (modelMatrix * lw).xyz${this.userData.envU.uShade ? ' - uShade' : ''}; vLN = normalize(mat3(modelMatrix) * ln); vLUv = uv; }`);
   s.fragmentShader = libPars + s.fragmentShader
     .replace('#include <map_fragment>', libMain)
     .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor *= lR;')
@@ -193,6 +199,7 @@ function libMat(name, o = {}) {
     uL2: { value: new THREE.Vector4(1, o.floor, o.uv[0], o.uv[1]) }, uL3: { value: new THREE.Vector4(o.emit ? 1 : 0, o.back, o.macro, o.swap ? 1 : 0) },
     uL4: { value: new THREE.Vector4(o.grime, o.fine, 0, 0) }, uLDirt: { value: col3(o.dirtCol) }, uLEdge: { value: col3(o.edgeCol) } };
   m.onBeforeCompile = libCompile; m.userData.lib = name; m.userData.envU = envBoxU();
+  if (o.shade) { m.userData.envU.uShade = { value: V(...o.shade) }; m.defines = { SHADE: '' }; } // its own program (three keys programs by defines)
   return m;
 }
 const libCache = new Map();

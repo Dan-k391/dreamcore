@@ -71,7 +71,7 @@ Lengths in mm are true sizes on the surface. No block makes an edge sharper than
 - `dirt`, `dirtCol`: grime where walls meet the floor, dust on tops. `wear`, `edgeCol`: lightening on rounded convex edges (hard-edged boxes get none).
 - `vary: 1`: breaks the repeat with a turned second copy (isotropic sets only; it lowers fine contrast where the copies blend).
 - `sheen`: pile seen along its length (at the rim) lighter, end-on darker; the rim lobe is as bright for a dark yarn as a light one (velvet about 1, carpets .2-.4). `back`, `emit: [colour, level]`.
-- `floor`: the height its dirt gathers at (default 0). `tri: 1`: triplanar in world space. `uv: [u, v]`: metres per unit of the geometry's own UVs, with `add(mat, geo, true)`. `swap: 1`: turn the grain 90 degrees.
+- `floor`: the height its dirt gathers at (default 0). `tri: 1`: triplanar in world space. `uv: [u, v]`: metres per unit of the geometry's own UVs, with `add(mat, geo, true)`. `swap: 1`: turn the grain 90 degrees. `shade: [x, y, z]`: lit as if standing that far back: every lookup by world position (sun and lamp shadows, lamps, fixtures, ambient grid, reflection box, the world-space pattern) takes the point minus it; its own program (define `SHADE`), others untouched. For the far side of a portal with no turn (the terrace sky door's copy, `door(..., { shade })`, and the paving past it); the geometry's own UVs are not shifted, so place the far end a whole number of texture repeats away.
 - Any `MeshStandardMaterial` property, except maps: a `*Map` option throws (a library material packs its own maps into the 6 free texture units).
 
 ## Pool optics

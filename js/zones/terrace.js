@@ -1,7 +1,7 @@
 // The terrace above the clouds.
 import * as THREE from 'three';
 import { scene, uTime, sunDir, dry, zones, defZone } from '../core.js';
-import { P, M, noCast } from '../mat.js';
+import { P, M } from '../mat.js';
 import { flats, seeThrough, skyOnly, block, box, solid, slab, portal, via } from '../build.js';
 import { globeLamp } from '../props/lights.js';
 import { door, doorway, railing } from '../props/metalwork.js';
@@ -30,7 +30,7 @@ defZone('sK', { music: 'terrace', ...dry, amb: { wind: 1.1, crickets: .6, sea: [
   for (const zc of [642.65, 656.15]) for (const x of [670.6, 674, 677.4]) pier(z, x, 0, zc, 0, { w: .81, h: 3.3, mat: "stucco", color: 0xfff4e6, course: .22 });
   for (const x of [667.25, 680.75]) for (const zc of [646, 649.4, 652.8]) pier(z, x, 0, zc, PI / 2, { w: .81, h: 3.3, mat: "stucco", color: 0xfff4e6, course: .22 });
   for (const x of [667.25, 680.75]) for (const zc of [642.65, 656.15]) pier(z, x, 0, zc, 0, { w: .71, d: .71, h: 3.3, mat: "stucco", color: 0xfff4e6, course: .22 }); // the corners
-  const BLUE = { openable: true, frame: 0x86a8d8, color: 0x86a8d8 }, CD = [675.2, 650.6], courtDoor = door(z, CD[0], 0, CD[1], PI / 2, BLUE); // the court's free-standing door: from its west face it opens onto the sky stair (below).
+  const BLUE = { openable: true, frame: 0x86a8d8, color: 0x86a8d8 }, CD = [674, 649.4], courtDoor = door(z, CD[0], 0, CD[1], PI / 2, BLUE); // the court's free-standing door: from its west face it opens onto the sky stair (below).
   // Off the court's middle, in the sunbeam of the arch east of it: at dusk its whole swing and a metre of floor either side are in sun, as at the sky end
   block(Su, 684, -8, 645.4, 694, 0, 653.4); steps(z, 689, 0, 649.4, -PI / 2, { n: 20, r: .25, g: .5, w: 8, color: 0xffffff, insert: 0x8a8276 }); // the stair, between stepped walls
   for (let i = 0; i < 4; i++) for (const zc of [645, 653.4]) { box(Su, 684 + 2.5 * i, -8, zc, 686.5 + 2.5 * i, 1.25 * (i + 1) + .9, zc + .4); edge(684 + 2.5 * i, zc, 686.5 + 2.5 * i, zc + .4, 1.25 * (i + 1) + .9, zc < 649 ? 'n' : 's'); }
@@ -43,32 +43,26 @@ defZone('sK', { music: 'terrace', ...dry, amb: { wind: 1.1, crickets: .6, sea: [
   palmPlanter(z, 665.6, 0, 641.2); palmPlanter(z, 682.3, 0, 657.8);
   // things that hang in the sky out of reach: stairs and doors
   for (const [x, y, zc, n, ry] of [[690, 9, 622, 9, .4], [712, 3, 676, 12, -1.1]]) { const c = .25 * (n - 1); steps(z, x + c * Math.cos(ry), y, zc - c * Math.sin(ry), ry - PI / 2, { n, r: .25, g: .5, w: 2, color: 0xffffff, insert: 0x8a8276 }); doorway(blue, blue, x, y + .25 * n, zc - 3, ry); }
-  { // The sky stair: white stone hanging east of the lookout, nothing holding it up. Its door is the court's door through a portal
-    // (docs/building.md, Portals) with no turn: in at the court door's west face walking east, out at the top of the stair walking east, and the
-    // same low sun on both. The top landing is the court's paving carried on (the doors 49 x -12 repeats of its 1.2 m pattern apart, so the joints
-    // run through the threshold) to the first riser; the flight and the landing below are the same limestone, a course to a tread. Nothing
-    // stands in the sun's way within 3 m of the door (the sun is 6 degrees up, from the east-south-east, so a rail post that close laid its
-    // shadow across the leaf and the threshold): the top landing has low-iron glass, which casts none, in a steel shoe; the steel rails begin
-    // at the first riser. Unseen panes 3.6 m tall on the glass's and the rails' lines, and from them to the door's jambs: no way off.
-    const X = CD[0] + 49 * 1.2, Z = CD[1] - 12 * 1.2, Y = 13.75, g = .5, S0 = X + 3.3, S1 = S0 + 6 * g, E = S1 + 2.4, zl = Z - .92, zr = Z + .92, y0 = 11.4, y1 = Y + 3.6;
-    const stone = o => M(z, 'limestone', { color: 0xffffff, wear: 0, ...o }), Lt = stone({ floor: Y }), Lb = stone({ floor: 12 }), Lf = stone({ floor: 12, swap: 1 });
-    box(Lt, X - .1, Y - .55, Z - 1, S0, Y, Z + 1); // the top landing, carrying the door's frame just behind its plane; as deep as the flight's head
-    steps(z, (S0 + S1) / 2, 12, Z, PI / 2, { n: 6, r: .25, g, w: 2, mat: Lf, plan: 0, ku: .6, insert: 0x8a8276, soffit: .3 }); // a tread to a .3 m course: the joints at the nosings
-    box(Lb, S1 - .6, 11.7, Z - 1, E, 12, Z + 1); // the landing, running under the flight's foot
-    flats.push([X - .1, Z - 1, S0, Z + 1, () => Y], [S0, Z - 1, S1, Z + 1, x => 12 + .25 * Math.min(6, Math.ceil((S1 - x) / g))], [S1, Z - 1, E, Z + 1, () => 12]);
-    const Gl = M(z, 'glass'), Sh = M(z, 'brushedSteel', { roughness: .4 }); noCast.add(Gl);
-    for (const zz of [zl, zr]) { block(Gl, X + .14, Y + .04, zz - .006, S0 - .02, Y + 1, zz + .006); block(Sh, X + .12, Y, zz - .03, S0, Y + .045, zz + .03); }
-    const run = zz => [[S0 + .08, 13.5, zz], ...[5, 3, 1].map(k => [S1 - (k - .5) * g, 12 + .25 * k, zz]), [S1 + .5, 12, zz]]; // posts on alternate treads' middles
-    railing(z, [...run(zl), [E - .08, 12, zl], [E - .08, 12, zr], ...run(zr).reverse()]);
-    for (const zz of [zl, zr]) solid(X - .05, y0, zz - .03, E - .05, y1, zz + .03);
-    solid(E - .11, y0, zl - .03, E - .05, y1, zr + .03);
-    solid(X - .05, y0, zl - .03, X + .03, y1, Z - .55); solid(X - .05, y0, Z + .55, X + .03, y1, zr + .03); // to the jambs, either side of the door
+  { // The sky stair: white stone hanging east of the lookout like its two sisters, nothing holding it up. Its door is the court's door through a
+    // portal (docs/building.md, Portals) with no turn: in at the court door's west face walking east, out at the top of the stair walking east.
+    // The doors stand O apart, 49 x -12 repeats of the court paving's 1.2 m pattern, so its joints run on over the short flat top; that paving
+    // and the door's copy are lit as if they stood back in the court (mat.js, shade: O): the arcade's shadow stripes, the ambient and the
+    // reflections carry on through the threshold, and the leaf is one lit object from either side. The court's light stops at the first riser.
+    // Unseen panes 3.6 m above the top on all four sides, and from the sides to the door's jambs: no way off.
+    const O = [49 * 1.2, 13.75, -12 * 1.2], X = CD[0] + O[0], Y = O[1], Z = CD[1] + O[2], n = 11, r = .25, g = .5, T = X + 1.2, E = T + n * g, yb = Y - (n + 1) * r, y0 = yb - .6, y1 = Y + 3.6;
+    const C = M(z, 'concreteWall', { color: 0xffffff, wear: 0 }), Lt = M(z, 'limestone', { color: 0xffffff, wear: 0, floor: 0, shade: O }); Lt.color.setScalar(1.3); // the steps' own stone; the court's paving (lifted as it is, below)
+    box(C, X - .1, yb + .001, Z - .999, T, Y - .0205, Z + .999); box(Lt, X - .1, Y - .02, Z - .999, T, Y, Z + .999); // the flat top, carrying the door's frame just behind its plane: the stair's body, the paving on it
+    steps(z, (T + E) / 2 - .005, yb, Z, PI / 2, { n, r, g, w: 2, color: 0xffffff, insert: 0x8a8276 }); // its head 5 mm into the body
+    flats.push([X - .1, Z - 1, T, Z + 1, () => Y], [T, Z - 1, E, Z + 1, x => yb + r * Math.min(n, Math.ceil((E - x) / g))]);
+    for (const [a, b] of [[Z - 1.03, Z - .99], [Z + .99, Z + 1.03]]) solid(X - .05, y0, a, E + .3, y1, b);
+    solid(E + .26, y0, Z - 1.03, E + .3, y1, Z + 1.03); // the foot, a body's width out: you stand on the last step, its edge under your toes
+    solid(X - .05, y0, Z - 1.03, X + .03, y1, Z - .55); solid(X - .05, y0, Z + .55, X + .03, y1, Z + 1.03); // to the jambs, either side of the door
     const [a] = portal([CD[0], 0, CD[1], -PI / 2], [X, Y, Z, PI / 2], 1, 2.24, courtDoor);
-    a.to.door = door(z, ...via(a, CD[0], 0, CD[1], PI / 2), { ...BLUE, copy: courtDoor });
+    a.to.door = door(z, ...via(a, CD[0], 0, CD[1], PI / 2), { ...BLUE, copy: courtDoor, shade: O });
   }
   // The ashlar and the cast steps are greyer than the white plaster this place was built in; lift them back to sunlit white stone
   // (the same keys the kit asks for, so its piers, columns and steps share them: at the court, the lookout and under the cloud)
-  for (const o of [{ floor: 0 }, { floor: 5 }, { floor: -8 }, { floor: 13.75 }, { floor: 12 }, { floor: 12, swap: 1 }]) M(z, 'limestone', { color: 0xffffff, wear: 0, ...o }).color.setScalar(1.3);
+  for (const o of [{ floor: 0 }, { floor: 5 }, { floor: -8 }]) M(z, 'limestone', { color: 0xffffff, wear: 0, ...o }).color.setScalar(1.3);
   M(z, 'concreteWall', { color: 0xffffff, wear: 0 }).color.setScalar(1.3);
   // The cloud sea: an opaque floor of cloud well below the terrace and three thinner sheets above it, all cut from one drifting pattern, lit from the low sun
   [0, 1, 2, 3].forEach(l => { const m = new THREE.Mesh(new THREE.PlaneGeometry(4000, 4000).rotateX(-Math.PI / 2), new THREE.ShaderMaterial({ transparent: l > 0, depthWrite: l === 0, uniforms: { uTime, uSun: { value: sunDir }, uL: { value: l } },

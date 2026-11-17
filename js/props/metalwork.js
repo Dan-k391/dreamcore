@@ -112,9 +112,10 @@ const turnTo = (g, dir) => g.applyQuaternion(new THREE.Quaternion().setFromUnitV
 // both faces, no overhead closer (the floor spring closes it).
 function door(z, x, y, zc, ry = 0, o = {}) {
   const Wc = o.w ?? 1, dbl = o.double ?? Wc > 1.3, K = parts(o.leaf === false ? 'frame' : dbl ? 'doubleDoor' : 'door'), Hc = 2.24, FU = .1, FD = .075, open = o.openable ? 0 : o.open ?? 0, piv = !!(o.openable || o.pivot);
-  const F = M(z, 'paintedSteel', { color: o.frame ?? 0xe9e5dc, dirt: .35, dirtCol: [.5, .45, .38], wear: .3 });
-  const Lf = o.leafMat ?? M(z, 'paintedSteel', { color: o.color ?? 0x3a6d98, dirt: .35, dirtCol: [.5, .45, .38], wear: .3 });
-  const St = M(z, 'brushedSteel'), Al = M(z, 'anodised', { color: 0xc8c8c4, roughness: .42 }), Rb = M(z, 'rubber', { color: 0x2a2826 });
+  const S = o.shade ? { shade: o.shade } : {}; // o.shade: lit as if that far back (mat.js), for a door's far copy on a portal with no turn
+  const F = M(z, 'paintedSteel', { color: o.frame ?? 0xe9e5dc, dirt: .35, dirtCol: [.5, .45, .38], wear: .3, ...S });
+  const Lf = o.leafMat ?? M(z, 'paintedSteel', { color: o.color ?? 0x3a6d98, dirt: .35, dirtCol: [.5, .45, .38], wear: .3, ...S });
+  const St = M(z, 'brushedSteel', S), Al = M(z, 'anodised', { color: 0xc8c8c4, roughness: .42, ...S }), Rb = M(z, 'rubber', { color: 0x2a2826, ...S });
   // frame profile (u outward from the opening, v through the wall): the stop stands proud on +z, the leaf closes into the rebate.
   // The opening cut for it is o.w x 2.24; the frame stands SH proud of that cut all round, so its faces never lie in the wall's
   // reveal and soffit (they would z-fight). RB: the rebate's soffit, which the leaf closes into and the strike sits on.
@@ -144,7 +145,7 @@ function door(z, x, y, zc, ry = 0, o = {}) {
   for (const yy of [1.0, 1.1]) K.p(St, screw(.003, false).rotateZ(Math.PI / 2).translate(Wc / 2 + SO - .0015, yy, SZ)); }
   if (piv && o.leaf !== false) { // the pivot door has no stop: a brush seal in a slim carrier runs round the jambs' and head's soffits, closing the 4 mm
     // round the leaf (so the shut door is sealed in its frame, not a slab in a hole), broken for the strike and the top pivot's plate
-    const Ca = M(z, 'anodised', { color: 0x6b5a48, roughness: .5 }), seal = (cx, cy, w, h, ax) => { // ax: the soffit's inward direction ('x' a jamb, 'y' the head)
+    const Ca = M(z, 'anodised', { color: 0x6b5a48, roughness: .5, ...S }), seal = (cx, cy, w, h, ax) => { // ax: the soffit's inward direction ('x' a jamb, 'y' the head)
       const g = ax === 'x' ? [rbox(.0015, h, .009, .0005), rbox(.002, h, .005, .0008)] : [rbox(w, .0015, .009, .0005), rbox(w, .002, .005, .0008)];
       const sx = ax === 'x' ? Math.sign(cx) : 0, sy = ax === 'y' ? 1 : 0;
       K.p(Ca, g[0].translate(cx - sx * .00075, cy - sy * .00075, 0)); K.p(Rb, g[1].translate(cx - sx * .0025, cy - sy * .0025, 0)); };
