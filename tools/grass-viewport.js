@@ -24,10 +24,10 @@ export async function grassViewport(dev) {
     resize(480); dev.reset(8, 680, Math.PI, -.42); dev.step(90); fresh();
     const portrait = counts(), initialPose = pose();
     resize(1280);
-    for (let frame = 0; frame < 30; frame++) composer.render(0);
+    camera.userData.cut = true; for (let frame = 0; frame < 30; frame++) composer.render(0); // both runs from fresh AO history (js/ao.js), or they differ by its sample sequence
     const resized = counts(), before = read();
     fresh();
-    for (let frame = 0; frame < 30; frame++) composer.render(0);
+    camera.userData.cut = true; for (let frame = 0; frame < 30; frame++) composer.render(0); // both runs from fresh AO history (js/ao.js), or they differ by its sample sequence
     const rebuilt = counts(), after = read();
     let sum = 0, maxDelta = 0, changedOver24 = 0;
     for (let offset = 0; offset < before.pixels.length; offset += 4) {

@@ -11,6 +11,7 @@ import { seeThrough } from './build.js';
 import { sun } from './sky.js';
 import './water.js';
 import { stats as seen } from './portals.js'; // hooks the scene draws below: what is seen through a portal goes into the same buffers
+import { setSize as aoTargets, render as aoTemporal } from './ao.js'; // the AO itself: half size, carried over frames
 
 import { zone0 as zone } from './lights.js'; // the starting zone: the look starts from it
 // ---------- post ----------
@@ -23,11 +24,12 @@ scenePass.render = (r, w, read, ...x) => sceneRender(r, w, msaa, ...x);
 composer.addPass(scenePass);
 const ao = new GTAOPass(scene, camera, 1, 1);
 ao.updateGtaoMaterial({ radius: .9, distanceExponent: 1.5, thickness: 1, scale: 1.3, samples: 16 });
-ao.output = GTAOPass.OUTPUT.Off; ao.needsSwap = false; // it only makes its denoised AO picture; atmos multiplies it in (was a copy and a multiply blend, two full-screen passes)
+ao.output = GTAOPass.OUTPUT.Off; ao.needsSwap = false; // it only makes its AO picture; atmos multiplies it in (was a copy and a multiply blend, two full-screen passes)
 composer.addPass(ao);
 const quality = { scale: 1, msaa: 4, ao: 1 }; // render scale, scene samples, AO resolution: High, what the game always drew (settings.js sets the rest)
-const aoSize = ao.setSize.bind(ao); ao.setSize = (w, h) => aoSize(Math.round(w * quality.ao), Math.round(h * quality.ao));
-const aoRender = ao.render.bind(ao); // the AO pass sees the water's surface: occlusion worked out from the pool floor would darken the water where
+const aoSize = ao.setSize.bind(ao); ao.setSize = (w, h) => { aoSize(Math.round(w * quality.ao), Math.round(h * quality.ao)); ao.gtaoRenderTarget.setSize(1, 1); ao.pdRenderTarget.setSize(1, 1); // only its normals and depth are used (js/ao.js does the rest)
+  aoTargets(ao.normalRenderTarget.width, ao.normalRenderTarget.height, quality.ao >= 1 ? 2 : 1); }; // the AO at half the render's size whatever the depth's
+const aoRender = () => { ao.overrideVisibility(); ao.renderOverride(renderer, ao.normalMaterial, ao.normalRenderTarget, 0x7777ff, 1); ao.restoreVisibility(); atmos.uniforms.tAO.value = aoTemporal(ao); }; // the AO pass sees the water's surface: occlusion worked out from the pool floor would darken the water where
 const noAO = seeThrough; // the floor lies unbent, a ghost under what the water shows bent (water.js skips its pictures for that pass). The rest see-through is left out
 ao.render = (...a) => { const on = noAO.map(w => w.visible); for (const w of noAO) w.visible = false; aoRender(...a); noAO.forEach((w, i) => w.visible = on[i]); };
 const ahead = []; // programs compiling in parallel, awaited together once the passes are set up
@@ -40,13 +42,13 @@ const ahead = []; // programs compiling in parallel, awaited together once the p
 }
 const look = { exp: zone.exp, shaft: 0, sat: zone.sat, bloom: zone.bloom, tint: zone.tint.clone(), w: new Map([[zone, 1]]), on: false }; // on: a look (look.js) is set // w: each zone's share of the mood where you stand (player.js mood)
 const atmos = new THREE.ShaderMaterial({ // distance fog per zone + sun shafts ray-marched through the sun's shadow map
-  uniforms: { tDiffuse: { value: null }, tAO: { value: ao.pdRenderTarget.texture }, tDepth: { value: ao.depthTexture }, tShadow: { value: sun.shadow.map.texture }, uPI: { value: camera.projectionMatrixInverse }, uCW: { value: camera.matrixWorld },
+  uniforms: { tDiffuse: { value: null }, tAO: { value: null }, tDepth: { value: ao.depthTexture }, tShadow: { value: sun.shadow.map.texture }, uPI: { value: camera.projectionMatrixInverse }, uCW: { value: camera.matrixWorld },
               uSM: { value: sun.shadow.matrix }, uCam: { value: camera.position }, uSun: { value: sunDir }, uFog: { value: [zone.fog.clone(), zone.fog.clone(), zone.fog.clone()] }, uFogW: { value: new THREE.Vector3(1, 0, 0) }, uShaft: { value: 0 }, uPM: { value: new THREE.Matrix4() }, uPP: { value: new THREE.Vector4() }, uPN: { value: new THREE.Vector4() }, uPR: { value: new THREE.Vector4() }, t: uTime },
   vertexShader: quadVS,
   fragmentShader: `#include <packing>
     uniform sampler2D tDiffuse, tAO, tDepth, tShadow; uniform mat4 uPI, uCW, uSM, uPM; uniform vec4 uPP, uPN, uPR; uniform vec3 uCam, uSun, uFogW; uniform vec4 uFog[3]; uniform float uShaft, t; varying vec2 vUv;
     void main() {
-      vec3 col = texture2D(tDiffuse, vUv).rgb * texture2D(tAO, vUv).rgb; // the ambient occlusion (blend intensity 1)
+      vec3 col = texture2D(tDiffuse, vUv).rgb * texture2D(tAO, vUv).r; // the ambient occlusion (blend intensity 1)
       vec4 v = uPI * vec4(vUv * 2. - 1., texture2D(tDepth, vUv).x * 2. - 1., 1.);
       vec3 ray = (uCW * vec4(v.xyz / v.w, 1.)).xyz - uCam; float len = min(length(ray), 60.); vec3 dir = normalize(ray);
       // near a doorway: the picture under each zone's fog, mixed by its share, so a thick dark fog lifts as a veil, never as grey;
