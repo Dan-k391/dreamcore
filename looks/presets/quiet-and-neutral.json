@@ -1,0 +1,1 @@
+{ "all": { "light.warmth": -0.25, "light.ambient": 0.85, "exposure": -0.1, "bloom.strength": 0.7, "grade.sat": 0.85, "grade.temp": -0.12, "grade.contrast": 0.08, "grade.vignette": 0.85, "fog.density": 0.8, "grade.grain": 0.8 }, "zones": {} }

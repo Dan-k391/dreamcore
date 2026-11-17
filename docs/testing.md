@@ -4,7 +4,7 @@ All tools are dependency-free (Node 22; the two image tools use Python 3 with Pi
 
 ## Serving
 
-`node tools/serve.mjs <port>` serves the folder it is run from on 127.0.0.1 only, with no caching. Run it in the background from the root of the copy you are working in, on the port your brief gives you, and stop it when you are done.
+`node tools/serve.mjs <port>` serves the folder it is run from on 127.0.0.1 only, with no caching. Run it in the background from the root of the copy you are working in, on the port your brief gives you, and stop it when you are done. It also saves looks (`/looks/...`, docs/look.md).
 
 ## The page
 
@@ -49,7 +49,7 @@ Areas (112 checks; every check is in exactly one; alone, in seconds on the lead'
 - `water` (9, 68 s): pool pictures against direct renders, shared pictures, optics, the mall floor's reflection, skipped pool pictures.
 - `solid` (11, 48 s): what stops you (benches, door leaf, shelter, arch, flume deck), coplanar faces, nothing pops at an opening.
 - `light` (2, 41 s): every shadow map has every caster; the loose-things shadow cache.
-- `look` (9, about 30 s): zone culling, mood at openings and passage warps, settings panel, stationary grass viewport.
+- `look` (10, about 30 s): zone culling, mood at openings and passage warps, settings panel, stationary grass viewport, the look layer (a look set and cleared gives the same frame back).
 - `loose` (14, 25 s): balls, rings, the pit.
 - `sound` (1, 12 s): music.
 

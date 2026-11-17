@@ -38,7 +38,7 @@ const ahead = []; // programs compiling in parallel, awaited together once the p
   ahead.push((async () => renderer.compileAsync?.(scene, camera))()); // the materials are collected now, synchronously
   renderer.setRenderTarget(null); for (const [o, m] of was) o.material = m; // so put them back before awaiting: other modules run meanwhile and must not see the swap
 }
-const look = { exp: zone.exp, shaft: 0, sat: zone.sat, bloom: zone.bloom, tint: zone.tint.clone(), w: new Map([[zone, 1]]) }; // w: each zone's share of the mood where you stand (player.js mood)
+const look = { exp: zone.exp, shaft: 0, sat: zone.sat, bloom: zone.bloom, tint: zone.tint.clone(), w: new Map([[zone, 1]]), on: false }; // on: a look (look.js) is set // w: each zone's share of the mood where you stand (player.js mood)
 const atmos = new THREE.ShaderMaterial({ // distance fog per zone + sun shafts ray-marched through the sun's shadow map
   uniforms: { tDiffuse: { value: null }, tAO: { value: ao.pdRenderTarget.texture }, tDepth: { value: ao.depthTexture }, tShadow: { value: sun.shadow.map.texture }, uPI: { value: camera.projectionMatrixInverse }, uCW: { value: camera.matrixWorld },
               uSM: { value: sun.shadow.matrix }, uCam: { value: camera.position }, uSun: { value: sunDir }, uFog: { value: [zone.fog.clone(), zone.fog.clone(), zone.fog.clone()] }, uFogW: { value: new THREE.Vector3(1, 0, 0) }, uShaft: { value: 0 }, uPM: { value: new THREE.Matrix4() }, uPP: { value: new THREE.Vector4() }, uPN: { value: new THREE.Vector4() }, uPR: { value: new THREE.Vector4() }, t: uTime },
@@ -74,14 +74,14 @@ const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), .3, .85, .95);
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
 const film = new THREE.ShaderMaterial({ // lens fringing, per-zone grade, vignette, grain
-  uniforms: { tDiffuse: { value: null }, t: uTime, uTint: { value: look.tint }, uSat: { value: 1 } },
+  uniforms: { tDiffuse: { value: null }, t: uTime, uTint: { value: look.tint }, uSat: { value: 1 }, uCon: { value: .4 }, uVig: { value: .7 }, uGrain: { value: .035 } },
   vertexShader: quadVS,
-  fragmentShader: `uniform sampler2D tDiffuse; uniform float t, uSat; uniform vec3 uTint; varying vec2 vUv;
+  fragmentShader: `uniform sampler2D tDiffuse; uniform float t, uSat, uCon, uVig, uGrain; uniform vec3 uTint; varying vec2 vUv;
     void main() { vec2 d = vUv - .5; float r = dot(d, d);
       vec3 c = vec3(texture2D(tDiffuse, vUv - d * r * .014).r, texture2D(tDiffuse, vUv).g, texture2D(tDiffuse, vUv + d * r * .014).b);
       c = clamp(mix(vec3(dot(c, vec3(.2126, .7152, .0722))), c, uSat) * uTint, 0., 1.);
-      c = mix(c, c * c * (3. - 2. * c), .4) * (1. - r * .7); // S-curve: deeper darks, cleaner highlights
-      c += (fract(sin(dot(gl_FragCoord.xy + fract(t) * 91., vec2(12.9898, 78.233))) * 43758.5453) - .5) * .035;
+      c = mix(c, c * c * (3. - 2. * c), uCon) * (1. - r * uVig); // S-curve: deeper darks, cleaner highlights
+      c += (fract(sin(dot(gl_FragCoord.xy + fract(t) * 91., vec2(12.9898, 78.233))) * 43758.5453) - .5) * uGrain;
       gl_FragColor = vec4(c, 1.); }`,
 });
 composer.addPass(new ShaderPass(film));

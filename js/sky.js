@@ -57,7 +57,7 @@ function setSky(k) {
   skyNow = k; const s = skies[k], d = Math.max(40, 1.6 * s.r[0]);
   sunDir.set(...s.dir).normalize();
   if (s.sky) { const v = dome.material.uniforms; v.uZen.value.set(...s.sky[0]); v.uHor.value.set(...s.sky[1]); v.uGlow.value.set(...s.sky[2]); v.uStars.value = s.sky[3]; }
-  sun.intensity = s.light; sun.color.set(s.color); sun.position.copy(sunDir).multiplyScalar(d).add(sun.target.position.set(s.at[0], 2, s.at[1]));
+  sun.intensity = sun.userData.light = s.light; sun.color.set(s.color); sun.position.copy(sunDir).multiplyScalar(d).add(sun.target.position.set(s.at[0], 2, s.at[1]));
   Object.assign(sun.shadow.camera, { left: -s.r[0], right: s.r[0], top: s.r[1], bottom: -s.r[1], near: 1, far: Math.max(90, 2.2 * d) }); sun.shadow.camera.updateProjectionMatrix();
   sun.shadow.needsUpdate = renderer.shadowMap.needsUpdate = true;
   for (const q of Object.values(skies)) for (const o of q.show) o.visible = false;

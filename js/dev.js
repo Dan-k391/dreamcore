@@ -5,14 +5,15 @@ import { colliders, emitters, floorH } from './build.js';
 import { skyNow } from './sky.js';
 import { vel, eye, o, zone, feet, air, frame, place, looseCost, resetAll } from './player.js';
 import { groups, floaters } from './physics.js';
-import { composer } from './post.js';
+import { composer, look as mood } from './post.js';
+import * as look from './look.js';
 import { libStats } from './tex.js';
 import { ponds, uTest } from './water.js';
 import { renderMusic, renderSound, startAudio } from './audio.js';
 import * as audio from './audio.js';
 import * as voices from './voices.js';
 import { pieces } from './music.js';
-import { openings } from './lights.js';
+import { openings, view as zoneView } from './lights.js';
 
 // ---------- test harness: with ?dev in the address, tools/test.mjs and tools/shots.mjs drive the game through window.dev ----------
 if (new URLSearchParams(location.search).has('dev')) {
@@ -50,6 +51,13 @@ if (new URLSearchParams(location.search).has('dev')) {
     // loop(name, x, y, z) through the live one (doors: play('door.wood.open', x, y, z)); voices: the one-shot writers (voices.js)
     openings, sound: { render: renderSound, voices, start: () => { audio.sfx || startAudio(zone); return audio.sfx; }, play: (...a) => audio.sfx?.play(...a), loop: (...a) => audio.sfx?.loop(...a), get live() { return audio.sfx; } },
     music: { render: renderMusic, pieces }, // offline renders of the sound: render([[0, zoneA], [t, zoneB]], secs, { room, tap, log }) -> { buf, ms, peakNodes, log }
+    // the look layer (docs/look.md): params, set(look) / get(), and zoneAt(): the zone you stand in, the mood's shares, the zones on screen
+    look: { params: look.params, set: look.set, get: look.get, zoneAt() {
+      const v = zoneView(zone), fr = new THREE.Frustum().setFromProjectionMatrix(new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)), b = new THREE.Box3();
+      const inView = z => fr.intersectsBox(b.set(new THREE.Vector3(z.box[0], -1e3, z.box[1]), new THREE.Vector3(z.box[2], 1e3, z.box[3])));
+      // seen.js's list from here: those seen directly if in the frustum, those through a portal as listed (shortcut: a portal's far zone is not frustum-tested)
+      const on = Object.values(zones).filter(z => z === zone || (v ? v.has(z.id) && (!v.near.has(z.id) || inView(z)) : inView(z)));
+      return { here: zone.id, mix: [...mood.w].map(([z, w]) => [z.id, +w.toFixed(3)]).sort((a, b) => b[1] - a[1]), onScreen: on.map(z => z.id) }; } },
     lib: libStats, // the material library's bake: ms, sets, bytes
     texMem() { // material textures in the scene (env maps and shadow maps aside), counted as w x h x bytes per texel x 1.33 when mipmapped
       const seen = new Set(), keys = ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'emissiveMap', 'alphaMap', 'bumpMap'];

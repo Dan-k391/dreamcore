@@ -72,10 +72,10 @@ function relight(pos, zone, fade, wts, ahead) { // fade: how far to move brightn
     const e = !keep && l.k === 0 && want.find(e => !e.light);
     if (e) {
       if (l.e) l.e.light = null;
-      l.e = e; e.light = l; l.position.copy(e.p); l.target.position.copy(e.t); l.color.set(e.color); l.angle = e.angle; l.distance = e.dist;
+      l.e = e; e.light = l; l.position.copy(e.p); l.target.position.copy(e.t); l.color.set(e.color); if (e.zone.lk) l.color.multiply(e.zone.lk.warmC); l.angle = e.angle; l.distance = e.dist;
       l.shadow.needsUpdate = renderer.shadowMap.needsUpdate = true;
     }
-    l.intensity = l.e ? l.e.power * l.k * l.k : 0;
+    l.intensity = l.e ? l.e.power * l.k * l.k * (l.e.zone.lk?.light ?? 1) : 0; // lk: the zone's look (look.js)
   }
 }
 
@@ -257,4 +257,4 @@ env0.dispose(); performance.mark('load: zones baked'); // every material has its
 const zone0 = Object.values(zones).find(z => inR(camera.position.x, camera.position.z, ...z.box)) || zones.bA;
 setSky(zone0.sky || 'day'); relight(camera.position, zone0, 1); relight(camera.position, zone0, 1); // the zone you start in
 
-export { lights, relight, bake, zone0, openings, weights };
+export { lights, relight, bake, zone0, openings, weights, view };

@@ -19,7 +19,7 @@ const AREAS = { // area: [check count (a full run warns when it differs), runs a
   water: [9, 0, 'pool pictures, optics, mirror reflections, skipped pool pictures'],
   solid: [11, 0, 'what stops you: benches, doors, arches, the flume; coplanar faces; nothing pops at an opening'],
   light: [2, 0, 'shadow maps: every caster, the loose-things cache'],
-  look: [9, 0, 'zone culling, mood at openings and passages, settings panel, grass viewport'],
+  look: [10, 0, 'zone culling, mood at openings and passages, settings panel, grass viewport, look layer'],
   loose: [14, 0, 'balls, rings, the pit and what they do'],
   sound: [1, 0, 'music'],
 };
@@ -236,6 +236,13 @@ if (on('water')) { const f = run(base + '?dev&bare', `(async () => (await import
 
 if (on('look')) { const f = run(base + '?dev&bare', `(async () => (await import('/tools/grass-viewport.js')).grassViewport(dev))()`);
   check('stationary narrow-to-wide resize shows the same grass as a freshly rebuilt view', f.result?.samePose && f.result.width === 1280 && f.result.height === 720 && f.result.maxDelta <= 1 && f.result.meanDelta <= .01 && f.result.glError === 0 && !f.errors.length, JSON.stringify(f.result || f)); }
+// The look layer (docs/look.md): a look set on every parameter and then cleared gives back the same frame, pixel for pixel, and the film pass its built values
+if (on('look')) { const f = run(base + '?dev&bare', `(() => { const gl = dev.renderer.getContext(), n = gl.drawingBufferWidth * gl.drawingBufferHeight * 4, u = dev.composer.passes.at(-1).material.uniforms;
+    const shot = L => { dev.look.set(L); dev.reset(7.5, -3, .75, -.18); dev.step(20); const a = new Uint8Array(n); gl.readPixels(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight, gl.RGBA, gl.UNSIGNED_BYTE, a); return a; };
+    const d = (a, b) => { let s = 0; for (let i = 0; i < n; i++) s += Math.abs(a[i] - b[i]); return +(s / n).toFixed(3); };
+    const all = Object.fromEntries(dev.look.params.map(p => [p.id, p.neutral + (p.max - p.neutral) * .5])), a = shot({}), b = shot({ all, zones: { pH: { 'light.strength': 1.5 } } }), c = shot({});
+    return { changed: d(a, b), back: d(a, c), film: [u.uCon.value, u.uVig.value, u.uGrain.value], lk: Object.values(dev.zones).filter(z => z.lk).length }; })()`);
+  check('a look changes the picture and clearing it gives the same frame back (js/look.js)', f.result?.changed > 5 && f.result.back === 0 && f.result.film.join() === '0.4,0.7,0.035' && f.result.lk === 0 && !f.errors.length, JSON.stringify(f.result || f)); }
 
 // No two faces of different materials in one plane (they z-fight, the flicker on door frames and passages): tools/seams.mjs --scan, every sky's places.
 if (on('solid')) try { execFileSync(process.execPath, [fileURLToPath(new URL('./seams.mjs', import.meta.url)), '--port', base.split(':')[2].slice(0, -1), '--scan'], { encoding: 'utf8' }); check('no coplanar overlapping faces (tools/seams.mjs --scan)', true); }

@@ -256,15 +256,16 @@ const frame = dt => { // one game frame of dt seconds: the loop below passes the
 // a log scale; the fog is not mixed as numbers but as pictures (post.js), up to the three largest shares.
 const tint = new THREE.Vector3();
 function mood(wts, a) {
-  const m = look.w; let sum = 0, e = 0, sh = 0, sa = 0, bl = 0;
+  const m = look.w; let sum = 0, e = 0, sh = 0, sa = 0, bl = 0, con = 0, vig = 0, sn = 0;
   for (const [z] of wts) if (!m.has(z)) m.set(z, 0);
   for (const [z, v] of m) { const t = wts.find(q => q[0] === z)?.[1] || 0, n = v + (t - v) * a; if (n < 1e-3 && !t) m.delete(z); else { m.set(z, n); sum += n; } }
   const ws = [...m].map(([z, v]) => [z, v / sum]).sort((p, q) => q[1] - p[1]); tint.set(0, 0, 0);
-  for (const [z, v] of ws) { e += v * Math.log(z.exp); sh += v * z.shaft; sa += v * z.sat; bl += v * z.bloom; tint.addScaledVector(z.tint, v); }
+  for (const [z0, v] of ws) { const z = z0.lk || z0; e += v * Math.log(z.exp); sh += v * z.shaft; sa += v * z.sat; bl += v * z.bloom; tint.addScaledVector(z.tint, v); con += v * (z.con ?? .4); vig += v * (z.vig ?? .7); sn += v * (z.sun ?? 1); } // lk: the zone with the look laid over it (look.js)
   Object.assign(look, { exp: Math.exp(e), shaft: sh, sat: sa, bloom: bl }); look.tint.copy(tint);
   const F = atmos.uniforms.uFog.value, top = ws.slice(0, 3), s3 = top.reduce((s, q) => s + q[1], 0);
-  atmos.uniforms.uFogW.value.set(...[0, 1, 2].map(i => top[i] ? top[i][1] / s3 : 0)); top.forEach(([z], i) => F[i].copy(z.fog));
+  atmos.uniforms.uFogW.value.set(...[0, 1, 2].map(i => top[i] ? top[i][1] / s3 : 0)); top.forEach(([z], i) => F[i].copy((z.lk || z).fog));
   renderer.toneMappingExposure = look.exp; bloom.strength = look.bloom; atmos.uniforms.uShaft.value = look.shaft; film.uniforms.uSat.value = look.sat;
+  film.uniforms.uCon.value = look.on ? con : .4; film.uniforms.uVig.value = look.on ? vig : .7; sun.intensity = sun.userData.light * (look.on ? sn : 1);
 }
 { const w0 = weights(camera.position.x, camera.position.z, zone); mood(w0, 1); relight(camera.position, zone, 1, w0); relight(camera.position, zone, 1, w0); } // the start: as if standing there a while
 

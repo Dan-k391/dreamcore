@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { renderer } from './core.js';
 import { frame } from './player.js';
 
+import './look.js'; // the applied look (js/look.applied.js), in every mode
 import './dev.js';
 import { s, hooks } from './settings.js';
 
