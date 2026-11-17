@@ -3,7 +3,16 @@ import * as THREE from 'three';
 
 // Anything outside a light's shadow frustum counts as shadowed instead of lit. The sun's shadow map then only has to
 // cover the one hall it shines into; every enclosed zone is dark to it for free.
-THREE.ShaderChunk.shadowmap_pars_fragment = THREE.ShaderChunk.shadowmap_pars_fragment.replace('float shadow = 1.0;', 'float shadow = 0.0;');
+THREE.ShaderChunk.shadowmap_pars_fragment = THREE.ShaderChunk.shadowmap_pars_fragment.replace('float shadow = 1.0;', 'float shadow = 0.0;')
+  .replace('unpackRGBAToDepth( texture2D( depths, uv ) )', 'unpackRGBAToDepth( textureLod( depths, uv, 0.0 ) )'); // no mips: the same texel, and no gradient, so the lookup can sit in a real branch
+// A lamp's or the sun's 16-tap shadow lookup only where that light adds anything: inside its cone and reach (three's ternary was
+// flattened by the compiler, so every pixel paid all ten) and on the side the surface faces (RE_Direct adds nothing there). The same picture.
+for (const [map, sh, coord] of [['spotShadowMap', 'spotLightShadow', 'vSpotLightCoord'], ['directionalShadowMap', 'directionalLightShadow', 'vDirectionalShadowCoord']]) {
+  const from = `directLight.color *= ( directLight.visible && receiveShadow ) ? getShadow( ${map}[ i ], ${sh}.shadowMapSize, ${sh}.shadowIntensity, ${sh}.shadowBias, ${sh}.shadowRadius, ${coord}[ i ] ) : 1.0;`;
+  if (!THREE.ShaderChunk.lights_fragment_begin.includes(from)) throw new Error("three's lights_fragment_begin changed");
+  THREE.ShaderChunk.lights_fragment_begin = THREE.ShaderChunk.lights_fragment_begin.replace(from, `
+    if ( directLight.visible && receiveShadow && ( dot( geometryNormal, directLight.direction ) > 0.0 || dot( geometryClearcoatNormal, directLight.direction ) > 0.0 ) ) directLight.color *= getShadow( ${map}[ i ], ${sh}.shadowMapSize, ${sh}.shadowIntensity, ${sh}.shadowBias, ${sh}.shadowRadius, ${coord}[ i ] );`);
+}
 
 const renderer = new THREE.WebGLRenderer({ powerPreference: 'high-performance' });
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
