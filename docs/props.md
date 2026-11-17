@@ -121,7 +121,7 @@ Every function takes the zone `z` first; "(x, y, zc, ry, o)" below means `z, x, 
 | `kerb` | (pts, o: drop) | precast kerb run, with an optional dropped crossing |
 | `bollard` | (x, y, zc, ry, o) | precast concrete bollard (the steel one is in metalwork) |
 | `speedBump` | ([[x1, y1, z1], [x2, , z2]], o) | ribbed rubber-and-plastic speed bump in bolted modules |
-| `steps` | (x, y, zc, ry, o: n, r, g, w, color, insert, soffit) | concrete flight with fluted nosings and anti-slip inserts; `soffit` (m): a hanging flight, its underside parallel to the pitch, that deep at both ends, solid per step |
+| `steps` | (x, y, zc, ry, o: n, r, g, w, color, insert, soffit, mat, plan, ku) | concrete flight with fluted nosings and anti-slip inserts; `soffit` (m): a hanging flight, its underside parallel to the pitch, that deep at both ends, solid per step; `mat` another material for the body (the terrace sky stair: limestone), `plan` and `ku` its planar mapping (plan + ku x metres along the profile) |
 | `skirting` | (pts, o: color) | gloss-painted skirting with a caulk bead along a wall run |
 | `column` | (x, y, zc, ry, o) | round stone column with plinth, drums and capital; plinth stands, shaft is a post |
 | `pier` | (x, y, zc, ry, o: mat, color) | arch pier with plinth course and moulded impost |

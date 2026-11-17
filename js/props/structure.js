@@ -401,12 +401,13 @@ function speedBump(z, [[x1, y1, z1], [x2, , z2]], o = {}) {
 function steps(z, x, y, zc, ry = 0, o = {}) {
   begin('steps');
   const n = o.n ?? 4, r = o.r ?? .16, g = o.g ?? .28, W = o.w ?? 1.4, D = n * g, cx = D / 2, cy = n * r / 2;
-  const C = M(z, 'concreteWall', { color: o.color ?? 0xdcd6cc, wear: 0 }), A = M(z, 'anodised', { color: 0xcac6be, wear: 0 }), Rb = M(z, 'hardPlastic', { color: o.insert ?? 0xd8a228, wear: 0, roughness: .8 });
+  const C = o.mat ?? M(z, 'concreteWall', { color: o.color ?? 0xdcd6cc, wear: 0 }), A = M(z, 'anodised', { color: 0xcac6be, wear: 0 }), Rb = M(z, 'hardPlastic', { color: o.insert ?? 0xd8a228, wear: 0, roughness: .8 });
+  // o.mat, o.plan, o.ku: another stone for the body, and its planar mapping's offset and scale (plan + ku * metres along the profile)
   const c = (o.soffit ?? 0) * g / r; // o.soffit: a hanging flight's waist, its depth (vertical) at both ends; the underside runs parallel to the pitch from c
   const pts = o.soffit ? [[0, 0, 0], [c, 0, 0], [D, (D - c) * r / g, 0], [D, n * r, 0]] : [[0, 0, 0], [D, 0, 0], [D, n * r, 0]];
   for (let i = n - 1; i >= 0; i--) { pts.push([i * g, (i + 1) * r, .004]); if (i) pts.push([i * g, i * r, .003]); }
   const prof = fillet(pts.map(([a, b, f]) => [a - cx, b - cy, f]), 3), own = gm => gm.rotateY(PI / 2).translate(0, cy, 0);
-  put3(C, put(own(bar(prof, W, { plan: 1.64, ku: .75, v: .3 + 1.2 * hsh(x, zc, 3) })), x, y, zc, ry));
+  put3(C, put(own(bar(prof, W, { plan: o.plan ?? 1.64, ku: o.ku ?? .75, v: .3 + 1.2 * hsh(x, zc, 3) })), x, y, zc, ry));
   const t = .003, nose = fillet([[-t, -.03, .001], [0, -.03, .001], [0, 0, .001], [.05, 0, .001], [.05, t, .001], [.046, t, 0], [.0455, t - .0008, 0], [.044, t - .0008, 0], [.0435, t, 0],
     [.008, t, 0], [.0075, t - .0008, 0], [.006, t - .0008, 0], [.0055, t, 0], [-t, t, .004]], 2); // two flutes outside the insert's slot
   const grip = [[.011, t - .0005], [.041, t - .0005]];
