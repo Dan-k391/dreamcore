@@ -30,7 +30,7 @@ const OVER = 1.45;
 // Reuse a capture only within this scene render; a second render at the same time may have moved the
 // camera, changed the lights, or changed the scene (dev.waterCheck does all three). reuse false (every pool
 // captures again) stays for diagnostic A/B pictures and timings.
-const waterViews = { reuse: true, cull: true, depth: true, mask: true }; // cull false (?dev): pictures every frame, unscissored, for the no-pop A/B (tools/pool-skip.js); depth false: no lens pre-pass; mask false: the deep picture shaded whole
+const waterViews = { reuse: true, cull: true, depth: true, mask: true, cutCull: true }; // cull false (?dev): pictures every frame, unscissored, for the no-pop A/B (tools/pool-skip.js); depth false: no lens pre-pass; mask false: the deep picture shaded whole
 let captured = false, frameNo = 0, epoch = 0;
 const beforeScene = scene.onBeforeRender;
 scene.onBeforeRender = function (r, s, c, ...args) {
@@ -72,20 +72,36 @@ const maskMat = new THREE.ShaderMaterial({ uniforms: { tDeepZ: { value: deepZ.de
       vec4 p = uDeepInv * vec4(vUv * 2. - 1., d * 2. - 1., 1.), c = uLens * uView * vec4(p.xyz / p.w, 1.); vec2 u = c.xy / c.w * .5 + .5; // the real point, in the eye's picture
       vec2 h = .5 / vec2(textureSize(tUnderZ, 0)); float e = .01 + .003 * c.w; // all four texels a lookup there blends: so no edge of the eye's picture runs through it
       if (abs(seen(u + h) - c.w) < e && abs(seen(u - h) - c.w) < e && abs(seen(u + vec2(h.x, -h.y)) - c.w) < e && abs(seen(u - vec2(h.x, -h.y)) - c.w) < e) gl_FragDepth = d - 4e-7; }` }), maskQuad = new FullScreenQuad(maskMat); // seen there: nudged nearer, so not shaded
-const depthOnly = draw => { // every material depth only, see-through ones not at all
-  const materials = new Map();
-  scene.traverse(object => { for (const material of object.material ? [].concat(object.material) : []) if (!materials.has(material)) materials.set(material, [material.colorWrite, material.visible]); });
-  for (const [material] of materials) { material.colorWrite = false; if (material.transparent || !material.depthWrite) material.visible = false; }
-  try { draw(); } finally { for (const [material, [colorWrite, visible]] of materials) { material.colorWrite = colorWrite; material.visible = visible; } }
+{ const t = renderer.getRenderTarget(); renderer.setRenderTarget(deep); const warm = (async () => renderer.compileAsync?.(maskQuad._mesh, camera))(); renderer.setRenderTarget(t); // compiled at load, not on the first pool seen
+  try { await warm; } catch (e) { console.warn('compiling ahead failed, compiling as drawn instead', e); } }
+let listed = -1; const mats = [], objs = [];
+const lists = () => { // the scene's materials and cullable things, gathered once a frame for the captures (a walk of the scene each capture cost the CPU more)
+  if (listed === frameNo) return; listed = frameNo; mats.length = objs.length = 0; const seen = new Set();
+  scene.traverse(o => { for (const m of o.material ? [].concat(o.material) : []) if (!seen.has(m)) { seen.add(m); mats.push(m); } if ((o.isMesh || o.isLine || o.isPoints) && o.frustumCulled) objs.push(o); });
 };
-const captureUnder = capture => { // the lens picture after a depth pre-pass (fewer shaded pixels where things overlap)
-  if (!waterViews.depth) { capture(); return; }
-  const draw = renderer.render;
+const depthOnly = draw => { // every material depth only, see-through ones not at all
+  lists(); const was = mats.map(m => [m.colorWrite, m.visible]);
+  for (const m of mats) { m.colorWrite = false; if (m.transparent || !m.depthWrite) m.visible = false; }
+  try { draw(); } finally { mats.forEach((m, i) => { m.colorWrite = was[i][0]; m.visible = was[i][1]; }); }
+};
+const CROP = new THREE.Matrix4(), cut = new THREE.Frustum(), hide = [];
+const captureUnder = capture => { // the three pictures drawn with what lies wholly outside the target's cut (scissors) left out, and the lens after a depth pre-pass
+  const draw = renderer.render; // (fewer shaded pixels where things overlap)
   renderer.render = function (world, view) {
-    if (world !== scene || world.overrideMaterial || view !== lens.camera) return draw.call(this, world, view);
-    depthOnly(() => draw.call(this, world, view));
-    const autoClear = this.autoClear; this.autoClear = false;
-    try { return draw.call(this, world, view); } finally { this.autoClear = autoClear; }
+    if (world !== scene || world.overrideMaterial || (view !== lens.camera && view !== mirror.camera && view !== deepCam)) return draw.call(this, world, view);
+    const t = this.getRenderTarget(), sc = t.scissor, x0 = sc.x / t.width * 2 - 1, x1 = (sc.x + sc.z) / t.width * 2 - 1, y0 = sc.y / t.height * 2 - 1, y1 = (sc.y + sc.w) / t.height * 2 - 1;
+    if (waterViews.cutCull && t.scissorTest && x1 > x0 && y1 > y0) { // the cut as a frustum: the picture's projection stretched so the cut fills it
+      CROP.set(2 / (x1 - x0), 0, 0, -(x1 + x0) / (x1 - x0), 0, 2 / (y1 - y0), 0, -(y1 + y0) / (y1 - y0), 0, 0, 1, 0, 0, 0, 0, 1);
+      cut.setFromProjectionMatrix(CROP.multiply(view.projectionMatrix).multiply(view.matrixWorldInverse));
+      lists(); for (const o of objs) if (o.visible && !cut.intersectsObject(o)) hide.push(o); // (a thing under a hidden parent is hidden and shown again: no change)
+      for (const o of hide) o.visible = false;
+    }
+    try {
+      if (view !== lens.camera || !waterViews.depth) return draw.call(this, world, view);
+      depthOnly(() => draw.call(this, world, view));
+      const autoClear = this.autoClear; this.autoClear = false;
+      try { return draw.call(this, world, view); } finally { this.autoClear = autoClear; }
+    } finally { for (const o of hide) o.visible = true; hide.length = 0; }
   };
   try { capture(); } finally { renderer.render = draw; }
 };
@@ -368,7 +384,7 @@ const ponds = pools.map(([x1, z1, x2, z2, floor, zid, seen, scatter]) => {
     wideCam.copy(c); wideCam.projectionMatrix.elements[0] /= OVER; wideCam.projectionMatrix.elements[5] /= OVER; wideCam.projectionMatrixInverse.copy(wideCam.projectionMatrix).invert();
     const on = ponds.map(q => q.visible); // every pool is at the same level, so none belongs in another's mirror or underwater picture
     for (const q of ponds) q.visible = false;
-    mirror.matrixWorld.copy(w.matrixWorld); mirror.onBeforeRender(r, s, wideCam);
+    mirror.matrixWorld.copy(w.matrixWorld); captureUnder(() => mirror.onBeforeRender(r, s, wideCam));
     // three's Refractor sets only its camera's matrixWorld; a scene hook calling getWorldPosition() rebuilds that from .matrix (identity), so keep .matrix the same
     lens.camera.matrix.copy(wideCam.matrixWorld);
     sky.visible = false; lens.matrixWorld.copy(w.matrixWorld); captureUnder(() => { lens.onBeforeRender(r, s, wideCam); drawDeep(wideCam); }); sky.visible = true; // the sky ignores the clip and would fill the gaps

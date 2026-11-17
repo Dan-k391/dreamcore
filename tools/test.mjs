@@ -185,8 +185,10 @@ check('the first sign is drawn in under 0.5 s and the openings are found in unde
 }
 
 // Frame-cost ceilings at the two heaviest views of the real game (every pass of one frame). Before places were culled by what can be
-// seen from where you stand (js/seen.js) the gallery drew 902 calls / 6.9 M triangles; now about 340 / 1.4 M, the corridor 680 / 3.2 M.
-if (on('load')) for (const [name, hash, calls, tris] of [['gallery-pool', '23.2,14.2,3.14159,-0.08', 500, 2.5e6], ['corridor', '10.5,10.8,-1.5708,0', 900, 4.2e6]]) {
+// seen from where you stand (js/seen.js) the gallery drew 902 calls / 6.9 M triangles; then about 340 / 1.4 M, the corridor 680 / 3.2 M.
+// Since the pools' depth pre-passes (water.js: the lens's, and the deep picture's for its mask) the gallery draws about 530 / 2.8 M: each
+// pool view submits the underwater scene twice more, for about .6 ms of CPU against 0.7-1.3 ms of GPU saved; its ceiling moved from 500 / 2.5 M.
+if (on('load')) for (const [name, hash, calls, tris] of [['gallery-pool', '23.2,14.2,3.14159,-0.08', 600, 3.2e6], ['corridor', '10.5,10.8,-1.5708,0', 900, 4.2e6]]) {
   const f = run(base + '?dev&bare#' + hash, `(() => { dev.hold = true; dev.step(60); const n = dev.info(); return { calls: n.calls, tris: n.triangles }; })()`);
   check(`${name} draws under ${calls} calls and ${tris / 1e6} M triangles a frame`, f.result?.calls < calls && f.result?.tris < tris, JSON.stringify(f.result));
 }
