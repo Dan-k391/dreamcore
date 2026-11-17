@@ -39,7 +39,7 @@ function set(look) {
     p.uScatter.value.copy(scat0.get(w)).multiplyScalar(v('water.scatter') * v('light.strength')); }
   for (const l of lights) if (l.e) { l.color.set(l.e.color); if (l.e.zone.lk) l.color.multiply(l.e.zone.lk.warmC); } // intensities: relight, every frame
   bloom.threshold = bloom0.t + (L.all['bloom.threshold'] ?? 0); bloom.radius = bloom0.r + (L.all['bloom.radius'] ?? 0);
-  film.uniforms.uGrain.value = .035 * (L.all['grade.grain'] ?? 1);
+  film.uniforms.uGrain.value = .026 * (L.all['grade.grain'] ?? 1);
   return get();
 }
 const get = () => JSON.parse(JSON.stringify(cur));

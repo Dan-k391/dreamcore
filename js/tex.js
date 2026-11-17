@@ -92,14 +92,16 @@ function compileEarly(m) { // hand a bake program to the GPU now, while the plac
 }
 function libTex(name) {
   const s = sets[name]; if (!s) throw new Error('no texture set ' + name);
-  if (!s.B) { s.A = s.a ? rt(s.a, true) : null; s.B = rt(s.b, false); queue.push(s); compileEarly(s.p1 = p1Of(s)); }
+  if (!s.B) { s.A = s.a ? rt(s.a, true) : null; s.B = rt(s.b, false);
+    if (s.a) { s.B.texture.generateMipmaps = false; s.B.texture.mipmaps = Array.from({ length: 1 + Math.log2(s.b) }, () => ({})); }
+    queue.push(s); compileEarly(s.p1 = p1Of(s)); }
   return s;
 }
 const detailTex = libTex('detail').B.texture;
 const libStats = { ms: 0, compileMs: 0, sets: 0, bytes: 0, programs: 0 }; // what the last bake cost (programs: made for it, all freed after)
-const P2 = `uniform highp sampler2D t0, t1; uniform int uN, uK; uniform float uMM, uCav; layout(location = 0) out highp vec4 o0;
+const P2 = `uniform highp sampler2D t0, t1; uniform int uN, uK; uniform float uMM, uCav; uniform bool uDetail; layout(location = 0) out highp vec4 o0;
   vec4 T0(ivec2 p) { return texelFetch(t0, (p + uN) % uN, 0); } float H(ivec2 p) { return T0(p).a; }`;
-const pass2A = new THREE.ShaderMaterial({ glslVersion: THREE.GLSL3, vertexShader: quadVS, uniforms: { t0: { value: null }, t1: { value: null }, uN: { value: 1 }, uK: { value: 1 }, uMM: { value: 1 }, uCav: { value: 0 } },
+const pass2A = new THREE.ShaderMaterial({ glslVersion: THREE.GLSL3, vertexShader: quadVS, uniforms: { t0: { value: null }, t1: { value: null }, uN: { value: 1 }, uK: { value: 1 }, uMM: { value: 1 }, uCav: { value: 0 }, uDetail: { value: false } },
   fragmentShader: `${P2}
   void main() { // albedo: a box-filtered block of the bake, darkened where it sits below the height around it
     ivec2 o = ivec2(gl_FragCoord.xy) * uK; vec3 c = vec3(0); float t = 0., k2 = float(uK * uK);
@@ -111,15 +113,28 @@ const pass2B = new THREE.ShaderMaterial({ glslVersion: THREE.GLSL3, vertexShader
   fragmentShader: `${P2}
   const float G[5] = float[5](1., 4., 6., 4., 1.), D[5] = float[5](-1., -2., 0., 2., 1.);
   void main() { // normal from the height at its true scale, plus roughness and metalness, box-filtered
-    ivec2 o = ivec2(gl_FragCoord.xy) * uK; vec2 n = vec2(0); vec2 rm = vec2(0); float k2 = float(uK * uK);
+    ivec2 o = ivec2(gl_FragCoord.xy) * uK; vec2 n = vec2(0); vec2 rm = vec2(0); float energy = 0.; float k2 = float(uK * uK);
     for (int y = 0; y < 4; y++) for (int x = 0; x < 4; x++) { if (x >= uK || y >= uK) continue; ivec2 p = o + ivec2(x, y);
       // the slope by a 5x5 derivative of a Gaussian, not a 3x3 Sobel: a joint or a step a texel wide gives a smooth
       // normal instead of a one-texel spike, so edges don't alias into stepped double lines in raking light
       vec2 g = vec2(0); for (int j = 0; j < 5; j++) for (int i = 0; i < 5; i++) g += vec2(D[i] * G[j], G[i] * D[j]) * H(p + ivec2(i - 2, j - 2));
       vec3 nn = normalize(vec3(-g / (128. * uMM), 1.));
-      n += nn.xy; rm += texelFetch(t1, p % uN, 0).rg; }
-    o0 = vec4(n / k2 * .5 + .5, rm / k2); }` });
-compileEarly(pass2A); compileEarly(pass2B);
+      vec2 q = texelFetch(t1, p % uN, 0).rg;
+      n += nn.xy; rm += q; energy += pow(clamp(q.x, 0., 1.), 4.) + dot(nn.xy, nn.xy); }
+    o0 = uDetail ? vec4(n / k2 * (127. / 255.) + 128. / 255., rm / k2) : vec4(n / k2, energy / k2, rm.y / k2); }` });
+// Float moments are reduced, never the quantized output. E[r^4 + |n.xy|^2] minus
+// |E[n.xy]|^2 supplies unresolved normal energy once, including the base bake footprint.
+// Two scratch textures avoid sampling any mip of the texture currently attached for writing.
+const mipB = new THREE.ShaderMaterial({ glslVersion: THREE.GLSL3, vertexShader: quadVS,
+  uniforms: { tMoment: { value: null }, uPack: { value: false } },
+  fragmentShader: `uniform highp sampler2D tMoment; uniform bool uPack; layout(location = 0) out highp vec4 o0;
+    void main() { ivec2 p = ivec2(gl_FragCoord.xy); vec4 q;
+      if (uPack) { q = texelFetch(tMoment, p, 0);
+        o0 = vec4(q.xy * (127. / 255.) + 128. / 255., pow(max(0., q.z - dot(q.xy, q.xy)), .25), q.w);
+      } else { p *= 2; o0 = (texelFetch(tMoment, p, 0) + texelFetch(tMoment, p + ivec2(1,0), 0)
+          + texelFetch(tMoment, p + ivec2(0,1), 0) + texelFetch(tMoment, p + ivec2(1,1), 0)) * .25; }
+    }` });
+compileEarly(pass2A); compileEarly(pass2B); compileEarly(mipB);
 
 async function bakeLibrary() { // run once, after every place has asked for its materials and before anything is drawn (level.js)
   if (!queue.length) return;
@@ -128,9 +143,9 @@ async function bakeLibrary() { // run once, after every place has asked for its 
   // D3D11 compiles a program ahead (compileAsync, in parallel) only for its first output, so a two-output program was compiled
   // again, one after another, on its first draw (30-250 ms a set). Drawing it twice costs a few ms; the texels are the same.
   const sc0 = () => new THREE.WebGLRenderTarget(N, N, { type: THREE.FloatType, depthBuffer: false, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
-  const scratch = [sc0(), sc0()];
+  const scratch = [sc0(), sc0()], moments = [sc0(), scratch[0]];
   const sc = new THREE.Scene(); // the programs were handed to the GPU as each set was first asked for (compileEarly): this waits for them
-  for (const m of [...list.map(s => s.p1), pass2A, pass2B]) { const q = new THREE.Mesh(quad._mesh.geometry, m); q.frustumCulled = false; sc.add(q); }
+  for (const m of [...list.map(s => s.p1), pass2A, pass2B, mipB]) { const q = new THREE.Mesh(quad._mesh.geometry, m); q.frustumCulled = false; sc.add(q); }
   renderer.setRenderTarget(scratch[0]); // the programs must be made for drawing into a target, as they will be
   await renderer.compileAsync(sc, new THREE.Camera()); // all at once, in parallel where the browser can
   libStats.compileMs += performance.now() - t0; performance.mark('load: library compiled');
@@ -140,12 +155,27 @@ async function bakeLibrary() { // run once, after every place has asked for its 
     for (let k = 0; k < 2; k++) { scratch[k].viewport.set(0, 0, n, n); s.p1.uniforms.uOut.value = k; renderer.setRenderTarget(scratch[k]); quad.render(renderer); }
     u.uN.value = n; u.uMM.value = s.m * 1000 / n; u.uCav.value = s.cav;
     if (s.A) { u.uK.value = n / s.a; renderer.setRenderTarget(s.A); quad.material = pass2A; quad.render(renderer); }
-    u.uK.value = n / s.b; renderer.setRenderTarget(s.B); quad.material = pass2B; quad.render(renderer);
+    u.uK.value = n / s.b; u.uDetail.value = !s.a;
+    moments[0].viewport.set(0, 0, s.b, s.b);
+    renderer.setRenderTarget(s.a ? moments[0] : s.B); quad.material = pass2B; quad.render(renderer);
+    if (s.a) {
+      let src = 0; quad.material = mipB;
+      for (let level = 0, size = s.b; size >= 1; level++, size >>= 1) {
+        if (level) {
+          const dst = 1 - src; moments[dst].viewport.set(0, 0, size, size);
+          mipB.uniforms.tMoment.value = moments[src].texture; mipB.uniforms.uPack.value = false;
+          renderer.setRenderTarget(moments[dst]); quad.render(renderer); src = dst;
+        }
+        mipB.uniforms.tMoment.value = moments[src].texture; mipB.uniforms.uPack.value = true;
+        s.B.viewport.set(0, 0, size, size); renderer.setRenderTarget(s.B, 0, level); quad.render(renderer);
+      }
+      s.B.viewport.set(0, 0, s.b, s.b);
+    }
     s.p1.dispose(); delete s.p1;
     libStats.bytes += ((s.a * s.a) + s.b * s.b) * 4 * 1.33; libStats.sets++;
   }
-  renderer.setRenderTarget(null); for (const t of scratch) t.dispose(); pass2A.dispose(); pass2B.dispose(); quad.dispose(); preRT.dispose(); // three remakes them if a later bake needs them
-  libStats.programs += list.length + 2;
+  renderer.setRenderTarget(null); for (const t of new Set([...scratch, ...moments])) t.dispose(); pass2A.dispose(); pass2B.dispose(); mipB.dispose(); quad.dispose(); preRT.dispose(); // three remakes them if a later bake needs them
+  libStats.programs += list.length + 3;
   libStats.ms += performance.now() - t0;
 }
 

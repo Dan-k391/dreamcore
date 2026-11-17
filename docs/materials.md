@@ -7,7 +7,7 @@ Everything is generated; nothing is downloaded. Textures are GPU-baked once at l
 - `js/tex/<family>.js`: one file per family of materials, holding its texture sets and the materials made from them. A family agent edits only its own file.
 - `js/tex/blocks.js`: the GLSL every set is written with (noise and the building blocks below). Shared: change it only for all families.
 - `js/tex/registry.js`: `set()` and `mat()`, and the two registries they fill.
-- `js/tex.js`: the bake engine (two passes per set, mipmapped, anisotropic), the shared 10 cm `detail` set, and the imports of the family files, in showroom order.
+- `js/tex.js`: the bake engine (two surface passes plus moment-filtered normal/roughness mips, anisotropic), the shared 10 cm `detail` set, and the imports of the family files, in showroom order.
 - `js/mat.js`: the one shader all library materials share (macro variation, grime, dirt, wear, moire fade), `M()`, `libMat()` and the helpers (`wallMat`, `poolMats`, `lampOn` / `lampOff`, `P`).
 
 | Family file | Materials (texture set, where it is not the material's own name) |
@@ -73,6 +73,12 @@ Lengths in mm are true sizes on the surface. No block makes an edge sharper than
 - `sheen`: pile seen along its length (at the rim) lighter, end-on darker; the rim lobe is as bright for a dark yarn as a light one (velvet about 1, carpets .2-.4). `back`, `emit: [colour, level]`.
 - `floor`: the height its dirt gathers at (default 0). `tri: 1`: triplanar in world space. `uv: [u, v]`: metres per unit of the geometry's own UVs, with `add(mat, geo, true)`. `swap: 1`: turn the grain 90 degrees. `shade: [x, y, z]`: lit as if standing that far back: every lookup by world position (sun and lamp shadows, lamps, fixtures, ambient grid, reflection box, the world-space pattern) takes the point minus it; its own program (define `SHADE`), others untouched. For the far side of a portal with no turn (the terrace sky door's copy, `door(..., { shade })`, and the paving past it); the geometry's own UVs are not shifted, so place the far end a whole number of texture repeats away.
 - Any `MeshStandardMaterial` property, except maps: a `*Map` option throws (a library material packs its own maps into the 6 free texture units).
+
+## Normal and roughness filtering
+
+Packed B remains RGBA8: signed normal XY, effective perceptual roughness, metalness. Its explicit mip chain averages floating-point `E[n.xy]` and `E[r^4 + |n.xy|^2]`, then stores the fourth root of their difference. This is bounded tangent-normal variance (a small-slope approximation), not unbounded slope moments. Each mip is encoded once; rounded RG uses byte 128 for exactly zero. Float ping-pong scratch never samples a texture attached for writing; all levels through 1x1 have explicit storage. A, tint/emission and metalness retain their meanings, texture sizes and runtime sampler counts are unchanged, and the temporary extra float target is freed after baking. Authored roughness multipliers still scale the combined effective roughness.
+
+The shared detail texture deliberately keeps its original micro-gloss B and macro-field A; neither is reinterpreted as variance. Its hardware-filtered residual normal derivatives contribute a bounded pixel-footprint variance in the shader, only where the existing UV normal path actually uses them. Main B variance is not added again. This is a local anti-aliasing approximation, not a full second-moment representation of the shared detail. `tools/material-mips.js` checks conservation of combined normal/roughness energy and metalness across the actual packed mip chains.
 
 ## Pool optics
 

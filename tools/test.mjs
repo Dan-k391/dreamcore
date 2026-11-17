@@ -15,7 +15,7 @@ const AREAS = { // area: [check count (a full run warns when it differs), runs a
   perf: [5, 1, 'checks that measure time: library bake, ready, first sign, openings, physics budgets'],
   seen: [1, 0, 'js/seen.js covers what each zone can see (tools/pvs.mjs --check, the longest single check)'],
   move: [51, 0, 'walks between places, jumping and hopping, ladders, passage warps, portals, doors, noclip, the flume'],
-  load: [12, 0, 'page loads, draw-call and shader-compile guards, frame ceilings, the single file, other hosts, production'],
+  load: [13, 0, 'page loads, draw-call and shader-compile guards, frame ceilings, the single file, other hosts, production'],
   water: [9, 0, 'pool pictures, optics, mirror reflections, skipped pool pictures'],
   solid: [11, 0, 'what stops you: benches, doors, arches, the flume; coplanar faces; nothing pops at an opening'],
   light: [2, 0, 'shadow maps: every caster, the loose-things cache'],
@@ -236,6 +236,8 @@ if (on('water')) { const f = run(base + '?dev&bare', `(async () => {
   check('shared pool pictures match per-pool captures across qualities and same-clock camera changes', f.result?.count === 27 && f.result.maxMean < .05 && f.result.maxDelta <= 8 && !f.errors.length, JSON.stringify(f));
   check('at most one set of pool pictures (mirror, lens, deep) is rendered per main scene render', f.result?.maxCaptures === 3 && f.result.maxDepthCaptures <= 2 && !f.errors.length, JSON.stringify(f.result)); }
 
+if (on('load')) { const f = run(base + '?dev&bare', `(async () => (await import('/tools/material-mips.js')).materialMips(dev))()`);
+  check('packed material mips conserve normal/roughness energy and metalness', !f.errors.length && f.result?.ok, JSON.stringify(f.result?.rows?.filter(x => x.error >= .012 || x.metalError >= .004) || f.errors)); }
 if (on('water')) { const f = run(base + '?dev&bare', `(async () => (await import('/tools/water-optics.js')).waterOptics(dev))()`);
   check('pool focusing is bounded, balanced, animated, depth-filtered and responds to disturbances', f.result && Object.values(f.result.field).every(Boolean) && !f.errors.length, JSON.stringify(f.result || f));
   check('all four pool palettes retain finite nonnegative water and visible caustic modulation', f.result?.rows.length === 4 && f.result.rows.every(row => row.waterPixels > 10000 && row.nonfinite === 0 && row.negative === 0 && row.meanLinearModulation > 1e-5) && !f.errors.length, JSON.stringify(f.result?.rows || f));
@@ -253,7 +255,7 @@ if (on('look')) { const f = run(base + '?dev&bare', `(() => { const gl = dev.ren
     const d = (a, b) => { let s = 0; for (let i = 0; i < n; i++) s += Math.abs(a[i] - b[i]); return +(s / n).toFixed(3); };
     const all = Object.fromEntries(dev.look.params.map(p => [p.id, p.neutral + (p.max - p.neutral) * .5])), a = shot({}), b = shot({ all, zones: { pH: { 'light.strength': 1.5 } } }), c = shot({});
     return { changed: d(a, b), back: d(a, c), film: [u.uCon.value, u.uVig.value, u.uGrain.value], lk: Object.values(dev.zones).filter(z => z.lk).length }; })()`);
-  check('a look changes the picture and clearing it gives the same frame back (js/look.js)', f.result?.changed > 5 && f.result.back === 0 && f.result.film.join() === '0.4,0.7,0.035' && f.result.lk === 0 && !f.errors.length, JSON.stringify(f.result || f)); }
+  check('a look changes the picture and clearing it gives the same frame back (js/look.js)', f.result?.changed > 5 && f.result.back === 0 && f.result.film.join() === '0.4,0.7,0.026' && f.result.lk === 0 && !f.errors.length, JSON.stringify(f.result || f)); }
 
 // No two faces of different materials in one plane (they z-fight, the flicker on door frames and passages): tools/seams.mjs --scan, every sky's places.
 if (on('solid')) try { execFileSync(process.execPath, [fileURLToPath(new URL('./seams.mjs', import.meta.url)), '--port', base.split(':')[2].slice(0, -1), '--scan'], { encoding: 'utf8' }); check('no coplanar overlapping faces (tools/seams.mjs --scan)', true); }

@@ -74,11 +74,11 @@ const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), .3, .85, .95);
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
 const film = new THREE.ShaderMaterial({ // lens fringing, per-zone grade, vignette, grain
-  uniforms: { tDiffuse: { value: null }, t: uTime, uTint: { value: look.tint }, uSat: { value: 1 }, uCon: { value: .4 }, uVig: { value: .7 }, uGrain: { value: .035 } },
+  uniforms: { tDiffuse: { value: null }, t: uTime, uTint: { value: look.tint }, uSat: { value: 1 }, uCon: { value: .4 }, uVig: { value: .7 }, uGrain: { value: .026 } },
   vertexShader: quadVS,
   fragmentShader: `uniform sampler2D tDiffuse; uniform float t, uSat, uCon, uVig, uGrain; uniform vec3 uTint; varying vec2 vUv;
     void main() { vec2 d = vUv - .5; float r = dot(d, d);
-      vec3 c = vec3(texture2D(tDiffuse, vUv - d * r * .014).r, texture2D(tDiffuse, vUv).g, texture2D(tDiffuse, vUv + d * r * .014).b);
+      vec3 c = vec3(texture2D(tDiffuse, vUv - d * r * .002).r, texture2D(tDiffuse, vUv).g, texture2D(tDiffuse, vUv + d * r * .002).b);
       c = clamp(mix(vec3(dot(c, vec3(.2126, .7152, .0722))), c, uSat) * uTint, 0., 1.);
       c = mix(c, c * c * (3. - 2. * c), uCon) * (1. - r * uVig); // S-curve: deeper darks, cleaner highlights
       c += (fract(sin(dot(gl_FragCoord.xy + fract(t) * 91., vec2(12.9898, 78.233))) * 43758.5453) - .5) * uGrain;

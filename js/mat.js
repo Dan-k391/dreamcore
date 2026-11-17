@@ -35,7 +35,7 @@ const libPars = `uniform sampler2D tLA, tLB, tLD; uniform vec4 uL0, uL1, uL2, uL
     float lb = lBias(t); a = texture(tLA, t, lb); b = texture(tLB, t, lb);
     if (uL1.z > 0.) { // break the repeat: a second, turned copy faded in and out by a slow field
       vec2 t2 = lRot * t + vec2(.371, .713); vec4 a2 = texture(tLA, t2, lb), b2 = texture(tLB, t2, lb);
-      b2.xy = ((b2.xy * 2. - 1.) * lRot) * .5 + .5; // its normal turned back into this frame
+      b2.xy = (((b2.xy * 255. - 128.) / 127.) * lRot) * (127. / 255.) + 128. / 255.; // its normal turned back into this frame
       float w = smoothstep(.4, .6, texture2D(tLD, t * .23 + .5).a); a = mix(a, a2, w); b = mix(b, b2, w); } }
   mat3 lFrame(vec3 N, vec3 p, vec2 uv) { vec3 d1 = dFdx(p), d2 = dFdy(p); vec2 e1 = dFdx(uv), e2 = dFdy(uv); vec3 a = cross(d2, N), b = cross(N, d1);
     vec3 T = a * e1.x + b * e2.x, B = a * e1.y + b * e2.y; float s = inversesqrt(max(max(dot(T, T), dot(B, B)), 1e-24)); return mat3(T * s, B * s, N); }
@@ -54,7 +54,7 @@ const libMain = `
   else { vec4 ax, bx, ay, by, az, bz; vec3 w = lW3;
     lTap(vLW.zy * uL0.x, ax, bx); lTap(vLW.xz * uL0.x, ay, by); lTap(vLW.xy * uL0.x, az, bz);
     la = ax * w.x + ay * w.y + az * w.z; lb = bx * w.x + by * w.y + bz * w.z;
-    vec3 nx = lNz((bx.xy * 2. - 1.) * uL2.x), ny = lNz((by.xy * 2. - 1.) * uL2.x), nz = lNz((bz.xy * 2. - 1.) * uL2.x); // whiteout blend
+    vec3 nx = lNz(((bx.xy * 255. - 128.) / 127.) * uL2.x), ny = lNz(((by.xy * 255. - 128.) / 127.) * uL2.x), nz = lNz(((bz.xy * 255. - 128.) / 127.) * uL2.x); // whiteout blend
     lNW = normalize(vec3(nx.xy + lN.zy, nx.z * lN.x).zyx * w.x + vec3(ny.xy + lN.xz, ny.z * lN.y).xzy * w.y + vec3(nz.xy + lN.xy, nz.z * lN.z) * w.z); }
   vec4 lD;
   if (uL0.y < .5) lD = texture2D(tLD, lM * uL0.z);
@@ -164,10 +164,17 @@ function libCompile(s) {
     vLW = (modelMatrix * lw).xyz${this.userData.envU.uShade ? ' - uShade' : ''}; vLN = normalize(mat3(modelMatrix) * ln); vLUv = uv; }`);
   s.fragmentShader = libPars + s.fragmentShader
     .replace('#include <map_fragment>', libMain)
-    .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor *= lR;')
+    .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>\nroughnessFactor *= lR;
+      // The shared detail retains its gloss and macro channels. Filter only its residual
+      // screen-space normal variation; its hardware mips do not already add variance.
+      // Main B mips already account for their own normal variance: do not count it twice.
+      vec2 micro = ((lD.xy * 255. - 128.) / 127.) * uL0.w * (1. + lDk);
+      vec2 mx = dFdx(micro), my = dFdy(micro);
+      float microVariance = uL0.y < .5 ? min(.02, (dot(mx,mx) + dot(my,my)) / 12.) : 0.;
+      roughnessFactor = pow(pow(roughnessFactor, 4.) + microVariance, .25);`)
     .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor *= lMet;')
     .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
-      if (uL0.y < .5) { vec2 xy = (lb.xy * 2. - 1.) * uL2.x + (lD.xy * 2. - 1.) * uL0.w * (1. + lDk); xy *= min(1., .98 / max(length(xy), 1e-4));
+      if (uL0.y < .5) { vec2 xy = ((lb.xy * 255. - 128.) / 127.) * uL2.x + ((lD.xy * 255. - 128.) / 127.) * uL0.w * (1. + lDk); xy *= min(1., .98 / max(length(xy), 1e-4));
         normal = normalize(lFrame(normal, -vViewPosition, lT) * lNz(xy));
       } else normal = normalize((viewMatrix * vec4(lNW, 0.)).xyz);`)
     .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\nif (uL3.x > .5) totalEmissiveRadiance *= la.a;')

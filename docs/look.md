@@ -24,6 +24,8 @@ Two kinds of per-zone parameters:
 - **Per surface** (light, materials, water): each zone's own materials, lamps, fixtures and pools. A view from one zone into another shows each with its own values (pool hall lit 2.5x alone: its pillar on the left half changes 50.7, the right half 0.2).
 - **Per view** (exposure, fog, bloom strength, shafts, grade, sun): the engine has one value per frame, mixed from the zones by where you stand (`mood()`: the zone you are in, its neighbours' shares near an opening). So a zone's value shows while you stand in it, and blends at its doorways, exactly as the zone's own exposure and fog do today.
 
+The base film uses a radial chromatic offset of 0.002 and grain amplitude 0.026. The warm tint, S-curve, saturation and vignette remain zone-controlled as before.
+
 ## Parameters
 
 | id | kind | range | per zone | drives |
@@ -50,7 +52,7 @@ Two kinds of per-zone parameters:
 | `grade.tint` | add | -1 – 1 | view | the zone's tint: green / magenta |
 | `grade.contrast` | add | -0.4 – 0.5 | view | the film pass's S-curve amount (0.4, `uCon`) |
 | `grade.vignette` | mul | 0 – 2 | view | the film pass's vignette (0.7, `uVig`) |
-| `grade.grain` | mul | 0 – 3 | all only | the film pass's grain (0.035, `uGrain`) |
+| `grade.grain` | mul | 0 – 3 | all only | the film pass's grain (0.026, `uGrain`) |
 
 Picture difference (0–255, mean) at each end, from `tools/look-sweep.js`: every parameter changes its view, and setting `{}` returns it to 0.00 exactly.
 

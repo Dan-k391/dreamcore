@@ -1,5 +1,6 @@
 // Renderer, scene, camera, the constants and small helpers everything shares, and the zone registry every place registers into.
 import * as THREE from 'three';
+import './direct-light.js';
 
 // Anything outside a light's shadow frustum counts as shadowed instead of lit. The sun's shadow map then only has to
 // cover the one hall it shines into; every enclosed zone is dark to it for free.
