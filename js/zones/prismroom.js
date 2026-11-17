@@ -14,9 +14,11 @@ defZone('prism', { music: null, sky: 'prism', amb: { water: .25, drips: .12, ver
   box: [X - 5.4, Z - .9, X + 5.4, Z + 11.4], probe: [X + 1, 1.8, Z + 4],
   env: [[X - 5, BED, Z - .55], [X + 5, H, Z + 11]] });
 const z = zones.prism;
-// Existing 100 mm glazed ceramic scaled to 280 mm. Its baked grout, glaze relief,
-// normal/roughness mip filtering and native water caustics are retained unchanged.
-const T = z.tile = tileFX(M(z, 'poolTile', { color: 0xc4c7bd, uv: [1 / 2.8, 1 / 2.8] }), z);
+// The 100 mm ceramic is scaled to 280 mm here. Its baked face mask separates
+// the darker cement joints from the glaze, which stays glossy at the waterline.
+const T = z.tile = tileFX(M(z, 'poolTile', { color: 0xc4c7bd, uv: [1 / 2.8, 1 / 2.8] }), z, {
+  dryRoughnessFloor: .30, groutAlbedo: .42
+});
 const B = (m, x1, y1, z1, x2, y2, z2) => box(m, X + x1, y1, Z + z1, X + x2, y2, Z + z2);
 flats.push([X - 5, Z, X + 5, Z + EDGE, () => BED], [X + LEFT, Z - .55, X + RIGHT, Z, () => BED],
   [X - 5, Z + EDGE, X - 4.1, Z + 4.8, () => BED]);
@@ -70,9 +72,3 @@ const clouds = new THREE.Mesh(new THREE.PlaneGeometry(450, 250), new THREE.Shade
 }));
 clouds.position.set(X, 40, Z - 180); clouds.name = 'prism-distant-clouds'; clouds.renderOrder = -.5;
 scene.add(clouds); skyOnly.prism = [clouds];
-
-// Per-room tuning only; no global look or water shader changes.
-import('../look.js').then(({ get, set }) => {
-  const look = get(); look.zones.prism = { ...look.zones.prism, 'water.waves': 2.4, 'water.reflect': 1.8 };
-  set(look);
-});

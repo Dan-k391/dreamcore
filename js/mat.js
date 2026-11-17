@@ -258,7 +258,9 @@ const lampOn = M(null, 'troffer'), lampOff = libMat('trofferOff', { roughness: .
 
 // Tile shader extras: caustics under water, rippling reflected light on walls above it, a coloured tile band below a
 // given height (box-projected reflections come with the library shader underneath).
-function tileFX(m, z) {
+function tileFX(m, z, { dryRoughnessFloor, groutAlbedo } = {}) {
+  if (dryRoughnessFloor != null) m.defines = { ...m.defines, TILE_DRY_ROUGHNESS_FLOOR: dryRoughnessFloor };
+  if (groutAlbedo != null) m.defines = { ...m.defines, TILE_GROUT_ALBEDO: groutAlbedo };
   const u = z.tileU = { uTime, uBand: { value: z.band }, uBandCol: { value: new THREE.Color(...z.bandCol) }, uShimmer: { value: z.shimmer },
               uSim: { value: null }, uPond: { value: new THREE.Vector4(0, 0, 1, 1) }, uPx: { value: new THREE.Vector2() }, // this zone's pool, filled in when the pool is made
               uCaus: { value: z.caus || .45 }, uCausDir: { value: z.caus >= .9 ? sunDir : V(0, 1, 0) } }; // caustic strength: full only where the sun reaches
@@ -270,10 +272,20 @@ function tileFX(m, z) {
     s.fragmentShader = `varying vec3 vW; uniform float uTime, uBand, uShimmer, uCaus; uniform vec3 uBandCol, uCausDir; uniform sampler2D uSim; uniform vec4 uPond; uniform vec2 uPx;
       ${causticsGLSL}
     ` + s.fragmentShader
-      .replace('#include <color_fragment>', `#include <color_fragment>
+      .replace('#include <color_fragment>', `
+        #ifdef TILE_GROUT_ALBEDO
+          diffuseColor.rgb *= mix(float(TILE_GROUT_ALBEDO), 1.0, la.a);
+        #endif
+        #include <color_fragment>
         if (vW.y < uBand) diffuseColor.rgb *= uBandCol;
         float wet = 1. - smoothstep(0., .06, abs(vW.y + ${-WY})); diffuseColor.rgb *= 1. - .3 * wet; // the waterline leaves a wet band`)
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor *= 1. - .6 * wet;')
+      .replace('#include <metalnessmap_fragment>', `
+        #ifdef TILE_DRY_ROUGHNESS_FLOOR
+          // Apply the dry finish after the baked roughness and wet band.
+          roughnessFactor = max(roughnessFactor, float(TILE_DRY_ROUGHNESS_FLOOR) * smoothstep(-0.06, 0.0, vW.y));
+        #endif
+        #include <metalnessmap_fragment>`)
       .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
         if (vW.y < ${WY}) { // light focused by the surface: a drifting base pattern plus the real ripples (crests focus, troughs spread)
           vec2 s = (causticPath(vW).xy - uPond.xy) / (uPond.zw - uPond.xy), o = uPx * 2.;
