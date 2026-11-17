@@ -18,7 +18,7 @@ async function looks(req, res, path) { // -> true if it handled the request
   const [, kind, name] = m, verb = req.method;
   try {
     if (kind === 'applied' && name === undefined && verb === 'PUT') { const L = await body(req);
-      await writeFile(join(root, 'js', 'look.applied.js'), `// The look the game starts with (docs/look.md). Written by the tuning workspace through tools/serve.mjs (PUT /looks/applied); empty: the game as built.\nexport default ${JSON.stringify(L, null, 2)};\n`);
+      await writeFile(join(root, 'js', 'look.applied.js'), `// The look the game starts with (docs/look.md). Written by the tuning workspace through tools/serve.mjs (PUT /looks/applied); empty: the game as built.\nexport default ${Object.keys(L.all || {}).length + Object.keys(L.zones || {}).length ? JSON.stringify(L, null, 2) : '{}'};\n`);
       send(res, 200, JSON.stringify(L)); return true; }
     if (kind === 'presets' && name === undefined && verb === 'GET') { const f = await readdir(presets).catch(() => []);
       send(res, 200, JSON.stringify(f.filter(n => /^[a-z0-9-]{1,64}\.json$/.test(n)).map(n => n.slice(0, -5)).sort())); return true; }
