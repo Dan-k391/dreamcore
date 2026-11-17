@@ -16,7 +16,7 @@ const AREAS = { // area: [check count (a full run warns when it differs), runs a
   seen: [1, 0, 'js/seen.js covers what each zone can see (tools/pvs.mjs --check, the longest single check)'],
   move: [51, 0, 'walks between places, jumping and hopping, ladders, passage warps, portals, doors, noclip, the flume'],
   load: [13, 0, 'page loads, draw-call and shader-compile guards, frame ceilings, the single file, other hosts, production'],
-  water: [10, 0, 'pool pictures, optics, mirror reflections, skipped pool pictures, sky visibility'],
+  water: [11, 0, 'pool pictures, optics, mirror occlusion, skipped pool pictures, sky visibility'],
   solid: [11, 0, 'what stops you: benches, doors, arches, the flume; coplanar faces; nothing pops at an opening'],
   light: [2, 0, 'shadow maps: every caster, the loose-things cache'],
   look: [11, 0, 'zone culling, mood at openings and passages, settings panel, grass viewport, look layer, tuning workspace'],
@@ -248,6 +248,9 @@ if (on('water')) { const f = run(base + '?dev&bare', `(async () => (await import
   check('pool focusing is bounded, balanced, animated, depth-filtered and responds to disturbances', f.result && Object.values(f.result.field).every(Boolean) && !f.errors.length, JSON.stringify(f.result || f));
   check('all four pool palettes retain finite nonnegative water and visible caustic modulation', f.result?.rows.length === 4 && f.result.rows.every(row => row.waterPixels > 10000 && row.nonfinite === 0 && row.negative === 0 && row.meanLinearModulation > 1e-5) && !f.errors.length, JSON.stringify(f.result?.rows || f));
   check('water optics stays within sixteen active samplers without GL errors', f.result?.maxSamplers <= 16 && f.result.glError === 0 && !f.errors.length, JSON.stringify(f.result && { samplers: f.result.maxSamplers, glError: f.result.glError })); }
+
+if (on('water')) { const f = run(base + '?dev&bare&scene=prism', `(async () => (await import('/tools/water-reflection.js')).waterReflection(dev))()`);
+  check('water reflection stops at opaque walls while retaining the open-window signal', f.result?.ok && !f.errors.length, JSON.stringify(f.result || f)); }
 
 if (on('look')) { const f = run(base + '?dev&bare', `(async () => (await import('/tools/grass-viewport.js')).grassViewport(dev))()`);
   check('stationary narrow-to-wide resize shows the same grass as a freshly rebuilt view', f.result?.samePose && f.result.width === 1280 && f.result.height === 720 && f.result.maxDelta <= 1 && f.result.meanDelta <= .01 && f.result.glError === 0 && !f.errors.length, JSON.stringify(f.result || f)); }
