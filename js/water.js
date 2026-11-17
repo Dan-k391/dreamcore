@@ -47,6 +47,8 @@ scene.onBeforeRender = function (r, s, c, ...args) {
 const size = { textureWidth: 1280, textureHeight: 1280, multisample: 0 };
 const mirror = new Reflector(new THREE.PlaneGeometry(), size), lens = new Refractor(new THREE.PlaneGeometry(), size), under = lens.getRenderTarget(), mirrorRT = mirror.getRenderTarget();
 under.setSize(1, 1); under.depthTexture = new THREE.DepthTexture(1, 1, THREE.FloatType); // kept, so rays can be traced through what is under the water
+mirrorRT.depthTexture = new THREE.DepthTexture(mirrorRT.width, mirrorRT.height, THREE.FloatType);
+const uMirrorW = { value: new THREE.Vector4() };
 // Not multisampled: 4x would clean up fine geometry (a drain's 6 mm bars) for .3 ms at 1440p, but at OVER squared the screen's area its sample buffers take 370 MB there
 mirror.matrixAutoUpdate = lens.matrixAutoUpdate = false;
 // The deep picture: the same eye, the same lighting, but the world under the surface squashed toward it (depth x SQUASH), in the projection only, so
@@ -232,17 +234,49 @@ const simMat = new THREE.ShaderMaterial({ uniforms: { tSim: { value: null }, uPx
       gl_FragColor = s; }` });
 const simQuad = new FullScreenQuad(simMat);
 const waterVS = 'varying vec3 vW; void main() { vec4 w = modelMatrix * vec4(position, 1.); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }';
-const waterFS = `uniform sampler2D tMirror, tUnder, tUnderZ, tDeep, tDeepZ, tPlan, tGround, tNormalMap0, tNormalMap1, tSim;
-    uniform mat4 projectionMatrix, uLens, uDeep; uniform vec4 uDeepW, uLensCut; uniform vec4 uPond; uniform vec2 uPx; uniform vec3 uScatter, uCausDir; uniform float uFloor, uTime, uMain, uCaus, uTest; uniform vec4 uLook; varying vec3 vW;
+const waterFS = `uniform sampler2D tMirror, tMirrorZ, tUnder, tUnderZ, tDeep, tDeepZ, tPlan, tGround, tNormalMap0, tNormalMap1, tSim;
+    uniform mat4 projectionMatrix, uLens, uDeep; uniform vec4 uDeepW, uLensCut, uMirrorW; uniform vec4 uPond; uniform vec2 uPx; uniform vec3 uScatter, uCausDir; uniform float uFloor, uTime, uMain, uCaus, uTest; uniform vec4 uLook; varying vec3 vW;
     ${causticsGLSL}
     vec4 clip(vec3 p) { return projectionMatrix * viewMatrix * vec4(p, 1.); } // .w is the distance from the camera
     vec2 wide(vec4 c) { return c.xy / c.w * ${(.5 / OVER).toFixed(5)} + .5; } // a clip position's place in the two wider pictures
     ${seenGLSL}
     float deepSeen(vec2 u) { float d = texture2D(tDeepZ, u).x; return d > .999999 ? 1e4 : 1. / dot(uDeepW, vec4(u * 2. - 1., d * 2. - 1., 1.)); } // the same for the deep picture
     bool off(vec2 u) { return any(lessThan(u, vec2(0.))) || any(greaterThan(u, vec2(1.))); }
+    vec2 onScreen(vec2 from, vec2 to) { vec2 d = to - from, room = max(mix(from, 1. - from, step(0., d)), 1e-4); return from + sign(d) * room * (1. - exp(-abs(d) / room)); } // a lookup that would leave the picture is eased toward its edge; clamping smears streaks
+    vec2 mirrorUV(vec4 c) { vec2 u = wide(c); return vec2(1. - u.x, u.y); }
+    float mirrorSeen(vec2 uv) {
+      float depth = texture2D(tMirrorZ, uv).x;
+      // Undo the mirror camera's oblique projection using its inverse's last row.
+      return depth > .999999 ? 1e4 : 1. / dot(uMirrorW, vec4(uv * 2. - 1., depth * 2. - 1., 1.));
+    }
+    vec2 reflectionUV(vec3 ray, vec2 here) {
+      // Stop at the first captured surface, not a point beyond a nearby wall. The
+      // old fixed-distance lookup could cross the capture's water clip plane and
+      // read exterior sky where the actual reflected ray hits opaque masonry.
+      vec4 start = clip(vW);
+      vec4 delta = projectionMatrix * viewMatrix * vec4(ray, 0.);
+      float lo = 0.;
+      for (int i = 1; i <= 24; i++) {
+        float hi = 9. * pow(float(i) / 24., 2.);
+        vec4 sampleClip = start + delta * hi;
+        vec2 uv = mirrorUV(sampleClip);
+        if (off(uv)) break;
+        if (sampleClip.w >= mirrorSeen(uv)) {
+          for (int j = 0; j < 7; j++) {
+            float mid = (lo + hi) * .5;
+            vec4 midClip = start + delta * mid;
+            if (midClip.w >= mirrorSeen(mirrorUV(midClip))) hi = mid;
+            else lo = mid;
+          }
+          return mirrorUV(start + delta * hi);
+        }
+        lo = hi;
+      }
+      vec2 fallback = onScreen(here, wide(clip(vW + ray * 9.)));
+      return vec2(1. - fallback.x, fallback.y);
+    }
     vec2 plan(vec2 xz) { vec2 s = (xz - uPond.xy) / (uPond.zw - uPond.xy); return vec2(s.x, 1. - s.y); } // a world position's place in the pool's top-down picture
     float ground(vec2 xz) { return texture2D(tGround, (xz - uPond.xy) / (uPond.zw - uPond.xy)).r; } // height of whatever is under the water there
-    vec2 onScreen(vec2 from, vec2 to) { vec2 d = to - from, room = max(mix(from, 1. - from, step(0., d)), 1e-4); return from + sign(d) * room * (1. - exp(-abs(d) / room)); } // a lookup that would leave the picture is eased toward its edge; clamping smears streaks
     void main() {
       if (uTest == 3.) { gl_FragColor = vec4(-1., -1., -1., 1.); return; } // ?dev: where the water is
       vec4 c0 = clip(vW); vec2 here = wide(c0);
@@ -254,7 +288,7 @@ const waterFS = `uniform sampler2D tMirror, tUnder, tUnderZ, tDeep, tDeepZ, tPla
       vec3 n = normalize(vec3((hx * 10. + calm.x) * body * uLook.z, 1., (hz * 10. + calm.y) * body * uLook.z)), V = normalize(cameraPosition - vW);
       if (uTest > 0.) n = vec3(0., 1., 0.); // ?dev measurement: flat
       vec3 R = reflect(-V, n); R.y = -max(R.y, .03); // mirrored: the mirror picture shows the room upside-down below the surface
-      vec2 ru = onScreen(here, wide(clip(vW + R * 9.))), o = vec2(.0007, 0.); ru.x = 1. - ru.x; // four taps: a real surface is never a perfect mirror
+      vec2 ru = reflectionUV(R, here), o = vec2(.0007, 0.); // four taps: a real surface is never a perfect mirror
       vec3 refl = (texture2D(tMirror, ru + o.xy).rgb + texture2D(tMirror, ru - o.xy).rgb + texture2D(tMirror, ru + o.yx).rgb + texture2D(tMirror, ru - o.yx).rgb) * .25;
       vec3 T = refract(-V, n, uTest == 1. ? 1. : .75); // air to water (?dev measurement: straight through)
       if (uTest != 1.) { vec2 ra = vW.xz - cameraPosition.xz; float rl = length(ra), y = max(-T.y, .001); ra = rl > 1e-4 ? ra / rl : vec2(1., 0.); vec2 si = vec2(-ra.y, ra.x); // held to where reach() looks for it:
@@ -341,6 +375,7 @@ const ponds = pools.map(([x1, z1, x2, z2, floor, zid, seen, scatter]) => {
   const planCam = new THREE.OrthographicCamera((x1 - x2) / 2, (x2 - x1) / 2, (z2 - z1) / 2, (z1 - z2) / 2, .001, Math.max(1.6, WY - floor + .5)); // looking straight down from the surface, to below its deepest floor
   planCam.position.set((x1 + x2) / 2, WY, (z1 + z2) / 2); planCam.up.set(0, 0, -1); planCam.lookAt((x1 + x2) / 2, WY - 1, (z1 + z2) / 2);
   const U = { uCaus: zones[zid].tileU.uCaus, uCausDir: zones[zid].tileU.uCausDir, tMirror: { value: mirrorRT.texture }, tPlan: { value: planRT.texture }, tGround: { value: S.ground }, tUnder: { value: under.texture }, tUnderZ: { value: under.depthTexture }, tDeep: { value: deep.texture }, tDeepZ: { value: deep.depthTexture }, uDeep, uDeepW, uLensCut, uLens: { value: lens.camera.projectionMatrix }, tNormalMap0: { value: wn0 }, tNormalMap1: { value: wn1 },
+              tMirrorZ: { value: mirrorRT.depthTexture }, uMirrorW,
               tSim: { value: sim[0].texture }, uPond: { value: S.rect }, uPx: { value: px }, uFloor: { value: S.floor }, uScatter: { value: V(...scatter) }, uLook: { value: new THREE.Vector4(1, 1, 1, 1) }, uMain: { value: 0 }, uTest, uTime }; // uPond, uFloor: the sheet's box and deepest floor, which its field, height map and plan span
   const w = new THREE.Mesh(g, new THREE.ShaderMaterial({ uniforms: U, vertexShader: waterVS, fragmentShader: waterFS, transparent: true }));
   Object.assign(w, { lens, mirror, deep, seen, rect, floor, q: { pending: [], last: null }, sheet: S, tileU: zones[zid].tileU, zone: zones[zid], twin: S.twin });
@@ -386,6 +421,7 @@ const ponds = pools.map(([x1, z1, x2, z2, floor, zid, seen, scatter]) => {
     const on = ponds.map(q => q.visible); // every pool is at the same level, so none belongs in another's mirror or underwater picture
     for (const q of ponds) q.visible = false;
     mirror.matrixWorld.copy(w.matrixWorld); captureUnder(() => mirror.onBeforeRender(r, s, wideCam));
+    row(INV.copy(mirror.camera.projectionMatrix).invert(), 3, uMirrorW.value);
     // three's Refractor sets only its camera's matrixWorld; a scene hook calling getWorldPosition() rebuilds that from .matrix (identity), so keep .matrix the same
     lens.camera.matrix.copy(wideCam.matrixWorld);
     const skyVisible = sky.visible;
