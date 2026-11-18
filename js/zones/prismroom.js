@@ -10,7 +10,7 @@ const X = 2400, Z = 2400, H = 4.5984, BED = -1.2, EDGE = 2.8;
 const LEFT = -.5575, RIGHT = 2.2234, HEAD = 2.7901;
 defZone('prism', { music: null, sky: 'prism', amb: { water: .25, drips: .12, verb: [0, .5, .5] }, step: 'tile', grp: 'prism',
   k: 4.3, exp: .4, fog: [.15, .18, .16, .0008], tint: [1, 1, .98], sat: 1.02, bloom: .16,
-  shaft: .22, hum: 0, water: .5, wet: .5, band: -99, bandCol: [1, 1, 1], shimmer: .22, caus: 1,
+  shaft: .22, hum: 0, water: .5, wet: .5, band: -99, bandCol: [1, 1, 1], shimmer: .22, caus: 1, transmittedSun: true,
   box: [X - 5.4, Z - .9, X + 5.4, Z + 11.4], probe: [X + 1, 1.8, Z + 4],
   env: [[X - 5, BED, Z - .55], [X + 5, H, Z + 11]] });
 const z = zones.prism;

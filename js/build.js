@@ -51,9 +51,11 @@ const spin = (e, x, z) => [e.c * x + e.s * z, -e.s * x + e.c * z]; // a directio
 const live = e => !e.door || e.door.f > 0, gap = e => e.door ? Math.min(1, e.door.f * 4) : 1; // a portal behind a shut leaf is not drawn, lit for or heard through; its share of the mood grows as the leaf opens
 const reveal = (e, x, z, back = 0) => { const d = side(e, x, z); return d >= -back && d < 1 && Math.abs(across(e, x, z)) < e.w / 2; }; // in the 1 m strip in front of e's opening (its reveal, whichever zone's box holds it)
 const behind = (e, c) => Math.max(side(e, c[0], c[1]), side(e, c[2], c[1]), side(e, c[0], c[3]), side(e, c[2], c[3])) < 1e-3; // a solid's rectangle wholly at or behind e's plane
-function add(mat, g, ownUV = false) { // ownUV: keep the geometry's own UVs (a library material's `uv` option says how many metres one unit is)
+const solidCasters = new WeakSet();
+function add(mat, g, ownUV = false, solidCaster = false) { // ownUV: keep the geometry's own UVs (a library material's `uv` option says how many metres one unit is)
   g = g.index ? g.toNonIndexed() : g;
   if (!ownUV) boxUV(g);
+  if (solidCaster) solidCasters.add(g);
   geo.has(mat) ? geo.get(mat).push(g) : geo.set(mat, [g]);
 }
 function boxUV(g) { // world-space UVs by the face's main axis (a moving part takes them from its own space)
@@ -69,9 +71,9 @@ function boxUV(g) { // world-space UVs by the face's main axis (a moving part ta
 // sizeable share of the load) and handed out as a copy; works with `new`, as the places call it.
 const rounded = new Map();
 function RoundedBoxGeometry(...a) { const k = a.join(); if (!rounded.has(k)) rounded.set(k, new RoundedBox(...a)); return new THREE.BufferGeometry().copy(rounded.get(k)); }
-const block = (mat, x1, y1, z1, x2, y2, z2) => add(mat, new THREE.BoxGeometry(x2 - x1, y2 - y1, z2 - z1).translate((x1 + x2) / 2, (y1 + y2) / 2, (z1 + z2) / 2)); // a box that never blocks
+const block = (mat, x1, y1, z1, x2, y2, z2, solidCaster = false) => add(mat, new THREE.BoxGeometry(x2 - x1, y2 - y1, z2 - z1).translate((x1 + x2) / 2, (y1 + y2) / 2, (z1 + z2) / 2), false, solidCaster); // a box that never blocks
 function box(mat, x1, y1, z1, x2, y2, z2) { // a box that is solid, all of it: walls, floors, ceilings, seats
-  block(mat, x1, y1, z1, x2, y2, z2);
+  block(mat, x1, y1, z1, x2, y2, z2, Math.min(x2 - x1, y2 - y1, z2 - z1) >= .1);
   if (y2 - y1 >= .02) solid(x1, y1, z1, x2, y2, z2); // a flush inlay is not something to bump into
 }
 // A flight of n solid steps filling the rectangle, climbing toward its high end (up = 1) or its low end (-1) along x or z, from height y0
@@ -114,7 +116,7 @@ function slab(mat, axis, at, depth, a1, a2, y1, y2, cuts, through = false) { // 
     p.closePath(); sh.holes.push(p);
   }
   const g = new THREE.ExtrudeGeometry(sh, { depth, bevelEnabled: false, curveSegments: 24 });
-  add(mat, axis === 'x' ? g.translate(0, 0, at) : g.rotateY(-Math.PI / 2).translate(at + depth, 0, 0));
+  add(mat, axis === 'x' ? g.translate(0, 0, at) : g.rotateY(-Math.PI / 2).translate(at + depth, 0, 0), false, depth >= .1);
   let a = a1; // the solid: the whole slab, or the piers between walk-through arches and the curved heads over them in eight bands
   const part = (p, q, lo, hi) => axis === 'x' ? solid(p, lo, at, q, hi, at + depth) : solid(at, lo, p, at + depth, hi, q);
   const pier = b => { if (b - a > .01) part(a, b, y1, y2); };
@@ -217,6 +219,11 @@ function merge() { // once every place is built (level.js)
     for (const g of list) { g.computeBoundingBox(); if (fl) addFloor(g, fl); g.boundingBox.getCenter(_c); const id = m === seaMat ? '' : zoneAt(_c.x, _c.z)?.id || ''; parts.has(id) ? parts.get(id).push(g) : parts.set(id, [g]); }
     for (const [id, part] of parts) {
       const mesh = new THREE.Mesh(mergeGeometries(part), m); mesh.castShadow = !noCast.has(m); mesh.receiveShadow = m !== seaMat; mesh.userData.zone = id;
+      if (mesh.castShadow && m.side === THREE.FrontSide && m.shadowSide === null && part.every(g => solidCasters.has(g))) {
+        mesh.onBeforeShadow = (renderer, object, camera, shadowCamera, geometry, depthMaterial) => {
+          if (shadowCamera.isOrthographicCamera) depthMaterial.side = THREE.DoubleSide;
+        };
+      }
       if (bits.has(id)) mesh.layers.set(bits.get(id));
       scene.add(mesh); if (m === seaMat) sea = mesh;
     }

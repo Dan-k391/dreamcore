@@ -3,11 +3,12 @@ import * as THREE from 'three';
 import { Reflector } from 'three/addons/objects/Reflector.js';
 import { Refractor } from 'three/addons/objects/Refractor.js';
 import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
-import { renderer, scene, camera, uTime, V, quadVS, WY, zones, inR } from './core.js';
+import { renderer, scene, camera, uTime, V, quadVS, WY, zones, inR, sunDir } from './core.js';
 import { wn0, wn1 } from './tex.js';
-import { causticsGLSL } from './mat.js';
+import { causticsGLSL, waterAbsorptionGLSL, waterSunGLSL } from './mat.js';
 import { colliders, pools, floorH, seeThrough } from './build.js';
-import { sky } from './sky.js';
+import { sky, skyNow, sun } from './sky.js';
+import { bakeWaterSun, restoreWaterSun } from './water-sun.js';
 
 import './level.js';
 // ---------- water ----------
@@ -35,8 +36,10 @@ let captured = false, frameNo = 0, epoch = 0;
 const beforeScene = scene.onBeforeRender;
 scene.onBeforeRender = function (r, s, c, ...args) {
   if (c === camera && !s.overrideMaterial) { captured = false; frameNo++; fit(); }
+  for (const u of sunWater) u.uWaterSun.value.set(sun.color.r, sun.color.g, sun.color.b).multiplyScalar(sun.intensity);
   beforeScene.call(this, r, s, c, ...args);
 };
+const sunWater = [];
 // One mirror/lens pair for every pool: they share a plane, so a capture made for one is right for all (below the plane each pool
 // captures into it again just before it draws). Only the part the water on screen can sample is drawn (scissors: clipped to the eye and the picture, and for
 // the two under-water pictures to where a refracted ray from the water on screen can go, reach), and the deep picture only where the lens cannot answer.
@@ -227,16 +230,19 @@ const simMat = new THREE.ShaderMaterial({ uniforms: { tSim: { value: null }, uPx
     void main() { vec4 s = texture2D(tSim, vUv); // r = height, g = velocity
       vec2 l = vUv - vec2(uPx.x, 0.), r = vUv + vec2(uPx.x, 0.), d = vUv - vec2(0., uPx.y), u = vUv + vec2(0., uPx.y);
       if (!wet(vUv)) { float n = 0., c = 0.; if (wet(l)) { n += texture2D(tSim, l).r; c++; } if (wet(r)) { n += texture2D(tSim, r).r; c++; } if (wet(d)) { n += texture2D(tSim, d).r; c++; } if (wet(u)) { n += texture2D(tSim, u).r; c++; }
-        gl_FragColor = vec4(c > 0. ? n / c : 0., 0., 0., 1.); return; } // dry ground in the sheet's box holds the height of the water beside it, so slopes read at a wall are as at the box's own edge
+        gl_FragColor = vec4(c > 0. ? n / c : 0., 0., s.ba); return; } // dry ground in the sheet's box holds the height of the water beside it, so slopes read at a wall are as at the box's own edge
       float avg = (nb(l, s.r) + nb(r, s.r) + nb(d, s.r) + nb(u, s.r)) * .25;
       s.g = (s.g + (avg - s.r) * 2.) * .993; s.r += s.g;
       for (int i = 0; i < ${DROPS}; i++) { vec2 d = (vUv - uDrop[i].xy) / uPx; s.r += uDrop[i].z * exp(-dot(d, d) / 18.); }
       gl_FragColor = s; }` });
 const simQuad = new FullScreenQuad(simMat);
 const waterVS = 'varying vec3 vW; void main() { vec4 w = modelMatrix * vec4(position, 1.); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }';
-const waterFS = `uniform sampler2D tMirror, tMirrorZ, tUnder, tUnderZ, tDeep, tDeepZ, tPlan, tGround, tNormalMap0, tNormalMap1, tSim;
+const waterFS = withSun => `uniform sampler2D tMirror, tMirrorZ, tUnder, tUnderZ, tDeep, tDeepZ, tPlan, tGround, tNormalMap0, tNormalMap1, tSim;
     uniform mat4 projectionMatrix, uLens, uDeep; uniform vec4 uDeepW, uLensCut, uMirrorW; uniform vec4 uPond; uniform vec2 uPx; uniform vec3 uScatter, uCausDir; uniform float uFloor, uTime, uMain, uCaus, uTest; uniform vec4 uLook; varying vec3 vW;
     ${causticsGLSL}
+    ${waterAbsorptionGLSL}
+    ${withSun ? `uniform sampler2D tSunPlan;
+      ${waterSunGLSL}` : ''}
     vec4 clip(vec3 p) { return projectionMatrix * viewMatrix * vec4(p, 1.); } // .w is the distance from the camera
     vec2 wide(vec4 c) { return c.xy / c.w * ${(.5 / OVER).toFixed(5)} + .5; } // a clip position's place in the two wider pictures
     ${seenGLSL}
@@ -319,14 +325,17 @@ const waterFS = `uniform sampler2D tMirror, tMirrorZ, tUnder, tUnderZ, tDeep, tD
             t = mix(hi, t, live); hit = vW + T * t; break; }
           lo = ti; }
       }
-      vec3 still = texture2D(tPlan, plan(hit.xz)).rgb * uLook.w; // the plan is a still, so it gets the same moving light the tiles give the live picture: drifting pattern plus the real ripples
-      vec2 hs = (causticPath(hit).xy - uPond.xy) / (uPond.zw - uPond.xy), e = uPx * 2.;
+      vec2 planUV = plan(hit.xz);
+      vec3 still = texture2D(tPlan, planUV).rgb * uLook.w;
+      ${withSun ? `vec4 receiver = texture2D(tSunPlan, planUV);
+      still += receiver.rgb * waterSun(vec3(hit.x, min(receiver.a, ${WY}), hit.z), vec3(0., 1., 0.), tSim) * float(receiver.a < ${WY});` :
+      `vec2 hs = (causticPath(hit).xy - uPond.xy) / (uPond.zw - uPond.xy), e = uPx * 2.;
       float lap = texture2D(tSim, hs - vec2(e.x, 0.)).r + texture2D(tSim, hs + vec2(e.x, 0.)).r + texture2D(tSim, hs - vec2(0., e.y)).r + texture2D(tSim, hs + vec2(0., e.y)).r - 4. * texture2D(tSim, hs).r;
       float cz = caus(hit, lap);
-      still *= 1. + mix(.85, 1.8, smoothstep(.25, 1., max(still.r, max(still.g, still.b)))) * uCaus * cz; // stronger where the floor is in direct light, as on the tiles
+      still *= 1. + mix(.85, 1.8, smoothstep(.25, 1., max(still.r, max(still.g, still.b)))) * uCaus * cz;`}
       if (uTest == 1.) { gl_FragColor = vec4(mix(texture2D(tUnder, here).rgb, mix(mix(still, dc, dl), eye, live), body), 1.); return; } // ?dev: the lens picture alone
       if (uTest == 2.) { gl_FragColor = vec4(texture2D(tMirror, ru).rgb, 1.); return; } // ?dev: the mirror picture alone
-      vec3 refr = mix(mix(still, dc, dl), eye, live) * exp(-vec3(.42, .085, .06) * t * uLook.x); // red is absorbed first
+      vec3 refr = mix(mix(still, dc, dl), eye, live) * waterAbsorption(t); // red is absorbed first
       refr += uScatter * (1. - exp(-.3 * t)); // and the water itself scatters the room's light back, giving deep water a pale body
       vec3 col = mix(refr, refl, (.02 + .98 * pow(1. - max(dot(V, n), 0.), 5.)) * uLook.y);
       col = mix(texture2D(tUnder, here).rgb, col, body); // thin water shows what is under it, unbent and untinted
@@ -371,23 +380,63 @@ const sheets = [...new Set(sheetOf)].map(id => {
 });
 const ponds = pools.map(([x1, z1, x2, z2, floor, zid, seen, scatter]) => {
   const S = sheets.find(q => q.rects.some(r => r[0] === x1 && r[1] === z1 && r[2] === x2 && r[3] === z2)), { sim, px, planRT } = S;
+  const tileU = zones[zid].tileU, withSun = !!tileU.uWaterSun;
+  const receiverTint = withSun && new THREE.Color();
+  const sunPlan = withSun && new THREE.WebGLRenderTarget(planRT.width, planRT.height, { type: THREE.HalfFloatType, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
   const g = new THREE.PlaneGeometry(x2 - x1, z2 - z1), rect = new THREE.Vector4(x1, z1, x2, z2);
   const planCam = new THREE.OrthographicCamera((x1 - x2) / 2, (x2 - x1) / 2, (z2 - z1) / 2, (z1 - z2) / 2, .001, Math.max(1.6, WY - floor + .5)); // looking straight down from the surface, to below its deepest floor
   planCam.position.set((x1 + x2) / 2, WY, (z1 + z2) / 2); planCam.up.set(0, 0, -1); planCam.lookAt((x1 + x2) / 2, WY - 1, (z1 + z2) / 2);
   const U = { uCaus: zones[zid].tileU.uCaus, uCausDir: zones[zid].tileU.uCausDir, tMirror: { value: mirrorRT.texture }, tPlan: { value: planRT.texture }, tGround: { value: S.ground }, tUnder: { value: under.texture }, tUnderZ: { value: under.depthTexture }, tDeep: { value: deep.texture }, tDeepZ: { value: deep.depthTexture }, uDeep, uDeepW, uLensCut, uLens: { value: lens.camera.projectionMatrix }, tNormalMap0: { value: wn0 }, tNormalMap1: { value: wn1 },
               tMirrorZ: { value: mirrorRT.depthTexture }, uMirrorW,
               tSim: { value: sim[0].texture }, uPond: { value: S.rect }, uPx: { value: px }, uFloor: { value: S.floor }, uScatter: { value: V(...scatter) }, uLook: { value: new THREE.Vector4(1, 1, 1, 1) }, uMain: { value: 0 }, uTest, uTime }; // uPond, uFloor: the sheet's box and deepest floor, which its field, height map and plan span
-  const w = new THREE.Mesh(g, new THREE.ShaderMaterial({ uniforms: U, vertexShader: waterVS, fragmentShader: waterFS, transparent: true }));
+  if (withSun) {
+    Object.assign(U, { uLook: tileU.uLook, uWaterSun: tileU.uWaterSun, tSunPlan: { value: sunPlan.texture } });
+    sunWater.push(tileU);
+  }
+  const w = new THREE.Mesh(g, new THREE.ShaderMaterial({ uniforms: U, vertexShader: waterVS, fragmentShader: waterFS(withSun), transparent: true }));
   Object.assign(w, { lens, mirror, deep, seen, rect, floor, q: { pending: [], last: null }, sheet: S, tileU: zones[zid].tileU, zone: zones[zid], twin: S.twin });
   S.ponds.push(w);
-  w.drawPlan = z => { // once per zone, while that zone's lamps are lit for its bake: the part of this pool that lies in its room, into this pool's part of the sheet's plan
+  w.drawPlan = (z, receiverOnly = false) => { // once per zone, while that zone's lamps are lit for its bake: the part of this pool that lies in its room, into this pool's part of the sheet's plan
     const c1 = Math.max(x1, z.box[0]), d1 = Math.max(z1, z.box[1]), c2 = Math.min(x2, z.box[2]), d2 = Math.min(z2, z.box[3]); if (c1 >= c2 || d1 >= d2) return; // so where a pool runs on into the next room (a channel into a pool hall) it is drawn under that room's lamps, as the live view shows it
     const tu = Object.values(zones).filter(q => q.tileU), caus = tu.map(q => q.tileU.uCaus.value), target = renderer.getRenderTarget(), R = S.rect, k = S.ppm, u = x => Math.round((x - R.x) * k), v = z => Math.round((R.w - z) * k);
-    planRT.viewport.set(u(x1), v(z2), u(x2) - u(x1), v(z1) - v(z2)); planRT.scissor.set(u(c1), v(d2), u(c2) - u(c1), v(d1) - v(d2)); planRT.scissorTest = true;
-    const skyVisible = sky.visible;
-    for (const q of tu) q.tileU.uCaus.value = 0; sky.visible = false; renderer.setRenderTarget(planRT); renderer.render(scene, planCam); // caustics off, since the plan is a still and they move
-    planRT.viewport.set(0, 0, planRT.width, planRT.height); planRT.scissor.copy(planRT.viewport); planRT.scissorTest = false;
-    tu.forEach((q, i) => q.tileU.uCaus.value = caus[i]); sky.visible = skyVisible; renderer.setRenderTarget(target);
+    const face = renderer.getActiveCubeFace(), mip = renderer.getActiveMipmapLevel(), skyVisible = sky.visible;
+    const pondVisibility = withSun && ponds.map(pond => pond.visible), previousMode = withSun && tileU.uSunPlan.value;
+    const regions = (withSun ? [planRT, sunPlan] : [planRT]).map(rt => ({
+      rt, viewport: rt.viewport.clone(), scissor: rt.scissor.clone(), scissorTest: rt.scissorTest
+    }));
+    try {
+      if (withSun) {
+        if (!S.sunPaths) {
+          S.sunPaths = bakeWaterSun(S);
+          try { for (const buffer of sim) restoreWaterSun(S, buffer); }
+          catch (error) { S.sunPaths.dispose(); S.sunPaths = null; throw error; }
+          tileU.uCausDir.value = sunDir.clone(); // keep the ceramic and water aligned with the baked paths across sky changes
+        }
+        for (const pond of ponds) pond.visible = false;
+        tileU.uSunPlan.value = 1;
+      }
+      planRT.viewport.set(u(x1), v(z2), u(x2) - u(x1), v(z1) - v(z2));
+      planRT.scissor.set(u(c1), v(d2), u(c2) - u(c1), v(d1) - v(d2)); planRT.scissorTest = true;
+      for (const q of tu) q.tileU.uCaus.value = 0; // the plan stores the still lighting underneath the moving caustics
+      sky.visible = false;
+      if (!receiverOnly) { renderer.setRenderTarget(planRT); renderer.render(scene, planCam); }
+      if (withSun) {
+        tileU.uSunPlan.value = 2;
+        sunPlan.viewport.copy(planRT.viewport); sunPlan.scissor.copy(planRT.scissor); sunPlan.scissorTest = true;
+        renderer.setRenderTarget(sunPlan); renderer.render(scene, planCam);
+        receiverTint.copy(w.zone.tile.color);
+      }
+    } finally {
+      if (withSun) {
+        tileU.uSunPlan.value = previousMode;
+        ponds.forEach((pond, index) => { pond.visible = pondVisibility[index]; });
+      }
+      for (const { rt, viewport, scissor, scissorTest } of regions) {
+        rt.viewport.copy(viewport); rt.scissor.copy(scissor); rt.scissorTest = scissorTest;
+      }
+      tu.forEach((q, i) => { q.tileU.uCaus.value = caus[i]; }); sky.visible = skyVisible;
+      renderer.setRenderTarget(target, face, mip);
+    }
   };
   for (let x = x1 + .05; x < x2; x += .1) for (let z = z1 + .05; z < z2; z += .1) console.assert(Object.values(zones).some(q => q.mats.length && inR(x, z, ...q.box)), 'a pool reaches past every room: its plan has a hole there', x, z); // drawPlan's parts cover it
   w.tileU.uSim.value = sim[0].texture; w.tileU.uPond.value = S.rect; w.tileU.uPx.value = px;
@@ -411,6 +460,7 @@ const ponds = pools.map(([x1, z1, x2, z2, floor, zid, seen, scatter]) => {
   w.onBeforeRender = (r, s, c) => {
     U.uMain.value = +(c === camera);
     if (c !== camera || s.overrideMaterial) return; // only the main view makes the two pictures (not the AO pass's normals, drawn from the same camera)
+    if (withSun && skyNow === w.zone.sky && !receiverTint.equals(w.zone.tile.color)) w.drawPlan(w.zone, true);
     // Three skips a plane's captures from its back side. There each pool captures for itself just before it draws rather
     // than trust a capture made for another (also covers noclip and near-coplanar diagnostic views).
     const reuse = waterViews.reuse && c.matrixWorld.elements[13] > WY + .001;
@@ -474,7 +524,7 @@ function ripple(S, drops) { // one 60Hz step of a sheet's waves, with up to DROP
 
 function resetWater() { // ?dev only (dev.reset): every pool flat and still, as at load, on the GPU and in the CPU's copy
   const t = renderer.getRenderTarget(), c = renderer.getClearColor(new THREE.Color()), a = renderer.getClearAlpha(); renderer.setClearColor(0, 0);
-  for (const S of sheets) { for (const r of S.sim) { renderer.setRenderTarget(r); renderer.clear(); } S.twin.h.fill(0); S.twin.u.fill(0); S.twin.v.fill(0); }
+  for (const S of sheets) { for (const r of S.sim) { renderer.setRenderTarget(r); renderer.clear(); if (S.sunPaths) restoreWaterSun(S, r); } S.twin.h.fill(0); S.twin.u.fill(0); S.twin.v.fill(0); }
   renderer.setRenderTarget(t); renderer.setClearColor(c, a); epoch++; // and no visibility result from before counts
 }
 

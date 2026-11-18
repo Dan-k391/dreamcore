@@ -88,13 +88,29 @@ const fixPars = `
     // (a wall or floor: 2). uAG0: origin (a cell centre), 1 / cell. uAG1: cells x, y, z, tiles a row. uAG2: the grid's first texel, 1 / atlas size.
     // uAGk: how much of it (look.js light.bounce; 0 the plain capture)
     uniform vec4 uAG0, uAG1, uAG2; uniform float uAGk;
-    vec4 agTap(float t, vec2 c) { return texture2D(tFix, (uAG2.xy + vec2(mod(t, uAG1.w), floor(t / uAG1.w)) * uAG1.xz + c + .5) * uAG2.zw); }
-    vec3 agLight(vec3 p, vec3 n) {
-      vec3 g = (p + n * .3 - uAG0.xyz) * uAG0.w, c = clamp(g, vec3(0.), uAG1.xyz - 1.); // .3 m off the surface: the cells beside it, not in it
-      float e = length(g - c); if (e > 2.) return vec3(1.); float k = floor(c.y), f = c.y - k, dk = 6. * (min(k + 1., uAG1.y - 1.) - k); // well past the edge: plain, no reads
+    vec4 agTap(float t, vec2 c) { return textureLod(tFix, (uAG2.xy + vec2(mod(t, uAG1.w), floor(t / uAG1.w)) * uAG1.xz + c + .5) * uAG2.zw, 0.); }
+    vec4 agSample(vec3 c, vec3 n) {
+      float k = floor(c.y), f = c.y - k, dk = 6. * (min(k + 1., uAG1.y - 1.) - k);
       vec3 n2 = n * n; vec4 s = vec4(0.);
       for (int a = 0; a < 3; a++) if (n2[a] > 1e-3) { float t = 6. * k + float(2 * a) + (n[a] < 0. ? 1. : 0.); s += n2[a] * mix(agTap(t, c.xz), agTap(t + dk, c.xz), f); }
-      vec3 r = s.a > .02 ? s.rgb / s.a : vec3(1.); // every cell around solid: plain
+      return s;
+    }
+    vec3 agLight(vec3 p, vec3 n, vec3 viewGeom) {
+      vec3 hi = uAG1.xyz - 1., g = (p + n * .3 - uAG0.xyz) * uAG0.w, c = clamp(g, vec3(0.), hi);
+      float e = length(g - c); if (e > 2. || uAGk == 0.) return vec3(1.);
+      vec4 s = agSample(c, n);
+      if (s.a < .08) {
+        vec3 gn = normalize(viewGeom * mat3(viewMatrix));
+        vec3 tangent = normalize(cross(gn, abs(gn.y) > .7 ? vec3(1., 0., 0.) : vec3(0., 1., 0.)));
+        vec3 bitangent = cross(gn, tangent), center = (p - uAG0.xyz) * uAG0.w + gn;
+        vec4 nearby = vec4(0.);
+        for (int i = 0; i < 4; i++) {
+          vec3 off = float((i & 1) * 2 - 1) * tangent + float((i >> 1) * 2 - 1) * bitangent;
+          nearby += agSample(clamp(center + off * .5, vec3(0.), hi), n);
+        }
+        s += nearby * (.25 * (1. - smoothstep(0., .08, s.a)));
+      }
+      vec3 r = mix(vec3(1.), s.rgb / max(s.a, 1e-6), smoothstep(0., .01, s.a));
       return mix(mix(vec3(1.), r, uAGk), vec3(1.), clamp(e - 1., 0., 1.)); } // past the grid's edge: the plain capture
   #endif
   #ifdef NL
@@ -152,7 +168,7 @@ function envBox(s, u) {
       return t > 0. ? vEW + d * t - uEP : d; } // a point outside the box (a shop behind its glass): the plain lookup
   ${fixPars}` + s.fragmentShader.replace('#include <lights_fragment_begin>', begin + fixMain).replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
     #ifdef AG
-      reflectedLight.indirectDiffuse *= agLight(vEW, inverseTransformDirection(normal, viewMatrix)); // the room's bounced light where it falls, in its colours (reflections untouched)
+      reflectedLight.indirectDiffuse *= agLight(vEW, inverseTransformDirection(normal, viewMatrix), nonPerturbedNormal); // the room's bounced light where it falls, in its colours (reflections untouched)
     #endif`).replace('#include <envmap_physical_pars_fragment>', THREE.ShaderChunk.envmap_physical_pars_fragment.replace(
     'reflectVec = inverseTransformDirection( reflectVec, viewMatrix );', 'reflectVec = eBox( inverseTransformDirection( reflectVec, viewMatrix ) );'));
 }
@@ -237,19 +253,48 @@ const causticsGLSL = `
     poolWave(position, vec2(-.96, -.28), 67.8, .005, 5.1, spread, slope, curvature);
     return vec3(slope, curvature);
   }
+  vec3 causticRay() { return refract(-normalize(uCausDir), vec3(0., 1., 0.), .75); }
   vec3 causticPath(vec3 position) {
     float depth = max(0., ${WY} - position.y);
-    vec3 lightRay = refract(-normalize(uCausDir), vec3(0., 1., 0.), .75);
+    vec3 lightRay = causticRay();
     float travel = depth / max(.35, -lightRay.y);
     return vec3(position.xz - lightRay.xz * travel, travel);
   }
-  float caus(vec3 position, float laplacian) {
-    vec3 path = causticPath(position);
+  float causticFocus(vec3 path, float laplacian) {
     float curvature = poolWaves(path.xy, .012 * path.z).z + laplacian * 100.;
     float focus = -.25 * path.z * curvature;
     return .45 * focus / (.45 + abs(focus)) * exp(-.12 * path.z);
   }
+  float caus(vec3 position, float laplacian) { return causticFocus(causticPath(position), laplacian); }
 `; // the moving light pattern under water. Used by the tiles themselves and by the water, for floor it draws from the still plan
+const waterAbsorptionGLSL = `vec3 waterAbsorption(float travel) { return exp(-vec3(.42, .085, .06) * travel * uLook.x); }`;
+const waterSunGLSL = `
+  uniform vec3 uWaterSun;
+  vec3 waterSunDir() { return -causticRay(); }
+  float waterSunTap(sampler2D simTex, ivec2 ij, ivec2 limit, vec2 p, vec2 slope, float travel) {
+    ivec2 tap = clamp(ij, ivec2(0), limit);
+    vec2 lightPath = texelFetch(simTex, tap, 0).ba;
+    float receiverTravel = travel + dot(vec2(tap) - p, slope);
+    return lightPath.x * step(0., receiverTravel) * step(receiverTravel - .005, lightPath.y);
+  }
+  vec3 waterSun(vec3 point, vec3 planeNormal, sampler2D simTex) {
+    vec3 path = causticPath(point);
+    vec2 uv = (path.xy - uPond.xy) / (uPond.zw - uPond.xy), extent = vec2(textureSize(simTex, 0));
+    vec2 p = uv * extent - .5, f = fract(p); ivec2 ij = ivec2(floor(p)), limit = ivec2(extent) - 1;
+    float facing = dot(planeNormal, waterSunDir());
+    vec2 slope = (uPond.zw - uPond.xy) / extent * planeNormal.xz / max(.0001, facing);
+    float vis = mix(mix(waterSunTap(simTex, ij, limit, p, slope, path.z), waterSunTap(simTex, ij + ivec2(1, 0), limit, p, slope, path.z), f.x),
+                    mix(waterSunTap(simTex, ij + ivec2(0, 1), limit, p, slope, path.z), waterSunTap(simTex, ij + ivec2(1, 1), limit, p, slope, path.z), f.x), f.y) * step(.0001, facing);
+    vis *= float(all(greaterThan(uv, vec2(0.))) && all(lessThan(uv, vec2(1.))));
+    vec2 e = uPx * 2.;
+    float lap = texture2D(simTex, uv - vec2(e.x, 0.)).r + texture2D(simTex, uv + vec2(e.x, 0.)).r
+              + texture2D(simTex, uv - vec2(0., e.y)).r + texture2D(simTex, uv + vec2(0., e.y)).r - 4. * texture2D(simTex, uv).r;
+    float focus = 1. + 2.8 * clamp(causticFocus(path, lap) * uCaus * uLook.z, -.32, .32);
+    float air = uCausDir.y, wet = waterSunDir().y;
+    float rs = (.75 * air - wet) / (.75 * air + wet), rp = (air - .75 * wet) / (air + .75 * wet);
+    return uWaterSun * waterAbsorption(path.z) * (vis * focus * (1. - .5 * (rs * rs + rp * rp)) * air / wet);
+  }
+`;
 const glow = S({ color: 0, emissive: 0xffedc0, emissiveIntensity: 14 }); // frosted windows and light wells
 const seaMat = S({ color: 0x0f4652, roughness: .05, normalMap: wn0, normalScale: new THREE.Vector2(.5, .5) });
 seaMat.onBeforeCompile = envCompile; seaMat.userData.envU = envBoxU(); // no box (the open sea): the plain lookup, but the same program as P()'s water
@@ -261,9 +306,14 @@ const lampOn = M(null, 'troffer'), lampOff = libMat('trofferOff', { roughness: .
 function tileFX(m, z, { dryRoughnessFloor, groutAlbedo } = {}) {
   if (dryRoughnessFloor != null) m.defines = { ...m.defines, TILE_DRY_ROUGHNESS_FLOOR: dryRoughnessFloor };
   if (groutAlbedo != null) m.defines = { ...m.defines, TILE_GROUT_ALBEDO: groutAlbedo };
+  const sunWater = z.transmittedSun;
   const u = z.tileU = { uTime, uBand: { value: z.band }, uBandCol: { value: new THREE.Color(...z.bandCol) }, uShimmer: { value: z.shimmer },
               uSim: { value: null }, uPond: { value: new THREE.Vector4(0, 0, 1, 1) }, uPx: { value: new THREE.Vector2() }, // this zone's pool, filled in when the pool is made
-              uCaus: { value: z.caus || .45 }, uCausDir: { value: z.caus >= .9 ? sunDir : V(0, 1, 0) } }; // caustic strength: full only where the sun reaches
+              uCaus: { value: z.caus || .45 }, uCausDir: { value: sunWater || z.caus >= .9 ? sunDir : V(0, 1, 0) } }; // caustic strength: full only where the sun reaches
+  if (sunWater) {
+    m.defines = { ...m.defines, TILE_TRANSMITTED_SUN: 1 };
+    Object.assign(u, { uWaterSun: { value: V(0, 0, 0) }, uSunPlan: { value: 0 }, uLook: { value: new THREE.Vector4(1, 1, 1, 1) } });
+  }
   const lib = m.onBeforeCompile; // a library material underneath: its shader first
   m.onBeforeCompile = function (s, r) {
     lib.call(this, s, r);
@@ -271,6 +321,9 @@ function tileFX(m, z, { dryRoughnessFloor, groutAlbedo } = {}) {
     s.vertexShader = 'varying vec3 vW;\n' + s.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\nvW = (modelMatrix * vec4(transformed, 1.)).xyz;');
     s.fragmentShader = `varying vec3 vW; uniform float uTime, uBand, uShimmer, uCaus; uniform vec3 uBandCol, uCausDir; uniform sampler2D uSim; uniform vec4 uPond; uniform vec2 uPx;
       ${causticsGLSL}
+      ${sunWater ? `uniform vec4 uLook; uniform float uSunPlan;
+        ${waterAbsorptionGLSL}
+        ${waterSunGLSL}` : ''}
     ` + s.fragmentShader
       .replace('#include <color_fragment>', `
         #ifdef TILE_GROUT_ALBEDO
@@ -287,12 +340,21 @@ function tileFX(m, z, { dryRoughnessFloor, groutAlbedo } = {}) {
         #endif
         #include <metalnessmap_fragment>`)
       .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
-        if (vW.y < ${WY}) { // light focused by the surface: a drifting base pattern plus the real ripples (crests focus, troughs spread)
+        ${sunWater ? `if (wetSun && uSunPlan == 0.) reflectedLight.directDiffuse += receiver * waterSun(vW, lN, uSim);` :
+        `if (vW.y < ${WY}) { // light focused by the surface: a drifting base pattern plus the real ripples (crests focus, troughs spread)
           vec2 s = (causticPath(vW).xy - uPond.xy) / (uPond.zw - uPond.xy), o = uPx * 2.;
           float lap = texture2D(uSim, s - vec2(o.x, 0.)).r + texture2D(uSim, s + vec2(o.x, 0.)).r + texture2D(uSim, s - vec2(0., o.y)).r + texture2D(uSim, s + vec2(0., o.y)).r - 4. * texture2D(uSim, s).r;
           float c = caus(vW, lap) * uCaus;
-          reflectedLight.directDiffuse *= 1. + 1.8 * c; reflectedLight.indirectDiffuse *= 1. + .85 * c; }
-        else if (uShimmer > 0.) reflectedLight.indirectDiffuse *= 1. + uShimmer * caus(vec3(vW.x * .6, ${WY} - .65, vW.z * .6), 0.) * smoothstep(.2, 1.2, vW.y - ${WY}) * exp((${WY} - vW.y) * .3);`);
+          reflectedLight.directDiffuse *= 1. + 1.8 * c; reflectedLight.indirectDiffuse *= 1. + .85 * c; }`}
+        else if (vW.y >= ${WY} && uShimmer > 0.) reflectedLight.indirectDiffuse *= 1. + uShimmer * caus(vec3(vW.x * .6, ${WY} - .65, vW.z * .6), 0.) * smoothstep(.2, 1.2, vW.y - ${WY}) * exp((${WY} - vW.y) * .3);`);
+    if (sunWater) {
+      s.fragmentShader = s.fragmentShader.replace('#include <lights_fragment_begin>', `
+        bool wetSun = vW.y < ${WY} && all(greaterThanEqual(vW.xz, uPond.xy - .001)) && all(lessThanEqual(vW.xz, uPond.zw + .001));
+        vec3 receiver = wetSun ? BRDF_Lambert(material.diffuseColor) * saturate(dot(normal, mat3(viewMatrix) * waterSunDir())) : vec3(0.);
+        if (uSunPlan == 2.) { gl_FragColor = vec4(receiver, vW.y); return; }
+        ${THREE.ShaderChunk.lights_fragment_begin.replace('getDirectionalLightInfo( directionalLight, directLight );',
+          'getDirectionalLightInfo( directionalLight, directLight ); if (wetSun) { directLight.color = vec3(0.); directLight.visible = false; }')}`);
+    }
   };
   return m;
 }
@@ -322,4 +384,4 @@ function paintedBall(z, r, paint, o) {
 const beachBall = z => paintedBall(z, .25, (x, y, zc) => Math.abs(y) > .93 ? 0xf4f0e6 : [0xe8402e, 0xf4f0e6, 0xf6c22b, 0xf4f0e6, 0x2f7fd8, 0xf4f0e6][Math.floor((Math.atan2(zc, x) / Math.PI + 1) * 3) % 6], { roughness: .28 }); // six vinyl gores, white caps
 const wallMat = (z, color, o) => M(z, 'plaster', { color, ...o }); // painted plaster in any colour
 
-export { FT, FA, S, M, libMat, LIB, dirt, causticsGLSL, lampOn, lampOff, glow, seaMat, noCast, tileFX, poolMats, P, neon, voidMat, aisle, label, sign, wallMat, paintedBall, beachBall };
+export { FT, FA, S, M, libMat, LIB, dirt, causticsGLSL, waterAbsorptionGLSL, waterSunGLSL, lampOn, lampOff, glow, seaMat, noCast, tileFX, poolMats, P, neon, voidMat, aisle, label, sign, wallMat, paintedBall, beachBall };
