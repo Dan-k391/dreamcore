@@ -215,52 +215,36 @@ function M(z, name, o = {}) {
   return m;
 }
 const causticsGLSL = `
-  void poolWave(vec2 position, vec2 direction, float frequency, float steepness, float offset, float spread, inout vec2 slope, inout vec3 hessian) {
+  void poolWave(vec2 position, vec2 direction, float frequency, float steepness, float offset, float spread, inout vec2 slope, inout float curvature) {
     vec2 bend = vec2(-direction.y, direction.x) * .6;
     float envelope = dot(bend, position) + uTime * .12 + offset * 2.;
-    float phase = dot(direction * frequency, position) + 2.2 * sin(envelope) - uTime * sqrt(9.81 * frequency) * .32 + offset;
+    vec2 wave = direction * frequency + 2.2 * cos(envelope) * bend;
+    float phase = dot(direction * frequency, position) + 2.2 * sin(envelope) - uTime * sqrt(9.81 * frequency) * .2 + offset;
     vec2 footprint = vec2(dFdx(phase), dFdy(phase));
     float filtered = exp(-.125 * dot(footprint, footprint) - .5 * frequency * frequency * spread * spread);
-    if (filtered < .05) return; // filtered away (far, deep, or under a wide lamp): skip its trigonometry
-    vec2 wave = direction * frequency + 2.2 * cos(envelope) * bend;
-    float amplitude = steepness / frequency * filtered, s = sin(phase), b = 2.2 * sin(envelope) * cos(phase);
+    float amplitude = steepness / frequency * filtered;
     slope += wave * (amplitude * cos(phase));
-    hessian -= amplitude * (s * vec3(wave.x * wave.x, wave.x * wave.y, wave.y * wave.y) + b * vec3(bend.x * bend.x, bend.x * bend.y, bend.y * bend.y)); // (xx, xy, yy)
+    curvature -= amplitude * (dot(wave, wave) * sin(phase) + 2.2 * dot(bend, bend) * sin(envelope) * cos(phase));
   }
-  void poolField(vec2 position, float spread, out vec2 slope, out vec3 hessian) {
-    slope = vec2(0.); hessian = vec3(0.);
-    poolWave(position, vec2(.94, .342), 6.3, .018, .4, spread, slope, hessian);
-    poolWave(position, vec2(-.42, .907), 11.8, .010, 2.1, spread, slope, hessian);
-    poolWave(position, vec2(.57, -.822), 19.1, .007, 4.7, spread, slope, hessian);
-    poolWave(position, vec2(-.893, -.45), 27.7, .006, 1.3, spread, slope, hessian);
-    poolWave(position, vec2(.147, .989), 38.3, .008, 3.8, spread, slope, hessian);
-    poolWave(position, vec2(.788, -.616), 52.6, .007, 2.7, spread, slope, hessian);
-    poolWave(position, vec2(-.96, -.28), 67.8, .005, 5.1, spread, slope, hessian);
+  vec3 poolWaves(vec2 position, float spread) {
+    vec2 slope = vec2(0.); float curvature = 0.;
+    poolWave(position, vec2(.94, .342), 3.4, .055, .4, spread, slope, curvature); // broad, slow undulation only (0.5 to 2 m): it breaks reflections
+    poolWave(position, vec2(-.42, .907), 4.9, .045, 2.1, spread, slope, curvature); // into a few soft patches and bends the tiles in wide swirls
+    poolWave(position, vec2(.57, -.822), 7.1, .035, 4.7, spread, slope, curvature);
+    poolWave(position, vec2(-.893, -.45), 9.8, .025, 1.3, spread, slope, curvature);
+    return vec3(slope, curvature);
   }
-  vec3 poolWaves(vec2 position, float spread) { vec2 slope; vec3 hessian; poolField(position, spread, slope, hessian); return vec3(slope, hessian.x + hessian.z); } // slopes, curvature
   vec3 causticPath(vec3 position) {
     float depth = max(0., ${WY} - position.y);
     vec3 lightRay = refract(-normalize(uCausDir), vec3(0., 1., 0.), .75);
     float travel = depth / max(.35, -lightRay.y);
     return vec3(position.xz - lightRay.xz * travel, travel);
   }
-  // Light reaching a submerged point, minus one (-1: none, 0: as without water). Real refraction optics: surface point x sends its light to
-  // x + k d grad h, so the floor gets 1 / det(I + k d H) of it (H: the surface's curvature); lines are where that determinant folds through zero.
-  // The calm surface is too gentle to fold, so the caustic sees it with a gain. Softened by the source's size (the sun sharp, lamps wide) and the pixel.
-  vec3 caus(vec3 position, float laplacian) {
+  float caus(vec3 position, float laplacian) {
     vec3 path = causticPath(position);
-    float lamp = step(.999, uCausDir.y); // overhead stands for the diffuse lamps (a wide source); the sun is never quite overhead
-    float travel = mix(path.z, max(path.z, .9), smoothstep(0., .25, path.z)); // shallow water still shows a web, fading out at the waterline
-    float spread = length(vec2(travel * mix(.014, .04, lamp), max(length(dFdx(path.xy)), length(dFdy(path.xy))))), k = .25 * travel, gain = 8.;
-    vec2 slope, x = path.xy; vec3 hessian;
-    if (lamp < .5) { poolField(x, spread, slope, hessian); x -= k * gain * slope; } // (about) the surface point whose light lands here; under a wide lamp the shift is lost in the blur
-    poolField(x, spread, slope, hessian);
-    hessian = hessian * gain + vec3(.5, 0., .5) * laplacian * 100.; // the real ripples, curvature split evenly
-    vec3 kc = k * vec3(.97, 1., 1.03); // blue bends a little more: a faint fringe on the lines
-    vec3 det = (1. + kc * hessian.x) * (1. + kc * hessian.z) - kc * kc * hessian.y * hessian.y;
-    float soft = mix(.12, .45, lamp) + .04 * travel + 1.5 * length(vec2(dFdx(det.g), dFdy(det.g))); // the source's size, and what one pixel spans
-    vec3 light = sqrt((1. + soft * soft) / (det * det + soft * soft)); // a flat surface gives exactly 1
-    return (light - 1.) * exp(-.12 * path.z);
+    float curvature = poolWaves(path.xy, .012 * path.z).z + laplacian * 100.;
+    float focus = -.7 * path.z * curvature; // broad waves focus gently: a few soft, slow patches
+    return .45 * focus / (.45 + abs(focus)) * exp(-.12 * path.z);
   }
 `; // the moving light pattern under water. Used by the tiles themselves and by the water, for floor it draws from the still plan
 const glow = S({ color: 0, emissive: 0xffedc0, emissiveIntensity: 14 }); // frosted windows and light wells
@@ -291,9 +275,9 @@ function tileFX(m, z) {
         if (vW.y < ${WY}) { // light focused by the surface: a drifting base pattern plus the real ripples (crests focus, troughs spread)
           vec2 s = (causticPath(vW).xy - uPond.xy) / (uPond.zw - uPond.xy), o = uPx * 2.;
           float lap = texture2D(uSim, s - vec2(o.x, 0.)).r + texture2D(uSim, s + vec2(o.x, 0.)).r + texture2D(uSim, s - vec2(0., o.y)).r + texture2D(uSim, s + vec2(0., o.y)).r - 4. * texture2D(uSim, s).r;
-          vec3 c = caus(vW, lap) * uCaus;
-          vec3 l = 1. + c; reflectedLight.directDiffuse *= l * mix(l * l, vec3(1.), max(step(1., l), step(uCaus, .9))); reflectedLight.indirectDiffuse *= 1. + .4 * c; } // cells deepened in sunlight, so the web reads even where the floor is near white
-        else if (uShimmer > 0.) reflectedLight.indirectDiffuse *= 1. + uShimmer * .5 * caus(vec3(vW.x * .6, ${WY} - .65, vW.z * .6), 0.) * smoothstep(.2, 1.2, vW.y - ${WY}) * exp((${WY} - vW.y) * .3);`);
+          float c = caus(vW, lap) * uCaus;
+          reflectedLight.directDiffuse *= 1. + 1.8 * c; reflectedLight.indirectDiffuse *= 1. + .85 * c; }
+        else if (uShimmer > 0.) reflectedLight.indirectDiffuse *= 1. + uShimmer * caus(vec3(vW.x * .6, ${WY} - .65, vW.z * .6), 0.) * smoothstep(.2, 1.2, vW.y - ${WY}) * exp((${WY} - vW.y) * .3);`);
   };
   return m;
 }

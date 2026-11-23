@@ -11,7 +11,7 @@ export function waterOptics(dev) {
   const material = new THREE.ShaderMaterial({ uniforms, depthTest: false, depthWrite: false,
     vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0., 1.); }',
     fragmentShader: `varying vec2 vUv; uniform float uTime, uDepth, uSpan, uImpulse; uniform vec3 uCausDir; ${causticsGLSL}
-      void main() { vec2 position = (vUv - .5) * uSpan + vec2(.37, -.81); gl_FragColor = vec4(caus(vec3(position.x, ${WY} - uDepth, position.y), uImpulse).g, poolWaves(position, 0.).xy, 1.); }` });
+      void main() { vec2 position = (vUv - .5) * uSpan + vec2(.37, -.81); gl_FragColor = vec4(caus(vec3(position.x, ${WY} - uDepth, position.y), uImpulse), poolWaves(position, 0.).xy, 1.); }` });
   const geometry = new THREE.PlaneGeometry(2, 2), scene = new THREE.Scene(), camera = new THREE.Camera();
   scene.add(new THREE.Mesh(geometry, material));
   const samples = [];
@@ -35,8 +35,8 @@ export function waterOptics(dev) {
   } finally { renderer.setRenderTarget(previousTarget); target.dispose(); geometry.dispose(); material.dispose(); }
   const byName = Object.fromEntries(samples.map(sample => [sample.name, sample]));
   const field = {
-    bounded: samples.every(sample => sample.nonfinite === 0 && sample.minimum >= -1 && sample.maximum <= 12), // light minus one: never below none, lines capped
-    balanced: Math.abs(byName.normal.mean) < .1,
+    bounded: samples.every(sample => sample.nonfinite === 0 && sample.minimum >= -.45 && sample.maximum <= .45),
+    balanced: Math.abs(byName.normal.mean) < .015,
     visible: byName.normal.rms > .01 && byName.normal.minimum < -.025 && byName.normal.maximum > .025,
     waterline: byName.waterline.rms < 1e-6,
     filtered: byName.subpixel.rms < byName.normal.rms * .1 && byName.deep.rms < byName.normal.rms * .5,
