@@ -94,7 +94,7 @@ const fixPars = `
       float e = length(g - c); if (e > 2.) return vec3(1.); float k = floor(c.y), f = c.y - k, dk = 6. * (min(k + 1., uAG1.y - 1.) - k); // well past the edge: plain, no reads
       vec3 n2 = n * n; vec4 s = vec4(0.);
       for (int a = 0; a < 3; a++) if (n2[a] > 1e-3) { float t = 6. * k + float(2 * a) + (n[a] < 0. ? 1. : 0.); s += n2[a] * mix(agTap(t, c.xz), agTap(t + dk, c.xz), f); }
-      vec3 r = s.a > .02 ? s.rgb / s.a : vec3(1.); // every cell around solid: plain
+      vec3 r = s.a > .001 ? s.rgb / s.a : vec3(1.); // only solid cells around: the light they lend (lights.js agWork, at 1/32); none: plain
       return mix(mix(vec3(1.), r, uAGk), vec3(1.), clamp(e - 1., 0., 1.)); } // past the grid's edge: the plain capture
   #endif
   #ifdef NL

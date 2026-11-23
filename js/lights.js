@@ -244,11 +244,11 @@ function agWork({ grids, AW, H, R, RB, PAD }) {
           for (let m = 1; m <= M; m++) { const t = m * H / el, I = Math.round(i + ex * t / H), J = Math.round(j + ey * t / H), L = Math.round(l + ez * t / H);
             if (I >= 0 && J >= 0 && L >= 0 && I < nx && J < ny && L < nz && solid[at(I, J, L)]) { vis = 0; break; } }
           if (vis) { Ed[p * 3] += e * src[s + 4]; Ed[p * 3 + 1] += e * src[s + 5]; Ed[p * 3 + 2] += e * src[s + 6]; } } } }
-    return { G, N, nx, ny, nz, P, at, solid, pid, pc, NP, link, Ed, ids, sS, meet };
+    return { G, N, nx, ny, nz, P, at, D, solid, pid, pc, NP, link, Ed, ids, sS, meet };
   });
   const t1 = Date.now();
   return pal => { const out = [];
-    for (const { G, N, nx, ny, nz, P, at, solid, pid, NP, link, Ed, ids, sS, meet } of work) { const { lo, n, per, y0, rows, occ, em, old, ops } = G;
+    for (const { G, N, nx, ny, nz, P, at, D, solid, pid, NP, link, Ed, ids, sS, meet } of work) { const { lo, n, per, y0, rows, occ, em, old, ops } = G;
       const rho = new Float32Array(NP * 3), Be = new Float32Array(NP * 3); for (let p = 0; p < NP; p++) for (let k = 0; k < 3; k++) rho[p * 3 + k] = pal[ids[p] * 3 + k] ?? .45;
       for (let e = 0; e < em.length; e += 4) { const c = em[e], p = pid[c]; if (p >= 0) for (let k = 0; k < 3; k++) Be[p * 3 + k] += Math.PI * em[e + 1 + k]; }
       let B = new Float32Array(NP * 3), B2 = new Float32Array(NP * 3); const far = [0, 0, 0];
@@ -295,10 +295,22 @@ function agWork({ grids, AW, H, R, RB, PAD }) {
             if (ops[o]) { const sd = (x - ops[o + 1]) * ops[o + 3] + (z - ops[o + 2]) * ops[o + 4], ac = -(x - ops[o + 1]) * ops[o + 4] + (z - ops[o + 2]) * ops[o + 3]; d = Math.min(d, Math.hypot(sd, Math.max(0, Math.abs(ac) - ops[o + 5] / 2))); } // a portal's end
             else { const u = ops[o + 1] ? z : x, v = ops[o + 1] ? x : z; d = Math.min(d, Math.hypot(u - ops[o + 2], Math.max(ops[o + 3] - v, v - ops[o + 4], 0))); } } // a doorway on the line u = at, v from lo to hi
           fade[c] = Math.min(1, Math.max(0, (d - 1) / 3)); for (let q = c * 18; q < c * 18 + 18; q++) E[q] = 1 + (E[q] * scale - 1) * fade[c]; } }
-      const o16 = new Uint16Array(AW * rows * 4), one = half(1);
+      // the light each open cell stores; a solid cell lends a lookup whose every tap is solid (a surface beside a second one: a wall under the
+      // ceiling, in a corner; the solid cells reach up to half a cell past a face) the light of the open cell its face looks into, else the
+      // mean of its lent or open neighbours but the one behind it (two rounds), at weight LW: an open tap still outweighs it 32 to 1. Was plain 1
+      // there, a bright frame round every wall whose corners baked darker
+      const V = new Float32Array(N * 18), F = new Uint8Array(N * 6), LW = 1 / 32;
+      for (let c = 0; c < N; c++) if (!solid[c]) for (let k = 0; k < 6; k++) { const w = op[c * 6 + k]; for (let ch = 0; ch < 3; ch++) V[c * 18 + k * 3 + ch] = w * (near[c] && lit ? E[c * 18 + k * 3 + ch] : 1); F[c * 6 + k] = 1; }
+      const nb = (c, d) => { const i = c % nx + D[d][0], l = (c / nx | 0) % nz + D[d][2], j = (c / (nx * nz) | 0) + D[d][1]; return i < 0 || j < 0 || l < 0 || i >= nx || j >= ny || l >= nz ? -1 : at(i, j, l); };
+      for (let c = 0; c < N; c++) if (solid[c]) for (let k = 0; k < 6; k++) { const o = nb(c, k); if (o >= 0 && !solid[o]) { V.copyWithin(c * 18 + k * 3, o * 18 + k * 3, o * 18 + k * 3 + 3); F[c * 6 + k] = 2; } }
+      for (let round = 0; round < 2; round++) { const F0 = F.slice();
+        for (let c = 0; c < N; c++) if (solid[c]) for (let k = 0; k < 6; k++) { if (F0[c * 6 + k]) continue; let m = 0;
+          for (let d = 0; d < 6; d++) { const o = d === (k ^ 1) ? -1 : nb(c, d); if (o < 0 || !F0[o * 6 + k]) continue; m++; for (let ch = 0; ch < 3; ch++) V[c * 18 + k * 3 + ch] += V[o * 18 + k * 3 + ch]; }
+          if (m) { for (let ch = 0; ch < 3; ch++) V[c * 18 + k * 3 + ch] /= m; F[c * 6 + k] = 3; } } }
+      const o16 = new Uint16Array(AW * rows * 4), one = half(1), lw = half(LW);
       for (let j = 0; j < ny; j++) for (let k = 0; k < 6; k++) { const t = 6 * j + k, tx = (t % per) * nx, ty = Math.floor(t / per) * nz; // layer j: tiles 6j .. 6j + 5 are +x -x +y -y +z -z
-        for (let l = 0; l < nz; l++) for (let i = 0; i < nx; i++) { const c = at(i, j, l), q = ((ty + l) * AW + tx + i) * 4; if (solid[c]) continue; // solid: 0 everywhere, weight 0
-          const nr = near[c] && lit, w = op[c * 6 + k]; for (let ch = 0; ch < 3; ch++) o16[q + ch] = half(w * (nr ? E[c * 18 + k * 3 + ch] : 1)); o16[q + 3] = one; } }
+        for (let l = 0; l < nz; l++) for (let i = 0; i < nx; i++) { const c = at(i, j, l), q = ((ty + l) * AW + tx + i) * 4, f = F[c * 6 + k]; if (!f) continue; // deep in a solid: 0 everywhere, weight 0
+          const w = f === 1 ? 1 : LW; for (let ch = 0; ch < 3; ch++) o16[q + ch] = half(w * V[c * 18 + k * 3 + ch]); o16[q + 3] = f === 1 ? one : lw; } }
       out.push({ y0, rows, out: o16, patches: NP }); }
     return { grids: out, ms: [t1 - t0, Date.now() - t1] }; };
 }
