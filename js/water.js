@@ -323,7 +323,7 @@ const waterFS = `uniform sampler2D tMirror, tMirrorZ, tUnder, tUnderZ, tDeep, tD
       vec2 hs = (causticPath(hit).xy - uPond.xy) / (uPond.zw - uPond.xy), e = uPx * 2.;
       float lap = texture2D(tSim, hs - vec2(e.x, 0.)).r + texture2D(tSim, hs + vec2(e.x, 0.)).r + texture2D(tSim, hs - vec2(0., e.y)).r + texture2D(tSim, hs + vec2(0., e.y)).r - 4. * texture2D(tSim, hs).r;
       float cz = caus(hit, lap);
-      still *= 1. + mix(.85, 1.8, smoothstep(.25, 1., max(still.r, max(still.g, still.b)))) * uCaus * cz; // stronger where the floor is in direct light, as on the tiles
+      still *= 1. + mix(.85, uCaus >= .9 ? 3.6 : 1.8, smoothstep(.25, 1., max(still.r, max(still.g, still.b)))) * sqrt(uCaus) * cz; // stronger where the floor is in direct light, as on the tiles
       if (uTest == 1.) { gl_FragColor = vec4(mix(texture2D(tUnder, here).rgb, mix(mix(still, dc, dl), eye, live), body), 1.); return; } // ?dev: the lens picture alone
       if (uTest == 2.) { gl_FragColor = vec4(texture2D(tMirror, ru).rgb, 1.); return; } // ?dev: the mirror picture alone
       vec3 refr = mix(mix(still, dc, dl), eye, live) * exp(-vec3(.42, .085, .06) * t * uLook.x); // red is absorbed first

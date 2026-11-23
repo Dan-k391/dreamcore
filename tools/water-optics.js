@@ -35,13 +35,13 @@ export function waterOptics(dev) {
   } finally { renderer.setRenderTarget(previousTarget); target.dispose(); geometry.dispose(); material.dispose(); }
   const byName = Object.fromEntries(samples.map(sample => [sample.name, sample]));
   const field = {
-    bounded: samples.every(sample => sample.nonfinite === 0 && sample.minimum >= -.45 && sample.maximum <= .45),
-    balanced: Math.abs(byName.normal.mean) < .015,
+    bounded: samples.every(sample => sample.nonfinite === 0 && sample.minimum >= -.45 && sample.maximum <= .6),
+    balanced: Math.abs(byName.normal.mean) < .03,
     visible: byName.normal.rms > .01 && byName.normal.minimum < -.025 && byName.normal.maximum > .025,
     waterline: byName.waterline.rms < 1e-6,
     filtered: byName.subpixel.rms < byName.normal.rms * .1 && byName.deep.rms < byName.normal.rms * .5,
     smooth: frameDelta > 0 && frameDelta < .03 && halfSecondDelta > frameDelta * 2,
-    disturbances: byName['positive-impulse'].mean < -.2 && byName['negative-impulse'].mean > .2
+    disturbances: byName['positive-impulse'].mean < -.06 && byName['negative-impulse'].mean > .12 // cells are only ever slightly darker
   };
   const liveTarget = new THREE.WebGLRenderTarget(1280, 720, { type: THREE.FloatType });
   const rows = [], strengths = ponds.map(pond => pond.tileU.uCaus.value);

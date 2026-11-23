@@ -215,39 +215,47 @@ function M(z, name, o = {}) {
   return m;
 }
 const causticsGLSL = `
-  void poolWave(vec2 position, vec2 direction, float frequency, float steepness, float offset, float spread, inout vec2 slope, inout float curvature) {
+  void poolWave(vec2 position, vec2 direction, float frequency, float steepness, float offset, float spread, inout vec2 slope, inout vec3 hessian) {
     float phase = frequency * dot(direction, position) - uTime * sqrt(9.81 * frequency) * .8 + offset; // near real water's timing: calm is small, not slow
     vec2 footprint = vec2(dFdx(phase), dFdy(phase));
     float filtered = exp(-.125 * dot(footprint, footprint) - .5 * frequency * frequency * spread * spread);
+    if (spread > 0. && filtered < .5) return; // the light's low-pass: it follows only the longer waves, and skips the rest
     float amplitude = .85 * steepness / frequency * filtered * (.55 + .45 * sin(uTime * (.11 + .04 * offset) + offset * 3.)); // each swells and fades on its own slow clock
     slope += direction * (frequency * amplitude * cos(phase));
-    curvature -= frequency * frequency * amplitude * sin(phase);
+    hessian -= frequency * frequency * amplitude * sin(phase) * vec3(direction.x * direction.x, direction.x * direction.y, direction.y * direction.y); // (xx, xy, yy)
   }
-  vec3 poolWaves(vec2 position, float spread) {
-    vec2 slope = vec2(0.); float curvature = 0.;
-    poolWave(position, vec2(0.940, 0.342), 3.6, 0.036, 0.4, spread, slope, curvature); // ten gentle trains right round the compass, in rough opposing pairs (0.65 to 1.75 m): half standing,
-    poolWave(position, vec2(-0.921, -0.391), 3.9, 0.035, 5.3, spread, slope, curvature); // half travelling, as in a closed basin; they beat into groups that swell and fade, so it never repeats visibly
-    poolWave(position, vec2(-0.423, 0.906), 4.6, 0.035, 2.1, spread, slope, curvature);
-    poolWave(position, vec2(0.375, -0.927), 5.1, 0.034, 3.6, spread, slope, curvature);
-    poolWave(position, vec2(0.469, 0.883), 5.9, 0.033, 1.2, spread, slope, curvature);
-    poolWave(position, vec2(-0.375, -0.927), 6.4, 0.032, 4.4, spread, slope, curvature);
-    poolWave(position, vec2(-0.940, 0.342), 7.3, 0.031, 0.9, spread, slope, curvature);
-    poolWave(position, vec2(0.921, -0.391), 7.9, 0.03, 5.8, spread, slope, curvature);
-    poolWave(position, vec2(0.035, 0.999), 8.8, 0.029, 2.9, spread, slope, curvature);
-    poolWave(position, vec2(0.017, -1.000), 9.6, 0.028, 3.3, spread, slope, curvature);
-    return vec3(slope, curvature);
+  void poolField(vec2 position, float spread, out vec2 slope, out vec3 hessian) {
+    slope = vec2(0.); hessian = vec3(0.);
+    poolWave(position, vec2(0.940, 0.342), 3.6, 0.036, 0.4, spread, slope, hessian); // ten gentle trains right round the compass, in rough opposing pairs (0.65 to 1.75 m): half standing,
+    poolWave(position, vec2(-0.921, -0.391), 3.9, 0.035, 5.3, spread, slope, hessian); // half travelling, as in a closed basin; they beat into groups that swell and fade, so it never repeats visibly
+    poolWave(position, vec2(-0.423, 0.906), 4.6, 0.035, 2.1, spread, slope, hessian);
+    poolWave(position, vec2(0.375, -0.927), 5.1, 0.034, 3.6, spread, slope, hessian);
+    poolWave(position, vec2(0.469, 0.883), 5.9, 0.033, 1.2, spread, slope, hessian);
+    poolWave(position, vec2(-0.375, -0.927), 6.4, 0.032, 4.4, spread, slope, hessian);
+    poolWave(position, vec2(-0.940, 0.342), 7.3, 0.031, 0.9, spread, slope, hessian);
+    poolWave(position, vec2(0.921, -0.391), 7.9, 0.03, 5.8, spread, slope, hessian);
+    poolWave(position, vec2(0.035, 0.999), 8.8, 0.029, 2.9, spread, slope, hessian);
+    poolWave(position, vec2(0.017, -1.000), 9.6, 0.028, 3.3, spread, slope, hessian);
   }
+  vec3 poolWaves(vec2 position, float spread) { vec2 slope; vec3 hessian; poolField(position, spread, slope, hessian); return vec3(slope, hessian.x + hessian.z); } // slopes, curvature
   vec3 causticPath(vec3 position) {
     float depth = max(0., ${WY} - position.y);
     vec3 lightRay = refract(-normalize(uCausDir), vec3(0., 1., 0.), .75);
     float travel = depth / max(.35, -lightRay.y);
     return vec3(position.xz - lightRay.xz * travel, travel);
   }
+  // Mild caustics from real refraction optics: surface point x sends its light to x + k d grad h, so the floor gets 1 / det(I + k d H) of it.
+  // Taken from the longer waves only, kept short of the fold and widely softened: soft veins round large cells, never thin lines. Light minus one, gently mapped.
   float caus(vec3 position, float laplacian) {
     vec3 path = causticPath(position);
-    float curvature = poolWaves(path.xy, .012 * path.z).z + laplacian * 100.;
-    float focus = -.7 * path.z * curvature; // broad waves focus gently: a few soft, slow patches
-    return .45 * focus / (.45 + abs(focus)) * exp(-.12 * path.z);
+    float k = .25 * clamp(path.z, .9, 1.3), gain = 16.; // the calm surface seen with a gain; shallow water keeps its veins, deep water stays short of the fold
+    vec2 slope; vec3 hessian;
+    poolField(path.xy, .15, slope, hessian); poolField(path.xy - k * gain * slope, .15, slope, hessian); // at the surface point whose light lands here
+    hessian = hessian * gain + vec3(.5, 0., .5) * laplacian * 100.; // the real ripples, curvature split evenly
+    float det = (1. + k * hessian.x) * (1. + k * hessian.z) - k * k * hessian.y * hessian.y;
+    float soft = .4 + 2. * length(vec2(dFdx(det), dFdy(det))); // wide, and wider where one pixel spans much of it: far water melts to an even glow
+    float light = sqrt((1. + soft * soft) / (det * det + soft * soft)) - 1.; // a flat surface gives exactly 0
+    return light * (light > 0. ? .3 : .24) * smoothstep(0., .25, path.z) * exp(-.12 * path.z); // veins a gentle lift, cells barely darker
   }
 `; // the moving light pattern under water. Used by the tiles themselves and by the water, for floor it draws from the still plan
 const glow = S({ color: 0, emissive: 0xffedc0, emissiveIntensity: 14 }); // frosted windows and light wells
@@ -278,8 +286,8 @@ function tileFX(m, z) {
         if (vW.y < ${WY}) { // light focused by the surface: a drifting base pattern plus the real ripples (crests focus, troughs spread)
           vec2 s = (causticPath(vW).xy - uPond.xy) / (uPond.zw - uPond.xy), o = uPx * 2.;
           float lap = texture2D(uSim, s - vec2(o.x, 0.)).r + texture2D(uSim, s + vec2(o.x, 0.)).r + texture2D(uSim, s - vec2(0., o.y)).r + texture2D(uSim, s + vec2(0., o.y)).r - 4. * texture2D(uSim, s).r;
-          float c = caus(vW, lap) * uCaus;
-          reflectedLight.directDiffuse *= 1. + 1.8 * c; reflectedLight.indirectDiffuse *= 1. + .85 * c; }
+          float c = caus(vW, lap) * sqrt(uCaus); // lamp pools: a little, not nothing
+          reflectedLight.directDiffuse *= 1. + (uCaus >= .9 ? 3.6 : 1.8) * c; reflectedLight.indirectDiffuse *= 1. + .85 * c; } // sunlight: twice, so soft cells show even where the floor is near white
         else if (uShimmer > 0.) reflectedLight.indirectDiffuse *= 1. + uShimmer * caus(vec3(vW.x * .6, ${WY} - .65, vW.z * .6), 0.) * smoothstep(.2, 1.2, vW.y - ${WY}) * exp((${WY} - vW.y) * .3);`);
   };
   return m;
