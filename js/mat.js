@@ -216,22 +216,25 @@ function M(z, name, o = {}) {
 }
 const causticsGLSL = `
   void poolWave(vec2 position, vec2 direction, float frequency, float steepness, float offset, float spread, inout vec2 slope, inout float curvature) {
-    vec2 bend = vec2(-direction.y, direction.x) * .6;
-    float envelope = dot(bend, position) + uTime * .12 + offset * 2.;
-    vec2 wave = direction * frequency + 2.2 * cos(envelope) * bend;
-    float phase = dot(direction * frequency, position) + 2.2 * sin(envelope) - uTime * sqrt(9.81 * frequency) * .2 + offset;
+    float phase = frequency * dot(direction, position) - uTime * sqrt(9.81 * frequency) * .8 + offset; // near real water's timing: calm is small, not slow
     vec2 footprint = vec2(dFdx(phase), dFdy(phase));
     float filtered = exp(-.125 * dot(footprint, footprint) - .5 * frequency * frequency * spread * spread);
-    float amplitude = steepness / frequency * filtered;
-    slope += wave * (amplitude * cos(phase));
-    curvature -= amplitude * (dot(wave, wave) * sin(phase) + 2.2 * dot(bend, bend) * sin(envelope) * cos(phase));
+    float amplitude = .85 * steepness / frequency * filtered * (.55 + .45 * sin(uTime * (.11 + .04 * offset) + offset * 3.)); // each swells and fades on its own slow clock
+    slope += direction * (frequency * amplitude * cos(phase));
+    curvature -= frequency * frequency * amplitude * sin(phase);
   }
   vec3 poolWaves(vec2 position, float spread) {
     vec2 slope = vec2(0.); float curvature = 0.;
-    poolWave(position, vec2(.94, .342), 3.4, .055, .4, spread, slope, curvature); // broad, slow undulation only (0.5 to 2 m): it breaks reflections
-    poolWave(position, vec2(-.42, .907), 4.9, .045, 2.1, spread, slope, curvature); // into a few soft patches and bends the tiles in wide swirls
-    poolWave(position, vec2(.57, -.822), 7.1, .035, 4.7, spread, slope, curvature);
-    poolWave(position, vec2(-.893, -.45), 9.8, .025, 1.3, spread, slope, curvature);
+    poolWave(position, vec2(0.940, 0.342), 3.6, 0.036, 0.4, spread, slope, curvature); // ten gentle trains right round the compass, in rough opposing pairs (0.65 to 1.75 m): half standing,
+    poolWave(position, vec2(-0.921, -0.391), 3.9, 0.035, 5.3, spread, slope, curvature); // half travelling, as in a closed basin; they beat into groups that swell and fade, so it never repeats visibly
+    poolWave(position, vec2(-0.423, 0.906), 4.6, 0.035, 2.1, spread, slope, curvature);
+    poolWave(position, vec2(0.375, -0.927), 5.1, 0.034, 3.6, spread, slope, curvature);
+    poolWave(position, vec2(0.469, 0.883), 5.9, 0.033, 1.2, spread, slope, curvature);
+    poolWave(position, vec2(-0.375, -0.927), 6.4, 0.032, 4.4, spread, slope, curvature);
+    poolWave(position, vec2(-0.940, 0.342), 7.3, 0.031, 0.9, spread, slope, curvature);
+    poolWave(position, vec2(0.921, -0.391), 7.9, 0.03, 5.8, spread, slope, curvature);
+    poolWave(position, vec2(0.035, 0.999), 8.8, 0.029, 2.9, spread, slope, curvature);
+    poolWave(position, vec2(0.017, -1.000), 9.6, 0.028, 3.3, spread, slope, curvature);
     return vec3(slope, curvature);
   }
   vec3 causticPath(vec3 position) {
