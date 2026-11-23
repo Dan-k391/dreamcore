@@ -215,8 +215,9 @@ function M(z, name, o = {}) {
   return m;
 }
 const causticsGLSL = `
+  float poolClock = 1.; // caus() slows it for the light alone
   void poolWave(vec2 position, vec2 direction, float frequency, float steepness, float offset, float spread, inout vec2 slope, inout vec3 hessian) {
-    float phase = frequency * dot(direction, position) - uTime * sqrt(9.81 * frequency) * .8 + offset; // near real water's timing: calm is small, not slow
+    float phase = frequency * dot(direction, position) - uTime * poolClock * sqrt(9.81 * frequency) * .8 + offset; // near real water's timing: calm is small, not slow
     vec2 footprint = vec2(dFdx(phase), dFdy(phase));
     float filtered = exp(-.125 * dot(footprint, footprint) - .5 * frequency * frequency * spread * spread);
     if (spread > 0. && filtered < .5) return; // the light's low-pass: it follows only the longer waves, and skips the rest
@@ -251,7 +252,8 @@ const causticsGLSL = `
     float k = .25 * clamp(path.z, .9, 1.3), gain = 16.; // the calm surface seen with a gain; shallow water keeps its veins, deep water stays short of the fold
     vec2 slope; vec3 hessian;
     float band = step(.999, uCausDir.y) * .05 + .15; // lamp pools (light from overhead): a wider source, so only the five longest waves
-    poolField(path.xy, band, slope, hessian); poolField(path.xy - k * gain * slope, band, slope, hessian); // at the surface point whose light lands here
+    vec2 at = path.xy * 1.8; poolClock = .35; // the light has its own scale and clock (the owner's eye over the optics): smaller cells that re-form over seconds, not with the surface's quick timing
+    poolField(at, band, slope, hessian); poolField(at - k * gain * slope, band, slope, hessian); poolClock = 1.; // at the surface point whose light lands here
     hessian = hessian * gain + vec3(.5, 0., .5) * laplacian * 100.; // the real ripples, curvature split evenly
     float det = (1. + k * hessian.x) * (1. + k * hessian.z) - k * k * hessian.y * hessian.y;
     float soft = .4 + 2. * length(vec2(dFdx(det), dFdy(det))); // wide, and wider where one pixel spans much of it: far water melts to an even glow
