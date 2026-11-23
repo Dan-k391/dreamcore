@@ -250,7 +250,8 @@ const causticsGLSL = `
     vec3 path = causticPath(position);
     float k = .25 * clamp(path.z, .9, 1.3), gain = 16.; // the calm surface seen with a gain; shallow water keeps its veins, deep water stays short of the fold
     vec2 slope; vec3 hessian;
-    poolField(path.xy, .15, slope, hessian); poolField(path.xy - k * gain * slope, .15, slope, hessian); // at the surface point whose light lands here
+    float band = step(.999, uCausDir.y) * .05 + .15; // lamp pools (light from overhead): a wider source, so only the five longest waves
+    poolField(path.xy, band, slope, hessian); poolField(path.xy - k * gain * slope, band, slope, hessian); // at the surface point whose light lands here
     hessian = hessian * gain + vec3(.5, 0., .5) * laplacian * 100.; // the real ripples, curvature split evenly
     float det = (1. + k * hessian.x) * (1. + k * hessian.z) - k * k * hessian.y * hessian.y;
     float soft = .4 + 2. * length(vec2(dFdx(det), dFdy(det))); // wide, and wider where one pixel spans much of it: far water melts to an even glow
