@@ -219,7 +219,7 @@ function M(z, name, o = {}) {
 // FILM.T seconds) and holds the surface's slope (rms 1; FILM.RIPPLE scales it; the picture draws FILM.SHOWN of it, the light all). 96 random waves (seeded): headings over a half circle, so the net drifts instead of boiling in place, FILM.lo to FILM.hi
 // long, Rayleigh amplitudes, each wave vector a whole number of waves across the tile and each frequency a whole number of cycles in the
 // loop, so it wraps without a seam; at FILM.clock of real water's speed, the one clock the trains run on too. Many random waves, not a few: no lattice.
-const FILM = { n: 160, d: 96, L: 4.8, T: 16, lo: .45, hi: 1.3, lay: .55, RIPPLE: .065, SHOWN: .4, clock: .25 }, filmU = { value: null };
+const FILM = { n: 160, d: 96, L: 4.8, T: 16, lo: .45, hi: 1.3, lay: .55, RIPPLE: .065, SHOWN: .4, clock: .25, IDLE: 0 }, filmU = { value: null }; // IDLE: how much of the trains and the film an undisturbed pool has (0: still water, only the simulation's ripples move it)
 function bakeFilm() {
   const { n, d, L, T, lo, hi } = FILM, K = [], O = [], seen = new Set(), t0 = performance.now(); let seed = 20261123;
   const rnd = () => (seed = seed * 16807 % 2147483647) / 2147483647;
@@ -271,7 +271,7 @@ const causticsGLSL = `
     poolWave(position, vec2(0.921, -0.391), 7.9, 0.03, 5.8, slope);
     poolWave(position, vec2(0.035, 0.999), 8.8, 0.029, 2.9, slope);
     poolWave(position, vec2(0.017, -1.000), 9.6, 0.028, 3.3, slope);
-    return slope;
+    return slope * ${FILM.IDLE.toFixed(2)};
   }
   vec3 causticPath(vec3 position) { // -> the surface point whose undisturbed light ray reaches this point under water (the light picture's coordinates), and the ray's length
     float depth = max(0., ${WY} - position.y);
@@ -284,7 +284,7 @@ const causticsGLSL = `
 const rippleGLSL = `
   uniform highp sampler3D tFilm;
   vec3 filmAt(vec2 position) { return vec3(mat2(.857, .515, -.515, .857) * position / ${(FILM.L * FILM.lay).toFixed(2)}, uTime / ${FILM.T.toFixed(1)}); } // off the pools' axes, laid at FILM.lay of its baked size
-  vec2 ripple(vec2 film) { return ${FILM.RIPPLE.toFixed(3)} * (film * mat2(.857, .515, -.515, .857)); } // the film's slope (rms 1) turned back onto the world's axes, times the ripple strength
+  vec2 ripple(vec2 film) { return ${(FILM.RIPPLE * FILM.IDLE).toFixed(3)} * (film * mat2(.857, .515, -.515, .857)); } // the film's slope (rms 1) turned back onto the world's axes, times the ripple strength
 `; // the ripple layer, for the water's normal and its light (not the tiles: they are at 16 texture units)
 const glow = S({ color: 0, emissive: 0xffedc0, emissiveIntensity: 14 }); // frosted windows and light wells
 const seaMat = S({ color: 0x0f4652, roughness: .05, normalMap: wn0, normalScale: new THREE.Vector2(.5, .5) });
