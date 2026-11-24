@@ -45,7 +45,7 @@ const waves = (s, n) => { // tileable ripple heightfield -> water normal map, on
     return t; });
   return (u, v, x, y) => { let h = 0; for (const t of T) h += t[x * 4] * t[y * 4 + 2] + t[x * 4 + 1] * t[y * 4 + 3]; return [0, 0, 0, h, 0]; };
 };
-const wn0 = makeTex(512, 6, waves(1, 512), 2).normalMap, wn1 = makeTex(512, 6, waves(2, 512), 2).normalMap;
+const wn0 = makeTex(512, 6, waves(1, 512), 2).normalMap;
 
 // ---------- the material library: GPU-baked texture sets ----------
 // A set is the body of surf(uv, c, h, r, m, t): uv runs 0..1 over SZ metres and must tile. It writes linear albedo c, height h in
@@ -170,4 +170,4 @@ async function bakeLibrary() { // run once, after every place has asked for its 
 // The shared materials the places used before the library, as handles P() in mat.js turns into library materials (see mat.js).
 const concrete = { lib: 'concreteFloor' }, hotelTex = { map: { lib: 'hotelCarpet' }, normalMap: { lib: 'hotelCarpet' } };
 
-export { hash, noise, fbm, ss, maxA, makeTex, grime, waves, wn0, wn1, concrete, hotelTex, sets, LIB, libTex, detailTex, bakeLibrary, libStats };
+export { hash, noise, fbm, ss, maxA, makeTex, grime, waves, wn0, concrete, hotelTex, sets, LIB, libTex, detailTex, bakeLibrary, libStats };

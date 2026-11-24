@@ -1,48 +1,32 @@
-import { causticsGLSL, filmGLSL, filmU } from '../js/mat.js';
-import { WY } from '../js/core.js';
-import { ponds, uTest } from '../js/water.js';
+import { ponds, sheets, ripple, resetWater, uTest } from '../js/water.js';
 
+// The light pictures (water.js): the light traced forward through the surface, as the tiles read it (1 = flat water's light)
 export function waterOptics(dev) {
   const { THREE, renderer } = dev;
-  dev.hold = true;
-  const target = new THREE.WebGLRenderTarget(128, 128, { type: THREE.FloatType, depthBuffer: false });
-  const previousTarget = renderer.getRenderTarget();
-  const uniforms = { uTime: { value: 1.5 }, uCausDir: { value: new THREE.Vector3(-1, .5, -.32).normalize() }, uDepth: { value: 1.08 }, uSpan: { value: 8 }, uImpulse: { value: 0 }, tFilm: filmU };
-  const material = new THREE.ShaderMaterial({ uniforms, depthTest: false, depthWrite: false,
-    vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0., 1.); }',
-    fragmentShader: `varying vec2 vUv; uniform float uTime, uDepth, uSpan, uImpulse, uCaus; uniform vec3 uCausDir; ${causticsGLSL}${filmGLSL}
-      void main() { vec2 position = (vUv - .5) * uSpan + vec2(.37, -.81); gl_FragColor = vec4(caus(vec3(position.x, ${WY} - uDepth, position.y), uImpulse), poolWaves(position, 0.).xy, 1.); }` });
-  const geometry = new THREE.PlaneGeometry(2, 2), scene = new THREE.Scene(), camera = new THREE.Camera();
-  scene.add(new THREE.Mesh(geometry, material));
-  const samples = [];
-  const sample = (name, time = 1.5, depth = 1.08, span = 8, impulse = 0) => {
-    uniforms.uTime.value = time; uniforms.uDepth.value = depth; uniforms.uSpan.value = span; uniforms.uImpulse.value = impulse;
-    renderer.setRenderTarget(target); renderer.render(scene, camera);
-    const pixels = new Float32Array(128 * 128 * 4); renderer.readRenderTargetPixels(target, 0, 0, 128, 128, pixels);
-    let minimum = Infinity, maximum = -Infinity, sum = 0, square = 0, nonfinite = 0;
-    for (let index = 0; index < pixels.length; index += 4) {
-      const value = pixels[index]; minimum = Math.min(minimum, value); maximum = Math.max(maximum, value); sum += value; square += value * value;
-      for (let channel = 0; channel < 4; channel++) if (!Number.isFinite(pixels[index + channel])) nonfinite++;
-    }
-    samples.push({ name, time, depth, span, impulse, minimum, maximum, mean: sum / 16384, rms: Math.sqrt(square / 16384), nonfinite });
-    return pixels;
-  };
-  const difference = (left, right) => { let sum = 0; for (let index = 0; index < left.length; index += 4) sum += Math.abs(left[index] - right[index]); return sum / 16384; };
-  let frameDelta, halfSecondDelta;
-  try {
-    const normal = sample('normal'); frameDelta = difference(normal, sample('next-frame', 1.5 + 1 / 60)); halfSecondDelta = difference(normal, sample('half-second', 2));
-    sample('waterline', 1.5, 0); sample('deep', 1.5, 24); sample('subpixel', 1.5, 1.08, 1024); sample('positive-impulse', 1.5, 1.08, 8, .1); sample('negative-impulse', 1.5, 1.08, 8, -.1);
-  } finally { renderer.setRenderTarget(previousTarget); target.dispose(); geometry.dispose(); material.dispose(); }
-  const byName = Object.fromEntries(samples.map(sample => [sample.name, sample]));
+  dev.hold = true; dev.reset(0.5, -17, 3.14159, -1.25); dev.step(30);
+  const S = sheets.find(q => q.ponds.some(w => w.tileU.uCausDir.value.y < .999)), W = S.light.width, H = S.light.height, R = S.rect, previousTarget = renderer.getRenderTarget();
+  const copy = new THREE.WebGLRenderTarget(W, H, { type: THREE.FloatType, depthBuffer: false }), quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({ uniforms: { t: { value: S.light.texture } }, depthTest: false,
+    vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0., 1.); }', fragmentShader: 'uniform sampler2D t; varying vec2 vUv; void main() { gl_FragColor = vec4(textureLod(t, vUv, 0.).r, 0., 0., 1.); }' }));
+  const scene = new THREE.Scene(), cam = new THREE.Camera(); scene.add(quad);
+  const read = () => { renderer.setRenderTarget(copy); renderer.render(scene, cam); const p = new Float32Array(W * H * 4); renderer.readRenderTargetPixels(copy, 0, 0, W, H, p); renderer.setRenderTarget(previousTarget); return p; }; // a half-float red target is not readable as such
+  const at = (x, z) => [Math.round((x - R.x) / (R.z - R.x) * W), Math.round((z - R.y) / (R.w - R.y) * H)];
+  const region = (pixels, x1, z1, x2, z2) => { const [i1, j1] = at(x1, z1), [i2, j2] = at(x2, z2), v = []; for (let j = j1; j < j2; j++) for (let i = i1; i < i2; i++) v.push(pixels[(j * W + i) * 4]); return v; };
+  const stats = v => { let min = Infinity, max = -Infinity, sum = 0, sq = 0, nonfinite = 0; for (const x of v) { if (!Number.isFinite(x)) { nonfinite++; continue; } min = Math.min(min, x); max = Math.max(max, x); sum += x; sq += x * x; } const mean = sum / v.length; return { min, max, mean, rms: Math.sqrt(Math.max(0, sq / v.length - mean * mean)), nonfinite }; };
+  const inner = p => region(p, R.x + 1.5, R.y + 1.5, R.z - 1.5, R.w - 1.5), diff = (a, b) => a.reduce((s, x, i) => s + Math.abs(x - b[i]), 0) / a.length;
+  const now = read(), all = stats(region(now, R.x, R.y, R.z, R.w)), mid = stats(inner(now));
+  dev.step(1); const next = read(); dev.step(29); const half = read();
+  const frameDelta = diff(inner(now), inner(next)), halfSecondDelta = diff(inner(now), inner(half));
+  const cx = (R.x + R.z) / 2, cz = (R.y + R.w) / 2, near = p => region(p, cx - .5, cz - .5, cx + .5, cz + .5); // the player's ripples: one landing in the middle of the pool, ten steps on, against still water
+  resetWater(); for (let i = 0; i < 10; i++) ripple(S, []); const calm = read();
+  resetWater(); ripple(S, [[cx, cz, .35]]); for (let i = 0; i < 9; i++) ripple(S, []); const struck = read(); resetWater(); copy.dispose(); quad.geometry.dispose(); quad.material.dispose();
   const field = {
-    bounded: samples.every(sample => sample.nonfinite === 0 && sample.minimum >= -1 && sample.maximum <= 19.1), // the light is conserved: never below none, lines at most what softening .05 allows
-    balanced: Math.abs(byName.normal.mean) < .03,
-    visible: byName.normal.rms > .01 && byName.normal.minimum < -.025 && byName.normal.maximum > .025,
-    waterline: byName.waterline.rms < 1e-6,
-    filtered: byName.subpixel.rms < byName.normal.rms * .1 && byName.deep.rms < byName.normal.rms * .5,
-    smooth: frameDelta > 0 && frameDelta < .03 && halfSecondDelta > frameDelta * 2,
-    disturbances: byName['positive-impulse'].mean < -.06 && byName['negative-impulse'].mean > .12 // cells are only ever slightly darker
+    bounded: all.nonfinite === 0 && all.min >= 0 && all.max <= 64, // never below none; a fold adds at most a few cells of 16
+    balanced: Math.abs(mid.mean - 1) < .05, // light is conserved
+    visible: mid.rms > .15 && mid.max > 2.5 && mid.min < .5, // a net: bright lines, darker cells
+    smooth: frameDelta > 0 && frameDelta < .25 && halfSecondDelta > frameDelta * 3, // at 1.5 cm a texel a moving line changes a few texels a step (measured .15 against .84 over half a second)
+    disturbances: diff(near(calm), near(struck)) > .1
   };
+  const samples = { all, mid, frameDelta, halfSecondDelta, ripples: diff(near(calm), near(struck)) };
   const liveTarget = new THREE.WebGLRenderTarget(1280, 720, { type: THREE.FloatType });
   const rows = [], strengths = ponds.map(pond => pond.tileU.uCaus.value);
   const grab = mode => {

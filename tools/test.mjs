@@ -188,7 +188,9 @@ check('the first sign is drawn in under 0.5 s and the openings are found in unde
 // seen from where you stand (js/seen.js) the gallery drew 902 calls / 6.9 M triangles; then about 340 / 1.4 M, the corridor 680 / 3.2 M.
 // Since the pools' depth pre-passes (water.js: the lens's, and the deep picture's for its mask) the gallery draws about 530 / 2.8 M: each
 // pool view submits the underwater scene twice more, for about .6 ms of CPU against 0.7-1.3 ms of GPU saved; its ceiling moved from 500 / 2.5 M.
-if (on('load')) for (const [name, hash, calls, tris] of [['gallery-pool', '23.2,14.2,3.14159,-0.08', 600, 3.2e6], ['corridor', '10.5,10.8,-1.5708,0', 900, 4.2e6]]) {
+// Since the light is traced forward through the pools' surface (water.js, light()) each visible sheet draws its grid every wave step: about
+// .6 M plain triangles more here (gallery 3.4 M, corridor 4.7 M), measured at .04-.22 ms of GPU; the ceilings moved from 3.2 / 4.2 M.
+if (on('load')) for (const [name, hash, calls, tris] of [['gallery-pool', '23.2,14.2,3.14159,-0.08', 600, 3.8e6], ['corridor', '10.5,10.8,-1.5708,0', 900, 5e6]]) {
   const f = run(base + '?dev&bare#' + hash, `(() => { dev.hold = true; dev.step(60); const n = dev.info(); return { calls: n.calls, tris: n.triangles }; })()`);
   check(`${name} draws under ${calls} calls and ${tris / 1e6} M triangles a frame`, f.result?.calls < calls && f.result?.tris < tris, JSON.stringify(f.result));
 }
@@ -245,7 +247,7 @@ if (on('water')) { const f = run(base + '?dev&bare', `(async () => {
   check('at most one set of pool pictures (mirror, lens, deep) is rendered per main scene render', f.result?.maxCaptures === 3 && f.result.maxDepthCaptures <= 2 && !f.errors.length, JSON.stringify(f.result)); }
 
 if (on('water')) { const f = run(base + '?dev&bare', `(async () => (await import('/tools/water-optics.js')).waterOptics(dev))()`);
-  check('pool focusing is bounded, balanced, animated, depth-filtered and responds to disturbances', f.result && Object.values(f.result.field).every(Boolean) && !f.errors.length, JSON.stringify(f.result || f));
+  check('the light traced through the pool surface is bounded, balanced, a visible net, smoothly animated and shows the player ripples', f.result && Object.values(f.result.field).every(Boolean) && !f.errors.length, JSON.stringify(f.result || f));
   check('all four pool palettes retain finite nonnegative water and visible caustic modulation', f.result?.rows.length === 4 && f.result.rows.every(row => row.waterPixels > 10000 && row.nonfinite === 0 && row.negative === 0 && row.meanLinearModulation > 1e-5) && !f.errors.length, JSON.stringify(f.result?.rows || f));
   check('water optics stays within sixteen active samplers without GL errors', f.result?.maxSamplers <= 16 && f.result.glError === 0 && !f.errors.length, JSON.stringify(f.result && { samplers: f.result.maxSamplers, glError: f.result.glError })); }
 
