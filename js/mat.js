@@ -253,7 +253,7 @@ const causticsGLSL = `
 // amplitudes, each wave vector a whole number of waves across the tile and each frequency a whole number of cycles in the loop, so it
 // wraps without a seam; a near-real dispersion slowed to the owner's clock. Optics as before: a floor point gets 1 / det(I + H) from
 // the surface point whose light lands there (one step back along the slope), close to the fold and softened by FILM.S: thin lines. Many random waves, not a few: no lattice.
-const FILM = { n: 160, d: 64, L: 4.8, T: 16, FOCUS: .35, lo: .45, hi: 1.3, S: .1, lay: .8 }, filmU = { value: null };
+const FILM = { n: 160, d: 64, L: 4.8, T: 16, FOCUS: .7, lo: .45, hi: 1.3, S: .05, lay: .8 }, filmU = { value: null };
 const filmGLSL = `uniform highp sampler3D tFilm;
   float causLight(vec2 surface, float laplacian) { // light minus one at the floor below this surface point, from the film and the simulation's real ripples
     float f = (1. + texture(tFilm, vec3(mat2(.857, .515, -.515, .857) * surface / ${(FILM.L * FILM.lay).toFixed(2)}, uTime / ${FILM.T.toFixed(1)})).r) / (1. + textureLod(tFilm, vec3(.5), 16.).r); // off the pools' axes, and laid at FILM.lay of its baked size (cells half the water's depth across, as in a real pool a metre deep); over the film's mean, so light is conserved
@@ -274,7 +274,7 @@ function bakeFilm() {
     K.push(new THREE.Vector4(kx, kz, Math.sqrt(-Math.log(1 - rnd())) / k, 2 * Math.PI * rnd())); // equal slope per wave on average
     O.push(2 * Math.PI / T * Math.max(1, Math.round(T * .65 * Math.sqrt(k) / (2 * Math.PI)))); // the light's clock: re-forms over seconds
   }
-  const g = FOCUS / Math.sqrt(K.reduce((a, w) => a + (w.z * w.x * w.x) ** 2 / 2, 0)); K.forEach(w => w.z *= g); // the curvature's spread, as the approved mild look
+  const g = FOCUS / Math.sqrt(K.reduce((a, w) => a + (w.z * w.x * w.x) ** 2 / 2, 0)); K.forEach(w => w.z *= g); // the curvature's spread: at .7 folds form, which is what makes lines thin (at .35 they were broad bands; the owner: "too bold")
   const rt = new THREE.WebGL3DRenderTarget(n, n, d, { depthBuffer: false });
   Object.assign(rt.texture, { type: THREE.HalfFloatType, format: THREE.RedFormat, generateMipmaps: false, minFilter: THREE.LinearMipmapLinearFilter, magFilter: THREE.LinearFilter, // three's 3D target ignores these options
     wrapS: THREE.RepeatWrapping, wrapT: THREE.RepeatWrapping, wrapR: THREE.RepeatWrapping });

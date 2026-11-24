@@ -35,7 +35,7 @@ export function waterOptics(dev) {
   } finally { renderer.setRenderTarget(previousTarget); target.dispose(); geometry.dispose(); material.dispose(); }
   const byName = Object.fromEntries(samples.map(sample => [sample.name, sample]));
   const field = {
-    bounded: samples.every(sample => sample.nonfinite === 0 && sample.minimum >= -1 && sample.maximum <= 9.1), // the light is conserved: never below none, lines at most what softening .1 allows
+    bounded: samples.every(sample => sample.nonfinite === 0 && sample.minimum >= -1 && sample.maximum <= 19.1), // the light is conserved: never below none, lines at most what softening .05 allows
     balanced: Math.abs(byName.normal.mean) < .03,
     visible: byName.normal.rms > .01 && byName.normal.minimum < -.025 && byName.normal.maximum > .025,
     waterline: byName.waterline.rms < 1e-6,
