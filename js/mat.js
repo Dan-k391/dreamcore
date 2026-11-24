@@ -245,25 +245,27 @@ const causticsGLSL = `
     float travel = depth / max(.35, -lightRay.y);
     return vec3(position.xz - lightRay.xz * travel, travel);
   }
-  float causMap(float light, float depth) { return light * (light > 0. ? .3 : .24) * smoothstep(0., .25, depth) * exp(-.12 * depth); } // veins a gentle lift, cells barely darker
+  float causStrength() { return uCausDir.y < .999 ? sqrt(uCaus) : .8 * uCaus; } // sun: the whole net; a lamp pool's (light from overhead): faint, its lamps being a wide source; 0 while the plan is drawn
+  float causMap(float light, float depth) { return light * smoothstep(0., .25, depth) * exp(-.06 * depth); } // light is conserved: the lines get what the cells lose; none at the waterline, where nothing has focused yet, and softer deep down (the sun's disc blurs the lines)
 `; // the surface waves and the light's path. The light itself comes from the film below, through each sheet of water's light picture (water.js)
 // The caustic film: the light a calm pool surface focuses onto its floor, baked once at load on the GPU into a 3D texture that repeats
 // in x, z and time (FILM.L metres, FILM.T seconds). The surface is 96 random waves (seeded): every direction, 0.3 to 1 m long, Rayleigh
 // amplitudes, each wave vector a whole number of waves across the tile and each frequency a whole number of cycles in the loop, so it
 // wraps without a seam; a near-real dispersion slowed to the owner's clock. Optics as before: a floor point gets 1 / det(I + H) from
-// the surface point whose light lands there (one step back along the slope), softened by .4. Many random waves, not a few: no lattice.
-const FILM = { n: 160, d: 64, L: 4.8, T: 16, FOCUS: .55, lo: .45, hi: 1.3 }, filmU = { value: null };
+// the surface point whose light lands there (one step back along the slope), close to the fold and softened by FILM.S: thin lines. Many random waves, not a few: no lattice.
+const FILM = { n: 160, d: 64, L: 4.8, T: 16, FOCUS: .35, lo: .45, hi: 1.3, S: .1, lay: .8 }, filmU = { value: null };
 const filmGLSL = `uniform highp sampler3D tFilm;
   float causLight(vec2 surface, float laplacian) { // light minus one at the floor below this surface point, from the film and the simulation's real ripples
-    float film = texture(tFilm, vec3(mat2(.857, .515, -.515, .857) * surface / ${(FILM.L * .7).toFixed(2)}, uTime / ${FILM.T.toFixed(1)})).r - textureLod(tFilm, vec3(.5), 16.).r; // off the pools' axes, and laid .7 of its baked size (the owner found half-metre cells too large); less the film's mean
-    float f = 1. + film, r = 1. + 13.5 * laplacian, d = r * r, soft = .6 + 2. * length(vec2(dFdx(d), dFdy(d))); // the ripples: crests focus, troughs spread
-    d *= sqrt(max(1.36 / (f * f) - .36, 0.)); // the film's focusing as the determinant it came from: the two maps compose, and stay short of unbounded light
+    float f = (1. + texture(tFilm, vec3(mat2(.857, .515, -.515, .857) * surface / ${(FILM.L * FILM.lay).toFixed(2)}, uTime / ${FILM.T.toFixed(1)})).r) / (1. + textureLod(tFilm, vec3(.5), 16.).r); // off the pools' axes, and laid at FILM.lay of its baked size (cells half the water's depth across, as in a real pool a metre deep); over the film's mean, so light is conserved
+    const float S2 = ${(FILM.S * FILM.S).toFixed(4)};
+    float r = 1. + 13.5 * laplacian, d = r * r, soft = sqrt(S2) + 2. * length(vec2(dFdx(d), dFdy(d))); // the ripples: crests focus, troughs spread
+    d *= sqrt(max((1. + S2) / (f * f) - S2, 0.)); // the film's focusing as the determinant it came from: the two maps compose, and stay short of unbounded light
     return sqrt((1. + soft * soft) / (d * d + soft * soft)) - 1.;
   }
   float caus(vec3 position, float laplacian) { vec3 path = causticPath(position); return causMap(causLight(path.xy, laplacian), path.z); }
 `;
 function bakeFilm() {
-  const { n, d, L, T, FOCUS, lo, hi } = FILM, K = [], O = [], seen = new Set(), t0 = performance.now(); let seed = 20261123;
+  const { n, d, L, T, FOCUS, lo, hi, S } = FILM, K = [], O = [], seen = new Set(), t0 = performance.now(); let seed = 20261123;
   const rnd = () => (seed = seed * 16807 % 2147483647) / 2147483647;
   while (K.length < 96) {
     const lam = lo * (hi / lo) ** rnd(), th = 2 * Math.PI * rnd(), qx = Math.round(L / lam * Math.cos(th)), qz = Math.round(L / lam * Math.sin(th)), key = qx + ',' + qz;
@@ -280,8 +282,10 @@ function bakeFilm() {
     fragmentShader: `uniform vec4 uK[96]; uniform float uO[96]; uniform float uT; varying vec2 vUv;
       void field(vec2 x, out vec2 g, out vec3 h) { g = vec2(0.); h = vec3(0.);
         for (int i = 0; i < 96; i++) { vec4 w = uK[i]; float p = dot(w.xy, x) - uO[i] * uT + w.w; g -= w.z * sin(p) * w.xy; h -= w.z * cos(p) * vec3(w.x * w.x, w.x * w.y, w.y * w.y); } }
-      void main() { vec2 g; vec3 h; field(vUv * ${L.toFixed(2)}, g, h); field(vUv * ${L.toFixed(2)} - g, g, h); // at the surface point whose light lands here
-        float det = (1. + h.x) * (1. + h.z) - h.y * h.y; gl_FragColor = vec4(sqrt(1.36 / (det * det + .36)) - 1., 0., 0., 1.); }` }));
+      float at(vec2 x) { vec2 g; vec3 h; field(x, g, h); field(x - g, g, h); // at the surface point whose light lands here
+        float det = (1. + h.x) * (1. + h.z) - h.y * h.y; return sqrt(${(1 + S * S).toFixed(4)} / (det * det + ${(S * S).toFixed(4)})); }
+      void main() { vec2 x = vUv * ${L.toFixed(2)}, e = vec2(.25, .75) * ${(L / n).toFixed(4)} * .5; // four samples a texel (rotated grid): thin lines stay lines, not beads
+        gl_FragColor = vec4((at(x + e) + at(x - e) + at(x + e.yx * vec2(-1., 1.)) + at(x - e.yx * vec2(-1., 1.))) * .25 - 1., 0., 0., 1.); }` }));
   const target = renderer.getRenderTarget();
   for (let i = 0; i < d; i++) { q.material.uniforms.uT.value = T * i / d; renderer.setRenderTarget(rt, i); q.render(renderer); }
   renderer.setRenderTarget(target); q.material.dispose(); q.dispose();
@@ -306,18 +310,20 @@ function tileFX(m, z) {
     lib.call(this, s, r);
     Object.assign(s.uniforms, u);
     s.vertexShader = 'varying vec3 vW;\n' + s.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\nvW = (modelMatrix * vec4(transformed, 1.)).xyz;');
-    s.fragmentShader = `varying vec3 vW; uniform float uTime, uBand, uShimmer, uCaus; uniform vec3 uBandCol, uCausDir; uniform sampler2D uLight; uniform vec4 uPond;
+    s.fragmentShader = `varying vec3 vW; float causShare = 0.; uniform float uTime, uBand, uShimmer, uCaus; uniform vec3 uBandCol, uCausDir; uniform sampler2D uLight; uniform vec4 uPond;
       ${causticsGLSL}
     ` + s.fragmentShader
       .replace('#include <color_fragment>', `#include <color_fragment>
         if (vW.y < uBand) diffuseColor.rgb *= uBandCol;
         float wet = 1. - smoothstep(0., .06, abs(vW.y + ${-WY})); diffuseColor.rgb *= 1. - .3 * wet; // the waterline leaves a wet band`)
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor *= 1. - .6 * wet;')
+      .replace('#include <opaque_fragment>', '#include <opaque_fragment>\nif (uCaus == 0.) gl_FragColor.a = causShare; // drawing the plan (caustics off): its alpha carries the share of diffuse light that is direct, for the water to put the net on')
       .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
         if (vW.y < ${WY}) { // light focused by the surface: the film plus the real ripples, from the pool's light picture at the surface point it comes through
           vec3 path = causticPath(vW);
-          float c = causMap(texture2D(uLight, (path.xy - uPond.xy) / (uPond.zw - uPond.xy), uCausDir.y > .999 ? .8 : 0.).r, path.z) * sqrt(uCaus); // lamp pools: a little, and softer (a wider source)
-          reflectedLight.directDiffuse *= 1. + (uCaus >= .9 ? 3.6 : 1.8) * c; reflectedLight.indirectDiffuse *= 1. + .85 * c; } // sunlight: twice, so soft cells show even where the floor is near white
+          float c = causMap(texture2D(uLight, (path.xy - uPond.xy) / (uPond.zw - uPond.xy), uCausDir.y > .999 ? .8 : 0.).r, path.z) * causStrength(); // lamp pools: fainter, and softer (a wider source); none while the plan is drawn
+          reflectedLight.directDiffuse *= (1. + c) * (uCausDir.y < .999 ? .97 * exp(-vec3(.42, .085, .06) * path.z) : vec3(1.)); // direct light only, so each light's own shadow cuts the net; sunlight also loses what the surface reflects and the water absorbs on its way down
+          causShare = dot(reflectedLight.directDiffuse, vec3(.3, .6, .1)) / max(dot(reflectedLight.directDiffuse + reflectedLight.indirectDiffuse, vec3(.3, .6, .1)), 1e-6); }
         else if (uShimmer > 0.) reflectedLight.indirectDiffuse *= 1. + uShimmer * causMap(texture2D(uLight, clamp((vW.xz - uPond.xy) / (uPond.zw - uPond.xy), 0., 1.), 2.).r, .65) * smoothstep(.2, 1.2, vW.y - ${WY}) * exp((${WY} - vW.y) * .3); // the nearest water's light, blurred`);
   };
   return m;

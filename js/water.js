@@ -236,7 +236,7 @@ const simQuad = new FullScreenQuad(simMat);
 // A sheet's light picture: the caustic film at this moment plus the simulation's real ripples, light minus one at 3 cm a texel with mipmaps,
 // one step after each wave step. The tiles and the water's still plan read it with one lookup (it takes the tiles' place for the simulation's map).
 const lightMat = new THREE.ShaderMaterial({ uniforms: { tSim: { value: null }, tFilm: filmU, uPx: { value: null }, uPond: { value: null }, uTime }, vertexShader: quadVS,
-  fragmentShader: `uniform sampler2D tSim; uniform vec2 uPx; uniform vec4 uPond; uniform float uTime; uniform vec3 uCausDir; varying vec2 vUv;
+  fragmentShader: `uniform sampler2D tSim; uniform vec2 uPx; uniform vec4 uPond; uniform float uTime, uCaus; uniform vec3 uCausDir; varying vec2 vUv;
     ${causticsGLSL}${filmGLSL}
     void main() { vec2 e = uPx * 2.;
       float lap = texture2D(tSim, vUv - vec2(e.x, 0.)).r + texture2D(tSim, vUv + vec2(e.x, 0.)).r + texture2D(tSim, vUv - vec2(0., e.y)).r + texture2D(tSim, vUv + vec2(0., e.y)).r - 4. * texture2D(tSim, vUv).r;
@@ -329,9 +329,9 @@ const waterFS = `uniform sampler2D tMirror, tMirrorZ, tUnder, tUnderZ, tDeep, tD
             t = mix(hi, t, live); hit = vW + T * t; break; }
           lo = ti; }
       }
-      vec3 still = texture2D(tPlan, plan(hit.xz)).rgb * uLook.w; // the plan is a still, so it gets the same moving light the tiles give the live picture: drifting pattern plus the real ripples
+      vec4 plan4 = texture2D(tPlan, plan(hit.xz)); vec3 still = plan4.rgb * uLook.w; // the plan is a still, so it gets the same moving light the tiles give the live picture: drifting pattern plus the real ripples
       vec3 hp = causticPath(hit); float cz = causMap(texture2D(tLight, (hp.xy - uPond.xy) / (uPond.zw - uPond.xy), uCausDir.y > .999 ? .8 : 0.).r, hp.z); // as the tiles have it
-      still *= 1. + mix(.85, uCaus >= .9 ? 3.6 : 1.8, smoothstep(.25, 1., max(still.r, max(still.g, still.b)))) * sqrt(uCaus) * cz; // stronger where the floor is in direct light, as on the tiles
+      still *= 1. + plan4.a * cz * causStrength(); // on the directly lit share only (the plan's alpha), as on the tiles: none in shade
       if (uTest == 1.) { gl_FragColor = vec4(mix(texture2D(tUnder, here).rgb, mix(mix(still, dc, dl), eye, live), body), 1.); return; } // ?dev: the lens picture alone
       if (uTest == 2.) { gl_FragColor = vec4(texture2D(tMirror, ru).rgb, 1.); return; } // ?dev: the mirror picture alone
       vec3 refr = mix(mix(still, dc, dl), eye, live) * exp(-vec3(.42, .085, .06) * t * uLook.x); // red is absorbed first
