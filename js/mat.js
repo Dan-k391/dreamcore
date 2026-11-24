@@ -255,7 +255,7 @@ const causticsGLSL = `
 const FILM = { n: 160, d: 64, L: 4.8, T: 16, FOCUS: .55, lo: .45, hi: 1.3 }, filmU = { value: null };
 const filmGLSL = `uniform highp sampler3D tFilm;
   float causLight(vec2 surface, float laplacian) { // light minus one at the floor below this surface point, from the film and the simulation's real ripples
-    float film = texture(tFilm, vec3(mat2(.857, .515, -.515, .857) * surface / ${FILM.L.toFixed(2)}, uTime / ${FILM.T.toFixed(1)})).r - textureLod(tFilm, vec3(.5), 16.).r; // off the pools' axes; less the film's mean
+    float film = texture(tFilm, vec3(mat2(.857, .515, -.515, .857) * surface / ${(FILM.L * .7).toFixed(2)}, uTime / ${FILM.T.toFixed(1)})).r - textureLod(tFilm, vec3(.5), 16.).r; // off the pools' axes, and laid .7 of its baked size (the owner found half-metre cells too large); less the film's mean
     float f = 1. + film, r = 1. + 13.5 * laplacian, d = r * r, soft = .6 + 2. * length(vec2(dFdx(d), dFdy(d))); // the ripples: crests focus, troughs spread
     d *= sqrt(max(1.36 / (f * f) - .36, 0.)); // the film's focusing as the determinant it came from: the two maps compose, and stay short of unbounded light
     return sqrt((1. + soft * soft) / (d * d + soft * soft)) - 1.;
