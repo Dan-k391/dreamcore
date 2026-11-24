@@ -33,10 +33,10 @@ const _p = new THREE.Vector3();
 function reshade(x, y, z, r) {
   for (const l of lights) if (l.intensity > 0 && l.position.distanceTo(_p.set(x, y, z)) < l.distance + r) { l.shadow.loose = true; renderer.shadowMap.needsUpdate = true; }
   if (sun.intensity > 0) { const c = sun.shadow.camera; _p.set(x, y, z).applyMatrix4(c.matrixWorldInverse);
-    if (_p.x > c.left - r && _p.x < c.right + r && _p.y > c.bottom - r && _p.y < c.top + r) { sun.shadow.needsUpdate = renderer.shadowMap.needsUpdate = true; } } // the sun has no cache (64 MB, saves 0.04 ms): a full redraw
+    if (_p.x > c.left - r && _p.x < c.right + r && _p.y > c.bottom - r && _p.y < c.top + r) { sun.shadow.loose = renderer.shadowMap.needsUpdate = true; } } // the sun has no cache (128 MB): it is redrawn whole, but only inside the box round what moved (SM.render)
 }
 const SM = renderer.shadowMap, drawShadows = SM.render, gl = renderer.getContext(), looseRoot = new THREE.Object3D(), cache = new Map(), noClear = () => {};
-const _s = new THREE.Sphere(), _m = new THREE.Matrix4(), _v = new THREE.Vector4(), _lo = new THREE.Vector3(), _hi = new THREE.Vector3(), _c = Array.from({ length: 8 }, () => new THREE.Vector4());
+const _s = new THREE.Sphere(), _f = new THREE.Frustum(), _m = new THREE.Matrix4(), _v = new THREE.Vector4(), _lo = new THREE.Vector3(), _hi = new THREE.Vector3(), _c = Array.from({ length: 8 }, () => new THREE.Vector4());
 function blit(a, b, [x0, y0, x1, y1]) { // texels [x0, x1) x [y0, y1) of render target a into b, colour and depth; three's record of the bindings left as its own copies leave it
   const st = renderer.state, P = renderer.properties;
   st.bindFramebuffer(gl.READ_FRAMEBUFFER, P.get(a).__webglFramebuffer); st.bindFramebuffer(gl.DRAW_FRAMEBUFFER, P.get(b).__webglFramebuffer);
@@ -61,8 +61,17 @@ const pose = o => [o.visible, o.count, o.instanceMatrix?.version, ...o.matrixWor
 SM.render = function (ls, scene, cam) {
   if (!SM.enabled || !SM.needsUpdate) return;
   const target = renderer.getRenderTarget(), face = renderer.getActiveCubeFace(), level = renderer.getActiveMipmapLevel(); // the blits rebind: put back what three was drawing to
-  if (sun.shadow.needsUpdate && ls.includes(sun)) { drawShadows.call(SM, [sun], scene, cam); SM.needsUpdate = true; } // the sun in full, loose things and all, as before the cache
-  const all = ls.filter(l => l.shadow.needsUpdate || l.shadow.loose), full = all.filter(l => l.shadow.needsUpdate || !cache.has(l.shadow)), kids = looseRoot.children;
+  if ((sun.shadow.needsUpdate || sun.shadow.loose) && ls.includes(sun)) { const s = sun.shadow, m = s.map, u = [1e9, 1e9, -1e9, -1e9]; // the sun, loose things and all: in full when asked, else
+    if (!s.needsUpdate && m && s.drawn) for (const o of looseRoot.children) { const [p0, r0] = s.drawn.get(o) || [], p = pose(o); if (!p0 || p.some((v, i) => v !== p0[i])) for (const q of [r0, cover(o, s)]) if (q) { u[0] = Math.min(u[0], q[0]); u[1] = Math.min(u[1], q[1]); u[2] = Math.max(u[2], q[2]); u[3] = Math.max(u[3], q[3]); } }
+    else u.splice(0, 4, -1, 0, 0, 0); // only where what moved was and is (a drifting ring asks every step: the whole map was .3 ms at 1440p, the ring's box a fraction)
+    if (u[0] < u[2]) { const W = m?.width, H = m?.height, crop = u[0] >= 0; s.needsUpdate = true;
+      if (crop) { // the box alone: drawn and cleared within the scissor, and three culls by the box's frustum (its camera unchanged: narrowing it changed every texel's depth in its last bits)
+        m.scissor.set(u[0], u[1], u[2] - u[0], u[3] - u[1]); m.scissorTest = true; const x0 = u[0] / W * 2 - 1, x1 = u[2] / W * 2 - 1, y0 = u[1] / H * 2 - 1, y1 = u[3] / H * 2 - 1;
+        s.getFrustum = function () { _m.set(2 / (x1 - x0), 0, 0, -(x1 + x0) / (x1 - x0), 0, 2 / (y1 - y0), 0, -(y1 + y0) / (y1 - y0), 0, 0, 1, 0, 0, 0, 0, 1).multiply(this.camera.projectionMatrix).multiply(this.camera.matrixWorldInverse); return _f.setFromProjectionMatrix(_m); }; }
+      try { drawShadows.call(SM, [sun], scene, cam); } finally { m.scissorTest = false; delete s.getFrustum; }
+      SM.needsUpdate = true; s.drawn = new Map(looseRoot.children.map(o => [o, [pose(o), cover(o, s)]])); }
+    s.loose = s.needsUpdate = false; }
+  const all = ls.filter(l => l !== sun && (l.shadow.needsUpdate || l.shadow.loose)), full = all.filter(l => l.shadow.needsUpdate || !cache.has(l.shadow)), kids = looseRoot.children;
   if (full.length) { // in full: everything but the loose things, kept
     const shown = kids.map(m => m.visible); kids.forEach(m => m.visible = false);
     for (const l of full) l.shadow.needsUpdate = true;
@@ -305,9 +314,9 @@ function drawLoose(near) { // once a frame, after the steps: meshes, and the sha
   for (const g of groups) { if (g.seen) g.mesh.visible = near.some(id => g.seen.includes(id)); /* drawn only where it can be seen from, as pools are */ if (g.shown) g.mesh.count = g.awake || g.inside || g.bq >= 0 ? g.n : g.shown; }
   for (const g of groups) if (g.fine && (g.fine.visible = g.mesh.visible)) fine(g); // every frame: the eye moves when the balls don't
   for (const g of groups) if (!g.drawn) { draw(g, 0); g.drawn = true;
-    if (g.moved > .01) { const [x1, z1, x2, z2] = g.region; if (g.n > 1) reshade((x1 + x2) / 2, 0, (z1 + z2) / 2, Math.hypot(x2 - x1, z2 - z1) / 2); else reshade(g.p[0], g.p[1], g.p[2], g.r); g.moved = 0; } }
+    if (g.moved > .002) { const [x1, z1, x2, z2] = g.region; if (g.n > 1) reshade((x1 + x2) / 2, 0, (z1 + z2) / 2, Math.hypot(x2 - x1, z2 - z1) / 2); else reshade(g.p[0], g.p[1], g.p[2], g.r); g.moved = 0; } }
   for (const f of floaters) { f.m.position.set(f.x, f.y, f.z); f.m.rotation.set(f.az, f.yaw, f.ax);
-    const s = f.shade; if (near.includes(f.w.zone.id) && Math.hypot(f.x - s[0], f.z - s[2]) + Math.abs(f.y - s[1]) + .5 * (Math.abs(f.ax - s[3]) + Math.abs(f.az - s[4])) > .04) { reshade(f.x, f.y, f.z, RO); f.shade = [f.x, f.y, f.z, f.ax, f.az]; } } // its pose when its shadow was last drawn; only from its own room or near its doorways, as its slow drift can't be seen from further through one
+    const s = f.shade; if (near.includes(f.w.zone.id) && Math.hypot(f.x - s[0], f.z - s[2]) + Math.abs(f.y - s[1]) + .5 * (Math.abs(f.ax - s[3]) + Math.abs(f.az - s[4])) > .002) { reshade(f.x, f.y, f.z, RO); f.shade = [f.x, f.y, f.z, f.ax, f.az]; } } // its pose when its shadow was last drawn; only from its own room or near its doorways, as its slow drift can't be seen from further through one. Every 2 mm it moves redraws it, a third of a sun texel on the floor, under a pixel at 3 m (was 4 cm: the shadow lagged the ring and jumped after it; every step made a drifting ring, 0.4 mm a step for ever, cost a redraw every frame)
   const took = ms + performance.now() - t0; ms = 0; return took;
 }
 
