@@ -5,7 +5,7 @@ import { Refractor } from 'three/addons/objects/Refractor.js';
 import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
 import { renderer, scene, camera, uTime, V, quadVS, WY, zones, inR } from './core.js';
 import { wn0, wn1 } from './tex.js';
-import { causticsGLSL } from './mat.js';
+import { causticsGLSL, filmGLSL, filmU } from './mat.js';
 import { colliders, pools, floorH, seeThrough } from './build.js';
 import { sky } from './sky.js';
 
@@ -233,8 +233,18 @@ const simMat = new THREE.ShaderMaterial({ uniforms: { tSim: { value: null }, uPx
       for (int i = 0; i < ${DROPS}; i++) { vec2 d = (vUv - uDrop[i].xy) / uPx; s.r += uDrop[i].z * exp(-dot(d, d) / 18.); }
       gl_FragColor = s; }` });
 const simQuad = new FullScreenQuad(simMat);
+// A sheet's light picture: the caustic film at this moment plus the simulation's real ripples, light minus one at 3 cm a texel with mipmaps,
+// one step after each wave step. The tiles and the water's still plan read it with one lookup (it takes the tiles' place for the simulation's map).
+const lightMat = new THREE.ShaderMaterial({ uniforms: { tSim: { value: null }, tFilm: filmU, uPx: { value: null }, uPond: { value: null }, uTime }, vertexShader: quadVS,
+  fragmentShader: `uniform sampler2D tSim; uniform vec2 uPx; uniform vec4 uPond; uniform float uTime; uniform vec3 uCausDir; varying vec2 vUv;
+    ${causticsGLSL}${filmGLSL}
+    void main() { vec2 e = uPx * 2.;
+      float lap = texture2D(tSim, vUv - vec2(e.x, 0.)).r + texture2D(tSim, vUv + vec2(e.x, 0.)).r + texture2D(tSim, vUv - vec2(0., e.y)).r + texture2D(tSim, vUv + vec2(0., e.y)).r - 4. * texture2D(tSim, vUv).r;
+      gl_FragColor = vec4(causLight(mix(uPond.xy, uPond.zw, vUv), lap), 0., 0., 1.); }` });
+const lightQuad = new FullScreenQuad(lightMat);
+function light(S) { Object.assign(lightMat.uniforms, { tSim: { value: S.sim[0].texture }, uPx: { value: S.px }, uPond: { value: S.rect } }); const t = renderer.getRenderTarget(); renderer.setRenderTarget(S.light); lightQuad.render(renderer); renderer.setRenderTarget(t); }
 const waterVS = 'varying vec3 vW; void main() { vec4 w = modelMatrix * vec4(position, 1.); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }';
-const waterFS = `uniform sampler2D tMirror, tMirrorZ, tUnder, tUnderZ, tDeep, tDeepZ, tPlan, tGround, tNormalMap0, tNormalMap1, tSim;
+const waterFS = `uniform sampler2D tMirror, tMirrorZ, tUnder, tUnderZ, tDeep, tDeepZ, tPlan, tGround, tNormalMap0, tNormalMap1, tSim, tLight;
     uniform mat4 projectionMatrix, uLens, uDeep; uniform vec4 uDeepW, uLensCut, uMirrorW; uniform vec4 uPond; uniform vec2 uPx; uniform vec3 uScatter, uCausDir; uniform float uFloor, uTime, uMain, uCaus, uTest; uniform vec4 uLook; varying vec3 vW;
     ${causticsGLSL}
     vec4 clip(vec3 p) { return projectionMatrix * viewMatrix * vec4(p, 1.); } // .w is the distance from the camera
@@ -320,9 +330,7 @@ const waterFS = `uniform sampler2D tMirror, tMirrorZ, tUnder, tUnderZ, tDeep, tD
           lo = ti; }
       }
       vec3 still = texture2D(tPlan, plan(hit.xz)).rgb * uLook.w; // the plan is a still, so it gets the same moving light the tiles give the live picture: drifting pattern plus the real ripples
-      vec2 hs = (causticPath(hit).xy - uPond.xy) / (uPond.zw - uPond.xy), e = uPx * 2.;
-      float lap = texture2D(tSim, hs - vec2(e.x, 0.)).r + texture2D(tSim, hs + vec2(e.x, 0.)).r + texture2D(tSim, hs - vec2(0., e.y)).r + texture2D(tSim, hs + vec2(0., e.y)).r - 4. * texture2D(tSim, hs).r;
-      float cz = caus(hit, lap);
+      vec3 hp = causticPath(hit); float cz = causMap(texture2D(tLight, (hp.xy - uPond.xy) / (uPond.zw - uPond.xy), uCausDir.y > .999 ? .8 : 0.).r, hp.z); // as the tiles have it
       still *= 1. + mix(.85, uCaus >= .9 ? 3.6 : 1.8, smoothstep(.25, 1., max(still.r, max(still.g, still.b)))) * sqrt(uCaus) * cz; // stronger where the floor is in direct light, as on the tiles
       if (uTest == 1.) { gl_FragColor = vec4(mix(texture2D(tUnder, here).rgb, mix(mix(still, dc, dl), eye, live), body), 1.); return; } // ?dev: the lens picture alone
       if (uTest == 2.) { gl_FragColor = vec4(texture2D(tMirror, ru).rgb, 1.); return; } // ?dev: the mirror picture alone
@@ -367,7 +375,8 @@ const sheets = [...new Set(sheetOf)].map(id => {
     for (const [bx1, bz1, bx2, bz2] of boxes) if (bx2 - bx1 >= 2 * r && bz2 - bz1 >= 2 * r) { const cx = Math.min(bx2 - r, Math.max(bx1 + r, x)), cz = Math.min(bz2 - r, Math.max(bz1 + r, z)), e = (cx - x) ** 2 + (cz - z) ** 2; if (e < d) { d = e; o.x = cx; o.z = cz; } }
     return d;
   };
-  return { rects, rect, floor, sim, px, wet, planRT, ppm, ground, keep, ponds: [], twin: twin(x1, z1, x2, z2, wetAt) };
+  const light = new THREE.WebGLRenderTarget(Math.round((x2 - x1) / .03), Math.round((z2 - z1) / .03), { type: THREE.HalfFloatType, format: THREE.RedFormat, depthBuffer: false, generateMipmaps: true, minFilter: THREE.LinearMipmapLinearFilter });
+  return { rects, rect, floor, sim, light, px, wet, planRT, ppm, ground, keep, ponds: [], twin: twin(x1, z1, x2, z2, wetAt) };
 });
 const ponds = pools.map(([x1, z1, x2, z2, floor, zid, seen, scatter]) => {
   const S = sheets.find(q => q.rects.some(r => r[0] === x1 && r[1] === z1 && r[2] === x2 && r[3] === z2)), { sim, px, planRT } = S;
@@ -376,7 +385,7 @@ const ponds = pools.map(([x1, z1, x2, z2, floor, zid, seen, scatter]) => {
   planCam.position.set((x1 + x2) / 2, WY, (z1 + z2) / 2); planCam.up.set(0, 0, -1); planCam.lookAt((x1 + x2) / 2, WY - 1, (z1 + z2) / 2);
   const U = { uCaus: zones[zid].tileU.uCaus, uCausDir: zones[zid].tileU.uCausDir, tMirror: { value: mirrorRT.texture }, tPlan: { value: planRT.texture }, tGround: { value: S.ground }, tUnder: { value: under.texture }, tUnderZ: { value: under.depthTexture }, tDeep: { value: deep.texture }, tDeepZ: { value: deep.depthTexture }, uDeep, uDeepW, uLensCut, uLens: { value: lens.camera.projectionMatrix }, tNormalMap0: { value: wn0 }, tNormalMap1: { value: wn1 },
               tMirrorZ: { value: mirrorRT.depthTexture }, uMirrorW,
-              tSim: { value: sim[0].texture }, uPond: { value: S.rect }, uPx: { value: px }, uFloor: { value: S.floor }, uScatter: { value: V(...scatter) }, uLook: { value: new THREE.Vector4(1, 1, 1, 1) }, uMain: { value: 0 }, uTest, uTime }; // uPond, uFloor: the sheet's box and deepest floor, which its field, height map and plan span
+              tSim: { value: sim[0].texture }, tLight: { value: S.light.texture }, uPond: { value: S.rect }, uPx: { value: px }, uFloor: { value: S.floor }, uScatter: { value: V(...scatter) }, uLook: { value: new THREE.Vector4(1, 1, 1, 1) }, uMain: { value: 0 }, uTest, uTime }; // uPond, uFloor: the sheet's box and deepest floor, which its field, height map and plan span
   const w = new THREE.Mesh(g, new THREE.ShaderMaterial({ uniforms: U, vertexShader: waterVS, fragmentShader: waterFS, transparent: true }));
   Object.assign(w, { lens, mirror, deep, seen, rect, floor, q: { pending: [], last: null }, sheet: S, tileU: zones[zid].tileU, zone: zones[zid], twin: S.twin });
   S.ponds.push(w);
@@ -390,7 +399,7 @@ const ponds = pools.map(([x1, z1, x2, z2, floor, zid, seen, scatter]) => {
     tu.forEach((q, i) => q.tileU.uCaus.value = caus[i]); sky.visible = skyVisible; renderer.setRenderTarget(target);
   };
   for (let x = x1 + .05; x < x2; x += .1) for (let z = z1 + .05; z < z2; z += .1) console.assert(Object.values(zones).some(q => q.mats.length && inR(x, z, ...q.box)), 'a pool reaches past every room: its plan has a hole there', x, z); // drawPlan's parts cover it
-  w.tileU.uSim.value = sim[0].texture; w.tileU.uPond.value = S.rect; w.tileU.uPx.value = px;
+  w.tileU.uLight.value = S.light.texture; w.tileU.uPond.value = S.rect;
   w.rotation.x = -Math.PI / 2; w.position.set((x1 + x2) / 2, WY, (z1 + z2) / 2); scene.add(w);
   const proxy = new THREE.Mesh(new THREE.BoxGeometry(x2 - x1 + 3, z2 - z1 + 3, 3.05).translate(0, 0, 1.475), proxyMat); // in the water's frame: z is up
   proxy.renderOrder = -1e9; w.add(proxy); seeThrough.push(proxy); // first of the see-through things, so only opaque depth decides; never in the AO pass
@@ -463,12 +472,14 @@ function twin(x1, z1, x2, z2, wetAt) { // over a sheet's box: faces next to dry 
 }
 // made at load, not on the frame a pool first shows (the baths seen first through their door: five targets and textures in one frame); `under` by fit(), from the first frame on
 for (const r of [...sheets.flatMap(S => S.sim), mirrorRT]) renderer.initRenderTarget(r);
+for (const S of sheets) light(S); // the light pictures, and their program, at load
 for (const w of ponds) for (const u of [w.material.uniforms, w.tileU]) for (const k in u) if (u[k].value?.isTexture && !u[k].value.isRenderTargetTexture) renderer.initTexture(u[k].value);
 function ripple(S, drops) { // one 60Hz step of a sheet's waves, with up to DROPS disturbances [x, z, size] in world space
   simMat.uniforms.tSim.value = S.sim[0].texture; simMat.uniforms.uPx.value = S.px; simMat.uniforms.uWet.value = S.wet;
   simMat.uniforms.uDrop.value.forEach((d, i) => { const [x, z, p] = drops[i] || [0, 0, 0]; d.set((x - S.rect.x) / (S.rect.z - S.rect.x), (z - S.rect.y) / (S.rect.w - S.rect.y), p); });
   renderer.setRenderTarget(S.sim[1]); simQuad.render(renderer); renderer.setRenderTarget(null);
-  S.sim.reverse(); for (const w of S.ponds) w.material.uniforms.tSim.value = w.tileU.uSim.value = S.sim[0].texture;
+  S.sim.reverse(); for (const w of S.ponds) w.material.uniforms.tSim.value = S.sim[0].texture;
+  light(S);
   if (S.twin.used) S.twin.step(drops.slice(0, DROPS)); // only a sheet with something floating on it (physics.js marks them) needs the copy
 }
 

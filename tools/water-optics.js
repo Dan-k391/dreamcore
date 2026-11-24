@@ -1,4 +1,4 @@
-import { causticsGLSL } from '../js/mat.js';
+import { causticsGLSL, filmGLSL, filmU } from '../js/mat.js';
 import { WY } from '../js/core.js';
 import { ponds, uTest } from '../js/water.js';
 
@@ -7,10 +7,10 @@ export function waterOptics(dev) {
   dev.hold = true;
   const target = new THREE.WebGLRenderTarget(128, 128, { type: THREE.FloatType, depthBuffer: false });
   const previousTarget = renderer.getRenderTarget();
-  const uniforms = { uTime: { value: 1.5 }, uCausDir: { value: new THREE.Vector3(-1, .5, -.32).normalize() }, uDepth: { value: 1.08 }, uSpan: { value: 8 }, uImpulse: { value: 0 } };
+  const uniforms = { uTime: { value: 1.5 }, uCausDir: { value: new THREE.Vector3(-1, .5, -.32).normalize() }, uDepth: { value: 1.08 }, uSpan: { value: 8 }, uImpulse: { value: 0 }, tFilm: filmU };
   const material = new THREE.ShaderMaterial({ uniforms, depthTest: false, depthWrite: false,
     vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0., 1.); }',
-    fragmentShader: `varying vec2 vUv; uniform float uTime, uDepth, uSpan, uImpulse; uniform vec3 uCausDir; ${causticsGLSL}
+    fragmentShader: `varying vec2 vUv; uniform float uTime, uDepth, uSpan, uImpulse; uniform vec3 uCausDir; ${causticsGLSL}${filmGLSL}
       void main() { vec2 position = (vUv - .5) * uSpan + vec2(.37, -.81); gl_FragColor = vec4(caus(vec3(position.x, ${WY} - uDepth, position.y), uImpulse), poolWaves(position, 0.).xy, 1.); }` });
   const geometry = new THREE.PlaneGeometry(2, 2), scene = new THREE.Scene(), camera = new THREE.Camera();
   scene.add(new THREE.Mesh(geometry, material));

@@ -1,11 +1,12 @@
 // Materials more than one place uses, and the helpers places make their own with.
 import * as THREE from 'three';
-import { scene, uTime, V, WY, sunDir } from './core.js';
+import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
+import { scene, renderer, quadVS, uTime, V, WY, sunDir } from './core.js';
 import { maxA, grime, wn0, sets, LIB, libTex, detailTex } from './tex.js';
 
 // ---------- materials ----------
 // Budget: 16 texture units. 9 lamp shadows + 1 sun shadow leave 6: a library material uses 4 (its two maps, the shared detail, env; 5 with the fixture atlas,
-// which also holds the indoor zones' ambient grids), pool tiles 5 (plus the ripple sim; 6 with the atlas). Nothing may use more than 6.
+// which also holds the indoor zones' ambient grids), pool tiles 5 (plus the pool's light picture; 6 with the atlas). Nothing may use more than 6.
 const S = o => new THREE.MeshStandardMaterial(o);
 const dirt = { aoMap: grime, aoMapIntensity: .7 };
 
@@ -215,9 +216,8 @@ function M(z, name, o = {}) {
   return m;
 }
 const causticsGLSL = `
-  float poolClock = 1.; // caus() slows it for the light alone
   void poolWave(vec2 position, vec2 direction, float frequency, float steepness, float offset, float spread, inout vec2 slope, inout vec3 hessian) {
-    float phase = frequency * dot(direction, position) - uTime * poolClock * sqrt(9.81 * frequency) * .8 + offset; // near real water's timing: calm is small, not slow
+    float phase = frequency * dot(direction, position) - uTime * sqrt(9.81 * frequency) * .8 + offset; // near real water's timing: calm is small, not slow
     vec2 footprint = vec2(dFdx(phase), dFdy(phase));
     float filtered = exp(-.125 * dot(footprint, footprint) - .5 * frequency * frequency * spread * spread);
     if (spread > 0. && filtered < .5) return; // the light's low-pass: it follows only the longer waves, and skips the rest
@@ -245,22 +245,50 @@ const causticsGLSL = `
     float travel = depth / max(.35, -lightRay.y);
     return vec3(position.xz - lightRay.xz * travel, travel);
   }
-  // Mild caustics from real refraction optics: surface point x sends its light to x + k d grad h, so the floor gets 1 / det(I + k d H) of it.
-  // Taken from the longer waves only, kept short of the fold and widely softened: soft veins round large cells, never thin lines. Light minus one, gently mapped.
-  float caus(vec3 position, float laplacian) {
-    vec3 path = causticPath(position);
-    float k = .25 * clamp(path.z, .9, 1.3), gain = 16.; // the calm surface seen with a gain; shallow water keeps its veins, deep water stays short of the fold
-    vec2 slope; vec3 hessian;
-    float band = step(.999, uCausDir.y) * .05 + .15; // lamp pools (light from overhead): a wider source, so only the five longest waves
-    vec2 at = path.xy * 1.8; poolClock = .35; // the light has its own scale and clock (the owner's eye over the optics): smaller cells that re-form over seconds, not with the surface's quick timing
-    poolField(at, band, slope, hessian); poolField(at - k * gain * slope, band, slope, hessian); poolClock = 1.; // at the surface point whose light lands here
-    hessian = hessian * gain + vec3(.5, 0., .5) * laplacian * 100.; // the real ripples, curvature split evenly
-    float det = (1. + k * hessian.x) * (1. + k * hessian.z) - k * k * hessian.y * hessian.y;
-    float soft = .4 + 2. * length(vec2(dFdx(det), dFdy(det))); // wide, and wider where one pixel spans much of it: far water melts to an even glow
-    float light = sqrt((1. + soft * soft) / (det * det + soft * soft)) - 1.; // a flat surface gives exactly 0
-    return light * (light > 0. ? .3 : .24) * smoothstep(0., .25, path.z) * exp(-.12 * path.z); // veins a gentle lift, cells barely darker
+  float causMap(float light, float depth) { return light * (light > 0. ? .3 : .24) * smoothstep(0., .25, depth) * exp(-.12 * depth); } // veins a gentle lift, cells barely darker
+`; // the surface waves and the light's path. The light itself comes from the film below, through each sheet of water's light picture (water.js)
+// The caustic film: the light a calm pool surface focuses onto its floor, baked once at load on the GPU into a 3D texture that repeats
+// in x, z and time (FILM.L metres, FILM.T seconds). The surface is 96 random waves (seeded): every direction, 0.3 to 1 m long, Rayleigh
+// amplitudes, each wave vector a whole number of waves across the tile and each frequency a whole number of cycles in the loop, so it
+// wraps without a seam; a near-real dispersion slowed to the owner's clock. Optics as before: a floor point gets 1 / det(I + H) from
+// the surface point whose light lands there (one step back along the slope), softened by .4. Many random waves, not a few: no lattice.
+const FILM = { n: 160, d: 64, L: 4.8, T: 16, FOCUS: .55, lo: .45, hi: 1.3 }, filmU = { value: null };
+const filmGLSL = `uniform highp sampler3D tFilm;
+  float causLight(vec2 surface, float laplacian) { // light minus one at the floor below this surface point, from the film and the simulation's real ripples
+    float film = texture(tFilm, vec3(mat2(.857, .515, -.515, .857) * surface / ${FILM.L.toFixed(2)}, uTime / ${FILM.T.toFixed(1)})).r - textureLod(tFilm, vec3(.5), 16.).r; // off the pools' axes; less the film's mean
+    float f = 1. + film, r = 1. + 13.5 * laplacian, d = r * r, soft = .6 + 2. * length(vec2(dFdx(d), dFdy(d))); // the ripples: crests focus, troughs spread
+    d *= sqrt(max(1.36 / (f * f) - .36, 0.)); // the film's focusing as the determinant it came from: the two maps compose, and stay short of unbounded light
+    return sqrt((1. + soft * soft) / (d * d + soft * soft)) - 1.;
   }
-`; // the moving light pattern under water. Used by the tiles themselves and by the water, for floor it draws from the still plan
+  float caus(vec3 position, float laplacian) { vec3 path = causticPath(position); return causMap(causLight(path.xy, laplacian), path.z); }
+`;
+function bakeFilm() {
+  const { n, d, L, T, FOCUS, lo, hi } = FILM, K = [], O = [], seen = new Set(), t0 = performance.now(); let seed = 20261123;
+  const rnd = () => (seed = seed * 16807 % 2147483647) / 2147483647;
+  while (K.length < 96) {
+    const lam = lo * (hi / lo) ** rnd(), th = 2 * Math.PI * rnd(), qx = Math.round(L / lam * Math.cos(th)), qz = Math.round(L / lam * Math.sin(th)), key = qx + ',' + qz;
+    if (seen.has(key) || !(qx || qz)) continue; seen.add(key);
+    const kx = 2 * Math.PI * qx / L, kz = 2 * Math.PI * qz / L, k = Math.hypot(kx, kz);
+    K.push(new THREE.Vector4(kx, kz, Math.sqrt(-Math.log(1 - rnd())) / k, 2 * Math.PI * rnd())); // equal slope per wave on average
+    O.push(2 * Math.PI / T * Math.max(1, Math.round(T * .65 * Math.sqrt(k) / (2 * Math.PI)))); // the light's clock: re-forms over seconds
+  }
+  const g = FOCUS / Math.sqrt(K.reduce((a, w) => a + (w.z * w.x * w.x) ** 2 / 2, 0)); K.forEach(w => w.z *= g); // the curvature's spread, as the approved mild look
+  const rt = new THREE.WebGL3DRenderTarget(n, n, d, { depthBuffer: false });
+  Object.assign(rt.texture, { type: THREE.HalfFloatType, format: THREE.RedFormat, generateMipmaps: false, minFilter: THREE.LinearMipmapLinearFilter, magFilter: THREE.LinearFilter, // three's 3D target ignores these options
+    wrapS: THREE.RepeatWrapping, wrapT: THREE.RepeatWrapping, wrapR: THREE.RepeatWrapping });
+  const q = new FullScreenQuad(new THREE.ShaderMaterial({ uniforms: { uK: { value: K }, uO: { value: O }, uT: { value: 0 } }, vertexShader: quadVS,
+    fragmentShader: `uniform vec4 uK[96]; uniform float uO[96]; uniform float uT; varying vec2 vUv;
+      void field(vec2 x, out vec2 g, out vec3 h) { g = vec2(0.); h = vec3(0.);
+        for (int i = 0; i < 96; i++) { vec4 w = uK[i]; float p = dot(w.xy, x) - uO[i] * uT + w.w; g -= w.z * sin(p) * w.xy; h -= w.z * cos(p) * vec3(w.x * w.x, w.x * w.y, w.y * w.y); } }
+      void main() { vec2 g; vec3 h; field(vUv * ${L.toFixed(2)}, g, h); field(vUv * ${L.toFixed(2)} - g, g, h); // at the surface point whose light lands here
+        float det = (1. + h.x) * (1. + h.z) - h.y * h.y; gl_FragColor = vec4(sqrt(1.36 / (det * det + .36)) - 1., 0., 0., 1.); }` }));
+  const target = renderer.getRenderTarget();
+  for (let i = 0; i < d; i++) { q.material.uniforms.uT.value = T * i / d; renderer.setRenderTarget(rt, i); q.render(renderer); }
+  renderer.setRenderTarget(target); q.material.dispose(); q.dispose();
+  const gl = renderer.getContext(); renderer.state.bindTexture(gl.TEXTURE_3D, renderer.properties.get(rt.texture).__webglTexture); gl.generateMipmap(gl.TEXTURE_3D); // far water melts to the mean
+  if (filmU.value) filmU.value.dispose?.(); filmU.value = rt.texture; FILM.rt = rt; FILM.ms = performance.now() - t0;
+}
+bakeFilm();
 const glow = S({ color: 0, emissive: 0xffedc0, emissiveIntensity: 14 }); // frosted windows and light wells
 const seaMat = S({ color: 0x0f4652, roughness: .05, normalMap: wn0, normalScale: new THREE.Vector2(.5, .5) });
 seaMat.onBeforeCompile = envCompile; seaMat.userData.envU = envBoxU(); // no box (the open sea): the plain lookup, but the same program as P()'s water
@@ -271,14 +299,14 @@ const lampOn = M(null, 'troffer'), lampOff = libMat('trofferOff', { roughness: .
 // given height (box-projected reflections come with the library shader underneath).
 function tileFX(m, z) {
   const u = z.tileU = { uTime, uBand: { value: z.band }, uBandCol: { value: new THREE.Color(...z.bandCol) }, uShimmer: { value: z.shimmer },
-              uSim: { value: null }, uPond: { value: new THREE.Vector4(0, 0, 1, 1) }, uPx: { value: new THREE.Vector2() }, // this zone's pool, filled in when the pool is made
+              uLight: { value: null }, uPond: { value: new THREE.Vector4(0, 0, 1, 1) }, // this zone's pool's light picture, filled in when the pool is made
               uCaus: { value: z.caus || .45 }, uCausDir: { value: z.caus >= .9 ? sunDir : V(0, 1, 0) } }; // caustic strength: full only where the sun reaches
   const lib = m.onBeforeCompile; // a library material underneath: its shader first
   m.onBeforeCompile = function (s, r) {
     lib.call(this, s, r);
     Object.assign(s.uniforms, u);
     s.vertexShader = 'varying vec3 vW;\n' + s.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\nvW = (modelMatrix * vec4(transformed, 1.)).xyz;');
-    s.fragmentShader = `varying vec3 vW; uniform float uTime, uBand, uShimmer, uCaus; uniform vec3 uBandCol, uCausDir; uniform sampler2D uSim; uniform vec4 uPond; uniform vec2 uPx;
+    s.fragmentShader = `varying vec3 vW; uniform float uTime, uBand, uShimmer, uCaus; uniform vec3 uBandCol, uCausDir; uniform sampler2D uLight; uniform vec4 uPond;
       ${causticsGLSL}
     ` + s.fragmentShader
       .replace('#include <color_fragment>', `#include <color_fragment>
@@ -286,12 +314,11 @@ function tileFX(m, z) {
         float wet = 1. - smoothstep(0., .06, abs(vW.y + ${-WY})); diffuseColor.rgb *= 1. - .3 * wet; // the waterline leaves a wet band`)
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor *= 1. - .6 * wet;')
       .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
-        if (vW.y < ${WY}) { // light focused by the surface: a drifting base pattern plus the real ripples (crests focus, troughs spread)
-          vec2 s = (causticPath(vW).xy - uPond.xy) / (uPond.zw - uPond.xy), o = uPx * 2.;
-          float lap = texture2D(uSim, s - vec2(o.x, 0.)).r + texture2D(uSim, s + vec2(o.x, 0.)).r + texture2D(uSim, s - vec2(0., o.y)).r + texture2D(uSim, s + vec2(0., o.y)).r - 4. * texture2D(uSim, s).r;
-          float c = caus(vW, lap) * sqrt(uCaus); // lamp pools: a little, not nothing
+        if (vW.y < ${WY}) { // light focused by the surface: the film plus the real ripples, from the pool's light picture at the surface point it comes through
+          vec3 path = causticPath(vW);
+          float c = causMap(texture2D(uLight, (path.xy - uPond.xy) / (uPond.zw - uPond.xy), uCausDir.y > .999 ? .8 : 0.).r, path.z) * sqrt(uCaus); // lamp pools: a little, and softer (a wider source)
           reflectedLight.directDiffuse *= 1. + (uCaus >= .9 ? 3.6 : 1.8) * c; reflectedLight.indirectDiffuse *= 1. + .85 * c; } // sunlight: twice, so soft cells show even where the floor is near white
-        else if (uShimmer > 0.) reflectedLight.indirectDiffuse *= 1. + uShimmer * caus(vec3(vW.x * .6, ${WY} - .65, vW.z * .6), 0.) * smoothstep(.2, 1.2, vW.y - ${WY}) * exp((${WY} - vW.y) * .3);`);
+        else if (uShimmer > 0.) reflectedLight.indirectDiffuse *= 1. + uShimmer * causMap(texture2D(uLight, clamp((vW.xz - uPond.xy) / (uPond.zw - uPond.xy), 0., 1.), 2.).r, .65) * smoothstep(.2, 1.2, vW.y - ${WY}) * exp((${WY} - vW.y) * .3); // the nearest water's light, blurred`);
   };
   return m;
 }
@@ -321,4 +348,4 @@ function paintedBall(z, r, paint, o) {
 const beachBall = z => paintedBall(z, .25, (x, y, zc) => Math.abs(y) > .93 ? 0xf4f0e6 : [0xe8402e, 0xf4f0e6, 0xf6c22b, 0xf4f0e6, 0x2f7fd8, 0xf4f0e6][Math.floor((Math.atan2(zc, x) / Math.PI + 1) * 3) % 6], { roughness: .28 }); // six vinyl gores, white caps
 const wallMat = (z, color, o) => M(z, 'plaster', { color, ...o }); // painted plaster in any colour
 
-export { FT, FA, S, M, libMat, LIB, dirt, causticsGLSL, lampOn, lampOff, glow, seaMat, noCast, tileFX, poolMats, P, neon, voidMat, aisle, label, sign, wallMat, paintedBall, beachBall };
+export { FT, FA, S, M, libMat, LIB, dirt, causticsGLSL, filmGLSL, filmU, FILM, bakeFilm, lampOn, lampOff, glow, seaMat, noCast, tileFX, poolMats, P, neon, voidMat, aisle, label, sign, wallMat, paintedBall, beachBall };
