@@ -5,6 +5,17 @@ import * as THREE from 'three';
 // cover the one hall it shines into; every enclosed zone is dark to it for free.
 THREE.ShaderChunk.shadowmap_pars_fragment = THREE.ShaderChunk.shadowmap_pars_fragment.replace('float shadow = 1.0;', 'float shadow = 0.0;')
   .replace('unpackRGBAToDepth( texture2D( depths, uv ) )', 'unpackRGBAToDepth( textureLod( depths, uv, 0.0 ) )'); // no mips: the same texel, and no gradient, so the lookup can sit in a real branch
+// The soft lookup's 16 taps weighted by a cubic B-spline instead of three's 3-texel box: the box's piecewise-linear ramp drew the texel grid as stair steps
+// and spread an edge over 3 texels (where the low sun grazes the pool floor, a texel is 2.4 times longer, so a ring's shadow was a blurred staircase); the spline is smooth and about 1.4 times narrower, at the same 16 taps
+{ const a = THREE.ShaderChunk.shadowmap_pars_fragment, i = a.indexOf('#elif defined( SHADOWMAP_TYPE_PCF_SOFT )'), j = a.indexOf('#elif defined( SHADOWMAP_TYPE_VSM )');
+  if (i < 0 || j < i) throw new Error("three's shadowmap_pars_fragment changed");
+  THREE.ShaderChunk.shadowmap_pars_fragment = a.slice(0, i) + `#elif defined( SHADOWMAP_TYPE_PCF_SOFT )
+      vec2 texelSize = vec2( 1.0 ) / shadowMapSize, f = fract( shadowCoord.xy * shadowMapSize + 0.5 ), uv = shadowCoord.xy - f * texelSize, g = 1.0 - f;
+      vec4 wx = vec4( g.x * g.x * g.x, 4.0 + f.x * f.x * ( 3.0 * f.x - 6.0 ), 1.0 + 3.0 * f.x * ( 1.0 + f.x * g.x ), f.x * f.x * f.x ) / 6.0;
+      vec4 wy = vec4( g.y * g.y * g.y, 4.0 + f.y * f.y * ( 3.0 * f.y - 6.0 ), 1.0 + 3.0 * f.y * ( 1.0 + f.y * g.y ), f.y * f.y * f.y ) / 6.0;
+      shadow = 0.0;
+      for ( int y = 0; y < 4; y ++ ) { vec4 r = vec4( 0.0 ); for ( int x = 0; x < 4; x ++ ) r[ x ] = texture2DCompare( shadowMap, uv + vec2( float( x ) - 1.0, float( y ) - 1.0 ) * texelSize, shadowCoord.z ); shadow += wy[ y ] * dot( wx, r ); }
+    ` + a.slice(j); }
 // A lamp's or the sun's 16-tap shadow lookup only where that light adds anything: inside its cone and reach (three's ternary was
 // flattened by the compiler, so every pixel paid all ten) and on the side the surface faces (RE_Direct adds nothing there). The same picture.
 for (const [map, sh, coord] of [['spotShadowMap', 'spotLightShadow', 'vSpotLightCoord'], ['directionalShadowMap', 'directionalLightShadow', 'vDirectionalShadowCoord']]) {
