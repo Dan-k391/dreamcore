@@ -215,77 +215,17 @@ function M(z, name, o = {}) {
   if (!m) { m = libMat(name, o); libCache.set(key, m); if (z) z.mats.push(m); }
   return m;
 }
-// The ripple film: the pools' fine wavelets, baked once at load on the GPU into a 3D texture that repeats in x, z and time (FILM.L metres,
-// FILM.T seconds) and holds the surface's slope (rms 1; FILM.RIPPLE scales it; the picture draws FILM.SHOWN of it, the light all). 96 random waves (seeded): headings over a half circle, so the net drifts instead of boiling in place, FILM.lo to FILM.hi
-// long, Rayleigh amplitudes, each wave vector a whole number of waves across the tile and each frequency a whole number of cycles in the
-// loop, so it wraps without a seam; at FILM.clock of real water's speed, the one clock the trains run on too. Many random waves, not a few: no lattice.
-const FILM = { n: 160, d: 96, L: 4.8, T: 16, lo: .45, hi: 1.3, lay: .55, RIPPLE: .065, SHOWN: .4, clock: .25, IDLE: 0 }, filmU = { value: null }; // IDLE: how much of the trains and the film an undisturbed pool has (0: still water, only the simulation's ripples move it)
-function bakeFilm() {
-  const { n, d, L, T, lo, hi } = FILM, K = [], O = [], seen = new Set(), t0 = performance.now(); let seed = 20261123;
-  const rnd = () => (seed = seed * 16807 % 2147483647) / 2147483647;
-  while (K.length < 96) {
-    const lam = lo * (hi / lo) ** rnd(), th = .6 + Math.PI * (rnd() - .5), qx = Math.round(L / lam * Math.cos(th)), qz = Math.round(L / lam * Math.sin(th)), key = qx + ',' + qz;
-    if (seen.has(key) || !(qx || qz)) continue; seen.add(key);
-    const kx = 2 * Math.PI * qx / L, kz = 2 * Math.PI * qz / L, k = Math.hypot(kx, kz);
-    K.push(new THREE.Vector4(kx, kz, Math.sqrt(-Math.log(1 - rnd())) / k, 2 * Math.PI * rnd())); // equal slope per wave on average
-    O.push(2 * Math.PI / T * Math.max(1, Math.round(T * FILM.clock * Math.sqrt(9.81 * k / FILM.lay) / (2 * Math.PI))));
-  }
-  const g = 1 / Math.sqrt(K.reduce((a, w) => a + (w.z * Math.hypot(w.x, w.y)) ** 2 / 2, 0)); K.forEach(w => w.z *= g); // slope rms 1
-  const rt = new THREE.WebGL3DRenderTarget(n, n, d, { depthBuffer: false });
-  Object.assign(rt.texture, { type: THREE.HalfFloatType, format: THREE.RGFormat, generateMipmaps: false, minFilter: THREE.LinearMipmapLinearFilter, magFilter: THREE.LinearFilter, // three's 3D target ignores these options
-    wrapS: THREE.RepeatWrapping, wrapT: THREE.RepeatWrapping, wrapR: THREE.RepeatWrapping });
-  const q = new FullScreenQuad(new THREE.ShaderMaterial({ uniforms: { uK: { value: K }, uO: { value: O }, uT: { value: 0 } }, vertexShader: quadVS,
-    fragmentShader: `uniform vec4 uK[96]; uniform float uO[96]; uniform float uT; varying vec2 vUv;
-      void main() { vec2 x = vUv * ${L.toFixed(2)}, g = vec2(0.);
-        for (int i = 0; i < 96; i++) { vec4 w = uK[i]; g -= w.z * sin(dot(w.xy, x) - uO[i] * uT + w.w) * w.xy; } // the slope of sum w.z cos(k.x - wt + phase)
-        gl_FragColor = vec4(g, 0., 1.); }` }));
-  const target = renderer.getRenderTarget();
-  for (let i = 0; i < d; i++) { q.material.uniforms.uT.value = T * i / d; renderer.setRenderTarget(rt, i); q.render(renderer); }
-  renderer.setRenderTarget(target); q.material.dispose(); q.dispose();
-  const gl = renderer.getContext(); renderer.state.bindTexture(gl.TEXTURE_3D, renderer.properties.get(rt.texture).__webglTexture); gl.generateMipmap(gl.TEXTURE_3D); // far water melts to calm
-  if (filmU.value) filmU.value.dispose?.(); filmU.value = rt.texture; FILM.rt = rt; FILM.ms = performance.now() - t0;
-}
-bakeFilm();
-// The pools' surface, one source for the picture and the light: ten gentle trains (poolField) plus a fine random ripple layer (the film below)
-// plus the simulation's real ripples (water.js). The water's normal and each sheet's light picture (traced forward through that same surface, water.js) both read it.
+// The pools' light: what the tiles and the water share to look up the light picture each sheet traces forward through the simulation's
+// ripples (water.js). An undisturbed pool is still: its picture is flat.
 const causticsGLSL = `
-  void poolWave(vec2 position, vec2 direction, float frequency, float steepness, float offset, inout vec2 slope) {
-    float phase = frequency * dot(direction, position) - uTime * sqrt(9.81 * frequency) * ${FILM.clock} + offset; // the film's clock: on two clocks the long waves shove the fine ones about
-    #ifdef POOL_VERTEX
-    float filtered = 1.; // the light's grid: no screen footprint
-    #else
-    vec2 footprint = vec2(dFdx(phase), dFdy(phase)); float filtered = exp(-.125 * dot(footprint, footprint));
-    #endif
-    float amplitude = .45 * steepness / frequency * filtered * (.55 + .45 * sin(uTime * (.11 + .04 * offset) + offset * 3.)); // each swells and fades on its own slow clock
-    slope += direction * (frequency * amplitude * cos(phase));
-  }
-  vec2 poolField(vec2 position) {
-    vec2 slope = vec2(0.);
-    poolWave(position, vec2(0.940, 0.342), 3.6, 0.036, 0.4, slope); // ten gentle trains right round the compass, in rough opposing pairs (0.65 to 1.75 m): half standing,
-    poolWave(position, vec2(-0.921, -0.391), 3.9, 0.035, 5.3, slope); // half travelling, as in a closed basin; they beat into groups that swell and fade, so it never repeats visibly
-    poolWave(position, vec2(-0.423, 0.906), 4.6, 0.035, 2.1, slope);
-    poolWave(position, vec2(0.375, -0.927), 5.1, 0.034, 3.6, slope);
-    poolWave(position, vec2(0.469, 0.883), 5.9, 0.033, 1.2, slope);
-    poolWave(position, vec2(-0.375, -0.927), 6.4, 0.032, 4.4, slope);
-    poolWave(position, vec2(-0.940, 0.342), 7.3, 0.031, 0.9, slope);
-    poolWave(position, vec2(0.921, -0.391), 7.9, 0.03, 5.8, slope);
-    poolWave(position, vec2(0.035, 0.999), 8.8, 0.029, 2.9, slope);
-    poolWave(position, vec2(0.017, -1.000), 9.6, 0.028, 3.3, slope);
-    return slope * ${FILM.IDLE.toFixed(2)};
-  }
   vec3 causticPath(vec3 position) { // -> the surface point whose undisturbed light ray reaches this point under water (the light picture's coordinates), and the ray's length
     float depth = max(0., ${WY} - position.y);
     vec3 lightRay = refract(-normalize(uCausDir), vec3(0., 1., 0.), .75);
     float travel = depth / max(.35, -lightRay.y);
     return vec3(position.xz - lightRay.xz * travel, travel);
   }
-  float causStrength() { return uCausDir.y < .999 ? sqrt(uCaus) : min(1., 2. * uCaus); } // sun: the whole traced light; a lamp pool's: up to all of it (straight down, the surface bends it two or three times less than the low sun's, so it is fainter already), and softer by a mip bias, its lamps being a wide source; 0 while the plan is drawn
+  float causStrength() { return uCausDir.y < .999 ? sqrt(uCaus) : min(1., 4. * uCaus); } // sun: the whole traced light; a lamp pool's: up to all of it (straight down, the surface bends it two or three times less than the low sun's, so it is fainter already); caus .25 (the gallery) takes it all; 0 while the plan is drawn
 `;
-const rippleGLSL = `
-  uniform highp sampler3D tFilm;
-  vec3 filmAt(vec2 position) { return vec3(mat2(.857, .515, -.515, .857) * position / ${(FILM.L * FILM.lay).toFixed(2)}, uTime / ${FILM.T.toFixed(1)}); } // off the pools' axes, laid at FILM.lay of its baked size
-  vec2 ripple(vec2 film) { return ${(FILM.RIPPLE * FILM.IDLE).toFixed(3)} * (film * mat2(.857, .515, -.515, .857)); } // the film's slope (rms 1) turned back onto the world's axes, times the ripple strength
-`; // the ripple layer, for the water's normal and its light (not the tiles: they are at 16 texture units)
 const glow = S({ color: 0, emissive: 0xffedc0, emissiveIntensity: 14 }); // frosted windows and light wells
 const seaMat = S({ color: 0x0f4652, roughness: .05, normalMap: wn0, normalScale: new THREE.Vector2(.5, .5) });
 seaMat.onBeforeCompile = envCompile; seaMat.userData.envU = envBoxU(); // no box (the open sea): the plain lookup, but the same program as P()'s water
@@ -318,7 +258,7 @@ function tileFX(m, z) {
       .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
         if (vW.y < ${WY}) { // light focused by the surface (traced forward through it, water.js), from the pool's light picture at the surface point it comes through
           vec3 path = causticPath(vW);
-          float c = (texture2D(uLight, (path.xy - uPond.xy) / (uPond.zw - uPond.xy), uCausDir.y > .999 ? .8 : 0.).r - 1.) * causStrength(); // lamp pools: fainter, and softer (a wider source); none while the plan is drawn
+          float c = (texture2D(uLight, (path.xy - uPond.xy) / (uPond.zw - uPond.xy)).r - 1.) * causStrength(); // none while the plan is drawn
           if (uCausDir.y < .999 && (uBaking == 0. || uCaus == 0.)) reflectedLight.directDiffuse -= 0.4845 * causSun; // the sun's own light reaches the floor at .5 in all (the art director's call: coloured tile between the lines, both references); other direct light as before. Not while the rooms' light is baked (the bounce off the floor stays as it was), but in the plan
           reflectedLight.directDiffuse *= (1. + c) * (uCausDir.y < .999 ? .97 * exp(-vec3(.42, .085, .06) * path.z) : vec3(1.)); // direct light only, so each light's own shadow cuts the net; sunlight also loses what the surface reflects and the water absorbs on its way down
           causShare = dot(reflectedLight.directDiffuse, vec3(.3, .6, .1)) / max(dot(reflectedLight.directDiffuse + reflectedLight.indirectDiffuse, vec3(.3, .6, .1)), 1e-6); }
@@ -352,4 +292,4 @@ function paintedBall(z, r, paint, o) {
 const beachBall = z => paintedBall(z, .25, (x, y, zc) => Math.abs(y) > .93 ? 0xf4f0e6 : [0xe8402e, 0xf4f0e6, 0xf6c22b, 0xf4f0e6, 0x2f7fd8, 0xf4f0e6][Math.floor((Math.atan2(zc, x) / Math.PI + 1) * 3) % 6], { roughness: .28 }); // six vinyl gores, white caps
 const wallMat = (z, color, o) => M(z, 'plaster', { color, ...o }); // painted plaster in any colour
 
-export { FT, FA, S, M, libMat, LIB, dirt, causticsGLSL, rippleGLSL, bakingU, filmU, FILM, bakeFilm, lampOn, lampOff, glow, seaMat, noCast, tileFX, poolMats, P, neon, voidMat, aisle, label, sign, wallMat, paintedBall, beachBall };
+export { FT, FA, S, M, libMat, LIB, dirt, causticsGLSL, bakingU, lampOn, lampOff, glow, seaMat, noCast, tileFX, poolMats, P, neon, voidMat, aisle, label, sign, wallMat, paintedBall, beachBall };

@@ -3,7 +3,7 @@ import { ponds, sheets, ripple, resetWater, uTest } from '../js/water.js';
 // The light pictures (water.js): the light traced forward through the surface, as the tiles read it (1 = flat water's light)
 export function waterOptics(dev) {
   const { THREE, renderer } = dev;
-  dev.hold = true; dev.reset(0.5, -17, 3.14159, -1.25); dev.step(30);
+  dev.hold = true; dev.reset(0.5, -17, 3.14159, -1.25); dev.step(30); // reset: every pool still
   const S = sheets.find(q => q.ponds.some(w => w.tileU.uCausDir.value.y < .999)), W = S.light.width, H = S.light.height, R = S.rect, previousTarget = renderer.getRenderTarget();
   const copy = new THREE.WebGLRenderTarget(W, H, { type: THREE.FloatType, depthBuffer: false }), quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({ uniforms: { t: { value: S.light.texture } }, depthTest: false,
     vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0., 1.); }', fragmentShader: 'uniform sampler2D t; varying vec2 vUv; void main() { gl_FragColor = vec4(textureLod(t, vUv, 0.).r, 0., 0., 1.); }' }));
@@ -13,20 +13,25 @@ export function waterOptics(dev) {
   const region = (pixels, x1, z1, x2, z2) => { const [i1, j1] = at(x1, z1), [i2, j2] = at(x2, z2), v = []; for (let j = j1; j < j2; j++) for (let i = i1; i < i2; i++) v.push(pixels[(j * W + i) * 4]); return v; };
   const stats = v => { let min = Infinity, max = -Infinity, sum = 0, sq = 0, nonfinite = 0; for (const x of v) { if (!Number.isFinite(x)) { nonfinite++; continue; } min = Math.min(min, x); max = Math.max(max, x); sum += x; sq += x * x; } const mean = sum / v.length; return { min, max, mean, rms: Math.sqrt(Math.max(0, sq / v.length - mean * mean)), nonfinite }; };
   const inner = p => region(p, R.x + 1.5, R.y + 1.5, R.z - 1.5, R.w - 1.5), diff = (a, b) => a.reduce((s, x, i) => s + Math.abs(x - b[i]), 0) / a.length;
-  const now = read(), all = stats(region(now, R.x, R.y, R.z, R.w)), mid = stats(inner(now));
-  dev.step(1); const next = read(); dev.step(29); const half = read();
+  const cx = (R.x + R.z) / 2, cz = (R.y + R.w) / 2, flat = p => inner(p).reduce((m, x) => Math.max(m, Math.abs(x - 1)), 0);
+  let traced = 0; const set = renderer.setRenderTarget.bind(renderer); renderer.setRenderTarget = (t, ...a) => { if (t === S.light) traced++; return set(t, ...a); }; // counts the light's passes
+  for (let i = 0; i < 30; i++) ripple(S, []); const stillTraces = traced, still = flat(read()), stillStir = S.stir;
+  ripple(S, [[cx, cz, .35]]); for (let i = 0; i < 29; i++) ripple(S, []); // a landing in the middle of the pool, half a second on
+  const now = read(), all = stats(region(now, R.x, R.y, R.z, R.w)), mid = stats(inner(now)); ripple(S, []); const next = read(); for (let i = 0; i < 29; i++) ripple(S, []); const half = read();
   const frameDelta = diff(inner(now), inner(next)), halfSecondDelta = diff(inner(now), inner(half));
-  const cx = (R.x + R.z) / 2, cz = (R.y + R.w) / 2, near = p => region(p, cx - .5, cz - .5, cx + .5, cz + .5); // the player's ripples: one landing in the middle of the pool, ten steps on, against still water
-  resetWater(); for (let i = 0; i < 10; i++) ripple(S, []); const calm = read();
-  resetWater(); ripple(S, [[cx, cz, .35]]); for (let i = 0; i < 9; i++) ripple(S, []); const struck = read(); resetWater(); copy.dispose(); quad.geometry.dispose(); quad.material.dispose();
+  for (let i = 0; i < 420; i++) ripple(S, []); const late = stats(inner(read())); // 8 s after the landing
+  let last = null, steps = 480; while (S.stir && steps < 3600) { for (let i = 0; i < 60; i++) ripple(S, []); steps += 60; if (S.stir) last = stats(inner(read())); }
+  renderer.setRenderTarget = set; const after = flat(read()); traced = 0; resetWater(); copy.dispose(); quad.geometry.dispose(); quad.material.dispose();
   const field = {
+    still: stillTraces === 0 && stillStir === 0 && still < 1e-3, // undisturbed: nothing traced, the picture flat
     bounded: all.nonfinite === 0 && all.min >= 0 && all.max <= 64, // never below none; a fold adds at most a few cells of 16
     balanced: Math.abs(mid.mean - 1) < .05, // light is conserved
-    visible: mid.rms > .15 && mid.max > 2.5 && mid.min < .5, // a net: bright lines, darker cells
-    smooth: frameDelta > 0 && frameDelta < .25 && halfSecondDelta > frameDelta * 3, // at 1.5 cm a texel a moving line changes a few texels a step (measured .15 against .84 over half a second)
-    disturbances: diff(near(calm), near(struck)) > .1
+    visible: mid.rms > .15 && mid.max > 2.5 && mid.min < .5, // bright lines, darker between
+    smooth: frameDelta > 0 && frameDelta < .25 && halfSecondDelta > frameDelta * 3, // a moving line changes a few texels a step
+    lasting: late.rms > .15 && late.max > 2.5, // 8 s on (the reflections still move), lines still clear: the gentle ripples' light is gained
+    settles: steps < 1500 && after < 1e-3 && (last?.rms ?? 1) < .01 // still again within 25 s, eased to flat before tracing stops (no pop)
   };
-  const samples = { all, mid, frameDelta, halfSecondDelta, ripples: diff(near(calm), near(struck)) };
+  const samples = { all, mid, frameDelta, halfSecondDelta, late, last, settledAfterSeconds: steps / 60, after };
   const liveTarget = new THREE.WebGLRenderTarget(1280, 720, { type: THREE.FloatType });
   const rows = [], strengths = ponds.map(pond => pond.tileU.uCaus.value);
   const grab = mode => {

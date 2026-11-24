@@ -4,7 +4,7 @@ import { renderer, scene, camera, V, zones, inR } from './core.js';
 import { seaMat, noCast, FT, FA, bakingU } from './mat.js';
 import { emitters, loose, rings, colliders, floorH, flats, warps, ends, side, across, carry, live, gap } from './build.js';
 import { setSky } from './sky.js';
-import { ponds, ripple } from './water.js';
+import { ponds } from './water.js';
 import { libBaked } from './level.js';
 import seen from './seen.js';
 
@@ -351,7 +351,6 @@ renderer.setRenderTarget(cubeRT);
 const compiled = (async () => renderer.compileAsync?.(scene, camera))(); // (a throw becomes a rejection) the GPU compiles them while the rest goes on
 renderer.setRenderTarget(null);
 for (const [o, v] of shown) o.visible = v; // collected synchronously above: restored before the await, while other modules run
-if (ponds.length) ripple(ponds[0].sheet, []); // and the wave step's program, by one step of still water (which stays still), not when a pool first comes into view
 // Openings: the stretches of a shared zone edge a body can walk straight through (free of solids from 0.8 m before the edge to
 // 0.8 m past it, no rise taller than a step), found once, while the GPU compiles the programs above. Between places the mood is a function of where you stand near one.
 const BAND = 2.5, openings = []; // BAND: metres either side of an opening over which the neighbour's share goes from 0 to a half

@@ -247,7 +247,7 @@ if (on('water')) { const f = run(base + '?dev&bare', `(async () => {
   check('at most one set of pool pictures (mirror, lens, deep) is rendered per main scene render', f.result?.maxCaptures === 3 && f.result.maxDepthCaptures <= 2 && !f.errors.length, JSON.stringify(f.result)); }
 
 if (on('water')) { const f = run(base + '?dev&bare', `(async () => (await import('/tools/water-optics.js')).waterOptics(dev))()`);
-  check('the light traced through the pool surface is bounded, balanced, a visible net, smoothly animated and shows the player ripples', f.result && Object.values(f.result.field).every(Boolean) && !f.errors.length, JSON.stringify(f.result || f));
+  check('the light traced through the pool surface is flat and untraced while still; after a landing bounded, balanced, visible lines, smoothly animated, still clear 8 s on, and eased flat before tracing stops', f.result && Object.values(f.result.field).every(Boolean) && !f.errors.length, JSON.stringify(f.result || f));
   check('all four pool palettes retain finite nonnegative water and visible caustic modulation', f.result?.rows.length === 4 && f.result.rows.every(row => row.waterPixels > 10000 && row.nonfinite === 0 && row.negative === 0 && row.meanLinearModulation > 1e-5) && !f.errors.length, JSON.stringify(f.result?.rows || f));
   check('water optics stays within sixteen active samplers without GL errors', f.result?.maxSamplers <= 16 && f.result.glError === 0 && !f.errors.length, JSON.stringify(f.result && { samplers: f.result.maxSamplers, glError: f.result.glError })); }
 

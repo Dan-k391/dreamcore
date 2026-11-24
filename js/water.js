@@ -4,7 +4,7 @@ import { Reflector } from 'three/addons/objects/Reflector.js';
 import { Refractor } from 'three/addons/objects/Refractor.js';
 import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
 import { renderer, scene, camera, uTime, V, quadVS, WY, zones, inR } from './core.js';
-import { causticsGLSL, rippleGLSL, filmU, FILM } from './mat.js';
+import { causticsGLSL } from './mat.js';
 import { colliders, pools, floorH, seeThrough } from './build.js';
 import { sky } from './sky.js';
 
@@ -217,6 +217,15 @@ const scissors = (users, c) => { // the pictures cut to what these pools' pixels
 };
 const proxyMat = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false, transparent: true, side: THREE.DoubleSide });
 const uTest = { value: 0 }; // ?dev measurement (dev.waterCheck): 1 the lens picture alone, 2 the mirror alone, both with the surface flat; 3 a mask
+const DAMP = .995; // what a wave keeps of its speed each step (here and in the CPU's copy): a splash's ripples move for some 15 s
+// Still water costs nothing: S.stir bounds how much the sheet still moves (the disturbances put in, dying away as its waves do). From 10 QUIET
+// down to QUIET the traced light eases to flat (gained, the last faint ripples still focus), and there the waves are zeroed, the light traced
+// once more (flat) and both left alone until the next disturbance: no pop either way.
+// The gain on the light's slope (see lightMat): uGain.x (14) for faint ripples (a wade's, a ring's), easing to 1 as the sheet's largest
+// disturbance, still dying away (S.amp), nears GAIN0: a fresh landing's ripples focus at this depth by themselves, and gained they would focus
+// far above the floor and spread again into broad bands.
+const GAIN0 = .1;
+const QUIET = 2e-3, fade = S => { const f = Math.min(1, Math.max(0, (S.stir - QUIET) / (9 * QUIET))); return f * f * (3 - 2 * f); };
 const DROPS = 8; // disturbances one step takes: the player's and the loose things'
 const RECTS = 4; // pools one sheet of water may join (sheets below)
 const simMat = new THREE.ShaderMaterial({ uniforms: { tSim: { value: null }, uPx: { value: null }, uDrop: { value: Array.from({ length: DROPS }, () => V(0, 0, 0)) }, uWet: { value: null } }, vertexShader: quadVS,
@@ -228,27 +237,37 @@ const simMat = new THREE.ShaderMaterial({ uniforms: { tSim: { value: null }, uPx
       if (!wet(vUv)) { float n = 0., c = 0.; if (wet(l)) { n += texture2D(tSim, l).r; c++; } if (wet(r)) { n += texture2D(tSim, r).r; c++; } if (wet(d)) { n += texture2D(tSim, d).r; c++; } if (wet(u)) { n += texture2D(tSim, u).r; c++; }
         gl_FragColor = vec4(c > 0. ? n / c : 0., 0., 0., 1.); return; } // dry ground in the sheet's box holds the height of the water beside it, so slopes read at a wall are as at the box's own edge
       float avg = (nb(l, s.r) + nb(r, s.r) + nb(d, s.r) + nb(u, s.r)) * .25;
-      s.g = (s.g + (avg - s.r) * 2.) * .993; s.r += s.g;
+      s.g = (s.g + (avg - s.r) * 2.) * ${DAMP}; s.r += s.g;
       for (int i = 0; i < ${DROPS}; i++) { vec2 d = (vUv - uDrop[i].xy) / uPx; s.r += uDrop[i].z * exp(-dot(d, d) / 18.); }
       gl_FragColor = s; }` });
 const simQuad = new FullScreenQuad(simMat);
-// A sheet's light picture: the light the surface lets through to whatever lies under it, traced forward through the surface the water draws
-// (poolField, the ripple film and the simulation, one source). Each step a grid over the sheet's pools (3 cm a cell in the sun, 6 cm under
-// lamps) is drawn into it: each vertex goes where its light ray lands after refracting at the surface's real slope there (marched through
+// A sheet's light picture: the light the surface lets through to whatever lies under it, traced forward through the simulation's ripples
+// (still water: not traced at all, the picture stays flat; see ripple). Each step a grid over the sheet's pools (S.lp a cell: 1.5 cm in the sun,
+// 2 cm under lamps) is drawn into it: each vertex goes where its light ray lands after refracting at the surface's slope there (marched through
 // the height map: the floor, a step's riser, a wall or a column), written at the surface point whose undisturbed ray reaches that landing
 // point (causticPath, as the tiles look it up), so flat water draws every vertex in place. A fragment gets the grid cell's area before over
-// after (flat water: exactly 1), added up where the light folds over itself; 3 cm a texel, half-float red, mipmapped, cleared to none.
-const lightMat = new THREE.ShaderMaterial({ uniforms: { tSim: { value: null }, tGround: { value: null }, tFilm: filmU, uPx: { value: null }, uPond: { value: null }, uCells: { value: new THREE.Vector2() }, uTexel: { value: 0 }, uCausDir: { value: null }, uFloor: { value: 0 }, uTime },
+// after (flat water: exactly 1), added up where the light folds over itself; S.lp a texel, 4 samples, half-float red, mipmapped, cleared to none.
+// The slope is the drawn one (a cubic B-spline over the 5 cm cells, so no facets) plus uLift - 1 (up to uGain.x - 1, see GAIN0) times that of the ripples longer than about 20 cm:
+// at a metre of depth a wade's gentle ripples barely focus, and their light would fade seconds before the reflections stop moving.
+const lightMat = new THREE.ShaderMaterial({ uniforms: { tSim: { value: null }, tGround: { value: null }, uGain: { value: new THREE.Vector2(14, .1) }, uLift: { value: 1 }, uFade: { value: 1 }, uPx: { value: null }, uPond: { value: null }, uCells: { value: new THREE.Vector2() }, uTexel: { value: 0 }, uCausDir: { value: null }, uFloor: { value: 0 } },
   blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.OneFactor, blendDst: THREE.OneFactor, depthTest: false, depthWrite: false, side: THREE.DoubleSide, // folds turn cells over
   vertexShader: `#define POOL_VERTEX
-    uniform sampler2D tSim, tGround; uniform vec2 uPx, uCells; uniform vec4 uPond; uniform float uTime, uCaus, uFloor; uniform vec3 uCausDir; varying vec2 vS;
-    ${causticsGLSL}${rippleGLSL}
+    uniform sampler2D tSim, tGround; uniform vec2 uPx, uCells, uGain; uniform vec4 uPond; uniform float uCaus, uFloor, uFade, uLift; uniform vec3 uCausDir; varying vec2 vS;
+    ${causticsGLSL}
     vec2 cell(vec3 p) { return (p.xz - uPond.xy) / (uPond.zw - uPond.xy) * uCells; } // in the height map's 5 cm cells
+    vec2 slope(vec2 t, float k, float m) { // -grad of the height as a cubic B-spline over 4 x 4 knots k cells apart (t: in knots; m: knots a metre): smooth slope and curvature, so the light has no 5 cm facets
+      vec2 f = fract(t), e = 1. - f, n = vec2(textureSize(tSim, 0)), q = floor(t) - 1.;
+      vec4 wx = vec4(e.x * e.x * e.x, 3. * f.x * f.x * f.x - 6. * f.x * f.x + 4., -3. * f.x * f.x * f.x + 3. * f.x * f.x + 3. * f.x + 1., f.x * f.x * f.x) / 6., wz = vec4(e.y * e.y * e.y, 3. * f.y * f.y * f.y - 6. * f.y * f.y + 4., -3. * f.y * f.y * f.y + 3. * f.y * f.y + 3. * f.y + 1., f.y * f.y * f.y) / 6.;
+      vec4 dx = vec4(-e.x * e.x, 3. * f.x * f.x - 4. * f.x, -3. * f.x * f.x + 2. * f.x + 1., f.x * f.x) * .5, dz = vec4(-e.y * e.y, 3. * f.y * f.y - 4. * f.y, -3. * f.y * f.y + 2. * f.y + 1., f.y * f.y) * .5;
+      vec2 g = vec2(0.);
+      for (int b = 0; b < 4; b++) for (int a = 0; a < 4; a++) { float h = textureLod(tSim, ((q + vec2(a, b)) * k + k * .5) / n, 0.).r; g -= vec2(dx[a] * wz[b], wx[a] * dz[b]) * h; } // k = 2: between four cells, their mean
+      return g * m;
+    }
     float below(vec3 p) { return p.y - texelFetch(tGround, ivec2(clamp(cell(p), vec2(0.), uCells - 1.)), 0).r; } // > 0: still in the water
     void main() {
-      vec2 s = position.xy + uPond.xy, u = position.xy / (uPond.zw - uPond.xy); vS = position.xy; // local: world coordinates lose the derivatives' precision far out (the baths)
-      float hx = textureLod(tSim, u - vec2(uPx.x, 0.), 0.).r - textureLod(tSim, u + vec2(uPx.x, 0.), 0.).r, hz = textureLod(tSim, u - vec2(0., uPx.y), 0.).r - textureLod(tSim, u + vec2(0., uPx.y), 0.).r;
-      vec2 g = vec2(hx, hz) * 10. - poolField(s) - ripple(textureLod(tFilm, filmAt(s), 0.).rg); // the water's normal, as it is drawn
+      vec2 s = position.xy + uPond.xy; vS = position.xy; // local: world coordinates lose the derivatives' precision far out (the baths)
+      vec2 g = slope(position.xy * 20. - .5, 1., 20.), G = slope(position.xy * 10. - .5, 2., 10.); // the drawn slope; and the same over 10 cm knots, without the sim's finest (grid-scale) ripples
+      g += (uLift - 1.) * G; g *= uFade / sqrt(1. + dot(g, g) / (uGain.y * uGain.y)); // the light's: the longer ripples' slope times a gain (small ripples focus at this depth too), eased off toward uGain.y so a hard splash stays a net, not a tangle
       vec3 ray = refract(-normalize(uCausDir), normalize(vec3(g.x, 1., g.y)), .75), o = vec3(s.x, ${WY}, s.y), p = o;
       if (below(o + ray * .001) > 0.) { // a dry vertex (a wall or column stands there) stays where it is
         float lo = 0., hi = (${WY} - uFloor + .05) / -ray.y, dt = hi / 24.;
@@ -266,7 +285,7 @@ const lightMat = new THREE.ShaderMaterial({ uniforms: { tSim: { value: null }, t
 const lightCam = new THREE.Camera();
 function light(S) {
   if (!S.grid) { // a grid over each of the sheet's pools, in the sheet's own coordinates
-    const sun = S.ponds.some(w => w.tileU.uCausDir.value.y < .999), sp = sun ? .03 : .06, pos = [], idx = [];
+    const sp = S.lp, pos = [], idx = [];
     for (const [x1, z1, x2, z2] of S.rects) {
       const nx = Math.ceil((x2 - x1) / sp), nz = Math.ceil((z2 - z1) / sp), b = pos.length / 3;
       for (let j = 0; j <= nz; j++) for (let i = 0; i <= nx; i++) pos.push(x1 - S.rect.x + (x2 - x1) * i / nx, z1 - S.rect.y + (z2 - z1) * j / nz, 0);
@@ -276,7 +295,7 @@ function light(S) {
     const m = new THREE.Mesh(g, lightMat); m.frustumCulled = false; S.grid = new THREE.Scene(); S.grid.add(m);
   }
   Object.assign(lightMat.uniforms, { tSim: { value: S.sim[0].texture }, tGround: { value: S.ground }, uPx: { value: S.px }, uPond: { value: S.rect }, uCausDir: S.ponds[0].tileU.uCausDir, uFloor: { value: S.floor } });
-  lightMat.uniforms.uCells.value.set(S.ground.image.width, S.ground.image.height); lightMat.uniforms.uTexel.value = (S.rect.z - S.rect.x) * (S.rect.w - S.rect.y) / (S.light.width * S.light.height);
+  lightMat.uniforms.uFade.value = fade(S); lightMat.uniforms.uLift.value = Math.min(lightMat.uniforms.uGain.value.x, Math.max(1, GAIN0 / Math.max(S.amp, 1e-9))); lightMat.uniforms.uCells.value.set(S.ground.image.width, S.ground.image.height); lightMat.uniforms.uTexel.value = (S.rect.z - S.rect.x) * (S.rect.w - S.rect.y) / (S.light.width * S.light.height);
   const t = renderer.getRenderTarget(), c = renderer.getClearColor(new THREE.Color()), a = renderer.getClearAlpha(), ac = renderer.autoClear;
   renderer.setClearColor(0, 0); renderer.setRenderTarget(S.light); renderer.clear(); renderer.autoClear = false; renderer.render(S.grid, lightCam);
   renderer.autoClear = ac; renderer.setClearColor(c, a); renderer.setRenderTarget(t);
@@ -284,7 +303,7 @@ function light(S) {
 const waterVS = 'varying vec3 vW; void main() { vec4 w = modelMatrix * vec4(position, 1.); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }';
 const waterFS = `uniform sampler2D tMirror, tMirrorZ, tUnder, tUnderZ, tDeep, tDeepZ, tPlan, tGround, tSim, tLight;
     uniform mat4 projectionMatrix, uLens, uDeep; uniform vec4 uDeepW, uLensCut, uMirrorW; uniform vec4 uPond; uniform vec2 uPx; uniform vec3 uScatter, uCausDir; uniform float uFloor, uTime, uMain, uCaus, uTest; uniform vec4 uLook; varying vec3 vW;
-    ${causticsGLSL}${rippleGLSL}
+    ${causticsGLSL}
     vec4 clip(vec3 p) { return projectionMatrix * viewMatrix * vec4(p, 1.); } // .w is the distance from the camera
     vec2 wide(vec4 c) { return c.xy / c.w * ${(.5 / OVER).toFixed(5)} + .5; } // a clip position's place in the two wider pictures
     ${seenGLSL}
@@ -332,8 +351,7 @@ const waterFS = `uniform sampler2D tMirror, tMirrorZ, tUnder, tUnderZ, tDeep, tD
       float body = smoothstep(0., .1, gap); // 0 at the shore, 1 in open water
       vec2 s = (vW.xz - uPond.xy) / (uPond.zw - uPond.xy);
       float hx = texture2D(tSim, s - vec2(uPx.x, 0.)).r - texture2D(tSim, s + vec2(uPx.x, 0.)).r, hz = texture2D(tSim, s - vec2(0., uPx.y)).r - texture2D(tSim, s + vec2(0., uPx.y)).r;
-      vec2 calm = -poolField(vW.xz) - ${FILM.SHOWN} * ripple(texture(tFilm, filmAt(vW.xz)).rg); // the gentle trains and the fine ripples (the light picture is traced through these at full strength)
-      vec3 n = normalize(vec3((hx * 10. + calm.x) * body * uLook.z, 1., (hz * 10. + calm.y) * body * uLook.z)), V = normalize(cameraPosition - vW);
+      vec3 n = normalize(vec3(hx * 10. * body * uLook.z, 1., hz * 10. * body * uLook.z)), V = normalize(cameraPosition - vW);
       if (uTest > 0.) n = vec3(0., 1., 0.); // ?dev measurement: flat
       vec3 R = reflect(-V, n); R.y = -max(R.y, .03); // mirrored: the mirror picture shows the room upside-down below the surface
       vec2 ru = reflectionUV(R, here), o = vec2(.0007, 0.); // four taps: a real surface is never a perfect mirror
@@ -368,7 +386,7 @@ const waterFS = `uniform sampler2D tMirror, tMirrorZ, tUnder, tUnderZ, tDeep, tD
           lo = ti; }
       }
       vec4 plan4 = texture2D(tPlan, plan(hit.xz)); vec3 still = plan4.rgb * uLook.w; // the plan is a still, so it gets the same moving light the tiles give the live picture: drifting pattern plus the real ripples
-      vec3 hp = causticPath(hit); float cz = texture2D(tLight, (hp.xy - uPond.xy) / (uPond.zw - uPond.xy), uCausDir.y > .999 ? .8 : 0.).r - 1.; // as the tiles have it
+      vec3 hp = causticPath(hit); float cz = texture2D(tLight, (hp.xy - uPond.xy) / (uPond.zw - uPond.xy)).r - 1.; // as the tiles have it
       still *= 1. + plan4.a * cz * causStrength(); // on the directly lit share only (the plan's alpha), as on the tiles: none in shade
       if (uTest == 1.) { gl_FragColor = vec4(mix(texture2D(tUnder, here).rgb, mix(mix(still, dc, dl), eye, live), body), 1.); return; } // ?dev: the lens picture alone
       if (uTest == 2.) { gl_FragColor = vec4(texture2D(tMirror, ru).rgb, 1.); return; } // ?dev: the mirror picture alone
@@ -413,16 +431,16 @@ const sheets = [...new Set(sheetOf)].map(id => {
     for (const [bx1, bz1, bx2, bz2] of boxes) if (bx2 - bx1 >= 2 * r && bz2 - bz1 >= 2 * r) { const cx = Math.min(bx2 - r, Math.max(bx1 + r, x)), cz = Math.min(bz2 - r, Math.max(bz1 + r, z)), e = (cx - x) ** 2 + (cz - z) ** 2; if (e < d) { d = e; o.x = cx; o.z = cz; } }
     return d;
   };
-  const lp = pools.some(p => p[1] >= z1 && p[3] <= z2 && p[0] >= x1 && p[2] <= x2 && zones[p[5]].caus >= .9) ? .015 : .03; // in the sun, 1.5 cm a texel: its lines are thinner than the grid's cells, and its mips average them
-  const light = new THREE.WebGLRenderTarget(Math.round((x2 - x1) / lp), Math.round((z2 - z1) / lp), { type: THREE.HalfFloatType, format: THREE.RedFormat, depthBuffer: false, generateMipmaps: true, minFilter: THREE.LinearMipmapLinearFilter, samples: lp < .03 ? 4 : 0 }); // in the sun 4 samples: a grid cell thinner than a texel (a line) counts by its coverage, not by hitting a texel centre or missing it
-  return { rects, rect, floor, sim, light, px, wet, planRT, ppm, ground, keep, ponds: [], twin: twin(x1, z1, x2, z2, wetAt) };
+  const lp = pools.some(p => p[1] >= z1 && p[3] <= z2 && p[0] >= x1 && p[2] <= x2 && zones[p[5]].caus >= .9) ? .015 : .02; // a texel, and a cell of the light's grid: 1.5 cm in the sun, 2 cm under the lamps (3 cm drew a ripple's line in stair steps)
+  const light = new THREE.WebGLRenderTarget(Math.round((x2 - x1) / lp), Math.round((z2 - z1) / lp), { type: THREE.HalfFloatType, format: THREE.RedFormat, depthBuffer: false, generateMipmaps: true, minFilter: THREE.LinearMipmapLinearFilter, samples: 4 }); // 4 samples: a grid cell thinner than a texel (a line) counts by its coverage, not by hitting a texel centre or missing it
+  return { rects, rect, floor, sim, light, lp, px, wet, planRT, ppm, ground, keep, ponds: [], twin: twin(x1, z1, x2, z2, wetAt) };
 });
 const ponds = pools.map(([x1, z1, x2, z2, floor, zid, seen, scatter]) => {
   const S = sheets.find(q => q.rects.some(r => r[0] === x1 && r[1] === z1 && r[2] === x2 && r[3] === z2)), { sim, px, planRT } = S;
   const g = new THREE.PlaneGeometry(x2 - x1, z2 - z1), rect = new THREE.Vector4(x1, z1, x2, z2);
   const planCam = new THREE.OrthographicCamera((x1 - x2) / 2, (x2 - x1) / 2, (z2 - z1) / 2, (z1 - z2) / 2, .001, Math.max(1.6, WY - floor + .5)); // looking straight down from the surface, to below its deepest floor
   planCam.position.set((x1 + x2) / 2, WY, (z1 + z2) / 2); planCam.up.set(0, 0, -1); planCam.lookAt((x1 + x2) / 2, WY - 1, (z1 + z2) / 2);
-  const U = { uCaus: zones[zid].tileU.uCaus, uCausDir: zones[zid].tileU.uCausDir, tMirror: { value: mirrorRT.texture }, tPlan: { value: planRT.texture }, tGround: { value: S.ground }, tUnder: { value: under.texture }, tUnderZ: { value: under.depthTexture }, tDeep: { value: deep.texture }, tDeepZ: { value: deep.depthTexture }, uDeep, uDeepW, uLensCut, uLens: { value: lens.camera.projectionMatrix }, tFilm: filmU,
+  const U = { uCaus: zones[zid].tileU.uCaus, uCausDir: zones[zid].tileU.uCausDir, tMirror: { value: mirrorRT.texture }, tPlan: { value: planRT.texture }, tGround: { value: S.ground }, tUnder: { value: under.texture }, tUnderZ: { value: under.depthTexture }, tDeep: { value: deep.texture }, tDeepZ: { value: deep.depthTexture }, uDeep, uDeepW, uLensCut, uLens: { value: lens.camera.projectionMatrix },
               tMirrorZ: { value: mirrorRT.depthTexture }, uMirrorW,
               tSim: { value: sim[0].texture }, tLight: { value: S.light.texture }, uPond: { value: S.rect }, uPx: { value: px }, uFloor: { value: S.floor }, uScatter: { value: V(...scatter) }, uLook: { value: new THREE.Vector4(1, 1, 1, 1) }, uMain: { value: 0 }, uTest, uTime }; // uPond, uFloor: the sheet's box and deepest floor, which its field, height map and plan span
   const w = new THREE.Mesh(g, new THREE.ShaderMaterial({ uniforms: U, vertexShader: waterVS, fragmentShader: waterFS, transparent: true }));
@@ -485,7 +503,7 @@ const ponds = pools.map(([x1, z1, x2, z2, floor, zid, seen, scatter]) => {
 });
 // The CPU's coarse copy of a pool's waves, 20 cm cells, given the same disturbances: what floating things ride on, so the GPU
 // waves never have to be read back. Shallow-water form (heights in the cells, water velocity on the faces between them),
-// tuned to the GPU waves' speed (c = 2.12 m/s: one 5 cm cell * 60 Hz / sqrt 2) and damping (.993 a step); walls reflect, as there.
+// tuned to the GPU waves' speed (c = 2.12 m/s: one 5 cm cell * 60 Hz / sqrt 2) and damping (DAMP); walls reflect, as there.
 function twin(x1, z1, x2, z2, wetAt) { // over a sheet's box: faces next to dry cells stay shut, and a dry cell beside water holds its height (as on the GPU)
   const nx = Math.round((x2 - x1) / .2), nz = Math.round((z2 - z1) / .2), dx = (x2 - x1) / nx, dz = (z2 - z1) / nz;
   const h = new Float32Array(nx * nz), u = new Float32Array((nx + 1) * nz), v = new Float32Array(nx * (nz + 1)), G = 9.8, D = 2.12 ** 2 / 9.8, t = 1 / 60;
@@ -497,8 +515,8 @@ function twin(x1, z1, x2, z2, wetAt) { // over a sheet's box: faces next to dry 
       const fx = Math.min(nx - 1.001, Math.max(0, (x - x1) / dx - .5)), fz = Math.min(nz - 1.001, Math.max(0, (z - z1) / dz - .5)), i = fx | 0, j = fz | 0, a = fx - i, b = fz - j, q = p * .1414 / (dx * dz);
       h[i + j * nx] += q * (1 - a) * (1 - b); h[i + 1 + j * nx] += q * a * (1 - b); h[i + (j + 1) * nx] += q * (1 - a) * b; h[i + 1 + (j + 1) * nx] += q * a * b;
     }
-    for (let j = 0; j < nz; j++) for (let i = 1; i < nx; i++) { const k = i + j * (nx + 1), c = i + j * nx; u[k] = wet[c] && wet[c - 1] ? (u[k] - G * t * (h[c] - h[c - 1]) / dx) * .993 : 0; }
-    for (let j = 1; j < nz; j++) for (let i = 0; i < nx; i++) { const k = i + j * nx; v[k] = wet[k] && wet[k - nx] ? (v[k] - G * t * (h[k] - h[k - nx]) / dz) * .993 : 0; }
+    for (let j = 0; j < nz; j++) for (let i = 1; i < nx; i++) { const k = i + j * (nx + 1), c = i + j * nx; u[k] = wet[c] && wet[c - 1] ? (u[k] - G * t * (h[c] - h[c - 1]) / dx) * DAMP : 0; }
+    for (let j = 1; j < nz; j++) for (let i = 0; i < nx; i++) { const k = i + j * nx; v[k] = wet[k] && wet[k - nx] ? (v[k] - G * t * (h[k] - h[k - nx]) / dz) * DAMP : 0; }
     let s = 0; for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) { const k = i + j * nx; if (wet[k]) s += h[k] -= D * t * ((u[k + j + 1] - u[k + j]) / dx + (v[k + nx] - v[k]) / dz); }
     s /= nWet; for (let k = 0; k < h.length; k++) h[k] = wet[k] ? h[k] - s : 0; // the drops add water and the closed sides keep it: hold the mean level at the still surface, as the drawn water's is
     for (const [k, ...n] of shore) { let a = 0; for (const q of n) a += h[q]; h[k] = a / n.length; }
@@ -515,21 +533,32 @@ function twin(x1, z1, x2, z2, wetAt) { // over a sheet's box: faces next to dry 
 }
 // made at load, not on the frame a pool first shows (the baths seen first through their door: five targets and textures in one frame); `under` by fit(), from the first frame on
 for (const r of [...sheets.flatMap(S => S.sim), mirrorRT]) renderer.initRenderTarget(r);
-for (const S of sheets) light(S); // the light pictures, and their program, at load
+for (const S of sheets) { S.stir = S.amp = 0; light(S); } // the light pictures, flat, and their program, at load
+waveStep(sheets[0], []); // and the wave step's program, by one step of still water (which stays still), not when a pool is first disturbed
 for (const w of ponds) for (const u of [w.material.uniforms, w.tileU]) for (const k in u) if (u[k].value?.isTexture && !u[k].value.isRenderTargetTexture) renderer.initTexture(u[k].value);
-function ripple(S, drops) { // one 60Hz step of a sheet's waves, with up to DROPS disturbances [x, z, size] in world space
+function waveStep(S, drops) {
   simMat.uniforms.tSim.value = S.sim[0].texture; simMat.uniforms.uPx.value = S.px; simMat.uniforms.uWet.value = S.wet;
   simMat.uniforms.uDrop.value.forEach((d, i) => { const [x, z, p] = drops[i] || [0, 0, 0]; d.set((x - S.rect.x) / (S.rect.z - S.rect.x), (z - S.rect.y) / (S.rect.w - S.rect.y), p); });
   renderer.setRenderTarget(S.sim[1]); simQuad.render(renderer); renderer.setRenderTarget(null);
   S.sim.reverse(); for (const w of S.ponds) w.material.uniforms.tSim.value = S.sim[0].texture;
-  light(S);
+}
+function ripple(S, drops) { // one 60Hz step of a sheet's waves, with up to DROPS disturbances [x, z, size] in world space
+  const kick = drops.reduce((a, d) => a + Math.abs(d[2] || 0), 0);
+  if (S.stir || kick) {
+    S.stir = S.stir * DAMP + kick; S.amp = Math.max(S.amp * DAMP, ...drops.map(d => Math.abs(d[2] || 0)));
+    if (S.stir > QUIET) { waveStep(S, drops); light(S); } else { S.stir = S.amp = 0; calm(S); }
+  }
   if (S.twin.used) S.twin.step(drops.slice(0, DROPS)); // only a sheet with something floating on it (physics.js marks them) needs the copy
 }
 
 function resetWater() { // ?dev only (dev.reset): every pool flat and still, as at load, on the GPU and in the CPU's copy
+  for (const S of sheets) { calm(S); S.stir = S.amp = 0; S.twin.h.fill(0); S.twin.u.fill(0); S.twin.v.fill(0); }
+  epoch++; // and no visibility result from before counts
+}
+function calm(S) { // the sheet's waves zeroed and its light traced flat
   const t = renderer.getRenderTarget(), c = renderer.getClearColor(new THREE.Color()), a = renderer.getClearAlpha(); renderer.setClearColor(0, 0);
-  for (const S of sheets) { for (const r of S.sim) { renderer.setRenderTarget(r); renderer.clear(); } S.twin.h.fill(0); S.twin.u.fill(0); S.twin.v.fill(0); }
-  renderer.setRenderTarget(t); renderer.setClearColor(c, a); epoch++; // and no visibility result from before counts
+  for (const r of S.sim) { renderer.setRenderTarget(r); renderer.clear(); }
+  renderer.setRenderTarget(t); renderer.setClearColor(c, a); light(S);
 }
 
 export { ponds, sheets, ripple, resetWater, uTest, waterViews };
