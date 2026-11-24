@@ -216,19 +216,19 @@ function M(z, name, o = {}) {
   return m;
 }
 // The ripple film: the pools' fine wavelets, baked once at load on the GPU into a 3D texture that repeats in x, z and time (FILM.L metres,
-// FILM.T seconds) and holds the surface's slope (rms 1; FILM.RIPPLE scales it). 96 random waves (seeded): every direction, FILM.lo to FILM.hi
+// FILM.T seconds) and holds the surface's slope (rms 1; FILM.RIPPLE scales it; the picture draws FILM.SHOWN of it, the light all). 96 random waves (seeded): headings over a half circle, so the net drifts instead of boiling in place, FILM.lo to FILM.hi
 // long, Rayleigh amplitudes, each wave vector a whole number of waves across the tile and each frequency a whole number of cycles in the
-// loop, so it wraps without a seam; on a slow clock (0.65 sqrt(k) rad/s; real water runs about five times faster). Many random waves, not a few: no lattice.
-const FILM = { n: 160, d: 64, L: 4.8, T: 16, lo: .45, hi: 1.3, lay: .55, RIPPLE: .065 }, filmU = { value: null };
+// loop, so it wraps without a seam; at FILM.clock of real water's speed, the one clock the trains run on too. Many random waves, not a few: no lattice.
+const FILM = { n: 160, d: 96, L: 4.8, T: 16, lo: .45, hi: 1.3, lay: .55, RIPPLE: .065, SHOWN: .4, clock: .25 }, filmU = { value: null };
 function bakeFilm() {
   const { n, d, L, T, lo, hi } = FILM, K = [], O = [], seen = new Set(), t0 = performance.now(); let seed = 20261123;
   const rnd = () => (seed = seed * 16807 % 2147483647) / 2147483647;
   while (K.length < 96) {
-    const lam = lo * (hi / lo) ** rnd(), th = 2 * Math.PI * rnd(), qx = Math.round(L / lam * Math.cos(th)), qz = Math.round(L / lam * Math.sin(th)), key = qx + ',' + qz;
+    const lam = lo * (hi / lo) ** rnd(), th = .6 + Math.PI * (rnd() - .5), qx = Math.round(L / lam * Math.cos(th)), qz = Math.round(L / lam * Math.sin(th)), key = qx + ',' + qz;
     if (seen.has(key) || !(qx || qz)) continue; seen.add(key);
     const kx = 2 * Math.PI * qx / L, kz = 2 * Math.PI * qz / L, k = Math.hypot(kx, kz);
     K.push(new THREE.Vector4(kx, kz, Math.sqrt(-Math.log(1 - rnd())) / k, 2 * Math.PI * rnd())); // equal slope per wave on average
-    O.push(2 * Math.PI / T * Math.max(1, Math.round(T * .65 * Math.sqrt(k) / (2 * Math.PI))));
+    O.push(2 * Math.PI / T * Math.max(1, Math.round(T * FILM.clock * Math.sqrt(9.81 * k / FILM.lay) / (2 * Math.PI))));
   }
   const g = 1 / Math.sqrt(K.reduce((a, w) => a + (w.z * Math.hypot(w.x, w.y)) ** 2 / 2, 0)); K.forEach(w => w.z *= g); // slope rms 1
   const rt = new THREE.WebGL3DRenderTarget(n, n, d, { depthBuffer: false });
@@ -250,13 +250,13 @@ bakeFilm();
 // plus the simulation's real ripples (water.js). The water's normal and each sheet's light picture (traced forward through that same surface, water.js) both read it.
 const causticsGLSL = `
   void poolWave(vec2 position, vec2 direction, float frequency, float steepness, float offset, inout vec2 slope) {
-    float phase = frequency * dot(direction, position) - uTime * sqrt(9.81 * frequency) * .8 + offset; // near real water's timing: calm is small, not slow
+    float phase = frequency * dot(direction, position) - uTime * sqrt(9.81 * frequency) * ${FILM.clock} + offset; // the film's clock: on two clocks the long waves shove the fine ones about
     #ifdef POOL_VERTEX
     float filtered = 1.; // the light's grid: no screen footprint
     #else
     vec2 footprint = vec2(dFdx(phase), dFdy(phase)); float filtered = exp(-.125 * dot(footprint, footprint));
     #endif
-    float amplitude = .85 * steepness / frequency * filtered * (.55 + .45 * sin(uTime * (.11 + .04 * offset) + offset * 3.)); // each swells and fades on its own slow clock
+    float amplitude = .45 * steepness / frequency * filtered * (.55 + .45 * sin(uTime * (.11 + .04 * offset) + offset * 3.)); // each swells and fades on its own slow clock
     slope += direction * (frequency * amplitude * cos(phase));
   }
   vec2 poolField(vec2 position) {

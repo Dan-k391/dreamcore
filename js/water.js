@@ -4,7 +4,7 @@ import { Reflector } from 'three/addons/objects/Reflector.js';
 import { Refractor } from 'three/addons/objects/Refractor.js';
 import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
 import { renderer, scene, camera, uTime, V, quadVS, WY, zones, inR } from './core.js';
-import { causticsGLSL, rippleGLSL, filmU } from './mat.js';
+import { causticsGLSL, rippleGLSL, filmU, FILM } from './mat.js';
 import { colliders, pools, floorH, seeThrough } from './build.js';
 import { sky } from './sky.js';
 
@@ -332,7 +332,7 @@ const waterFS = `uniform sampler2D tMirror, tMirrorZ, tUnder, tUnderZ, tDeep, tD
       float body = smoothstep(0., .1, gap); // 0 at the shore, 1 in open water
       vec2 s = (vW.xz - uPond.xy) / (uPond.zw - uPond.xy);
       float hx = texture2D(tSim, s - vec2(uPx.x, 0.)).r - texture2D(tSim, s + vec2(uPx.x, 0.)).r, hz = texture2D(tSim, s - vec2(0., uPx.y)).r - texture2D(tSim, s + vec2(0., uPx.y)).r;
-      vec2 calm = -poolField(vW.xz) - ripple(texture(tFilm, filmAt(vW.xz)).rg); // the gentle trains and the fine ripples: the surface the light picture is traced through
+      vec2 calm = -poolField(vW.xz) - ${FILM.SHOWN} * ripple(texture(tFilm, filmAt(vW.xz)).rg); // the gentle trains and the fine ripples (the light picture is traced through these at full strength)
       vec3 n = normalize(vec3((hx * 10. + calm.x) * body * uLook.z, 1., (hz * 10. + calm.y) * body * uLook.z)), V = normalize(cameraPosition - vW);
       if (uTest > 0.) n = vec3(0., 1., 0.); // ?dev measurement: flat
       vec3 R = reflect(-V, n); R.y = -max(R.y, .03); // mirrored: the mirror picture shows the room upside-down below the surface
