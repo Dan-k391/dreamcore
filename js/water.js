@@ -462,8 +462,12 @@ const ponds = pools.map(([x1, z1, x2, z2, floor, zid, seen, scatter]) => {
     // Three skips a plane's captures from its back side. There each pool captures for itself just before it draws rather
     // than trust a capture made for another (also covers noclip and near-coplanar diagnostic views).
     const reuse = waterViews.reuse && c.matrixWorld.elements[13] > WY + .001;
-    if ((reuse && captured) || hidden(w, c)) return;
+    if (reuse && captured) return;
     frustum.setFromProjectionMatrix(M4.multiplyMatrices(c.projectionMatrix, c.matrixWorldInverse));
+    // a pool judged hidden skips the pair only if no other pool in view makes it this frame: drawn first (the pool hall is, before its channel's pools), a stray pixel
+    // of it (its occlusion result is up to 4 frames old, and from another heading when the whole proxy was on screen) would sample last frame's pictures, while the
+    // pair is made anyway, after it. Under GPU load the results arrive later, and tools/pool-skip.mjs once saw that pixel (pC|pN spin, the pool hall drawn hidden).
+    if (hidden(w, c) && !(reuse && ponds.some(q => q !== w && q.visible && frustum.intersectsObject(q) && !hidden(q, c)))) return;
     fit(); scissors(reuse ? ponds.filter(q => q.visible && frustum.intersectsObject(q)) : [w], c); // a pool judged hidden still counts: the pair is made anyway
     wideCam.copy(c); wideCam.projectionMatrix.elements[0] /= OVER; wideCam.projectionMatrix.elements[5] /= OVER; wideCam.projectionMatrixInverse.copy(wideCam.projectionMatrix).invert();
     const on = ponds.map(q => q.visible); // every pool is at the same level, so none belongs in another's mirror or underwater picture
