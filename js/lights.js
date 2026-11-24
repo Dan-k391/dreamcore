@@ -1,7 +1,7 @@
 // The shared lamp pool, relighting as you move, and the ambient bakes.
 import * as THREE from 'three';
 import { renderer, scene, camera, V, zones, inR } from './core.js';
-import { seaMat, noCast, FT, FA } from './mat.js';
+import { seaMat, noCast, FT, FA, bakingU } from './mat.js';
 import { emitters, loose, rings, colliders, floorH, flats, warps, ends, side, across, carry, live, gap } from './build.js';
 import { setSky } from './sky.js';
 import { ponds, ripple } from './water.js';
@@ -385,12 +385,12 @@ bakeFixtures(); // before the zone bakes, which see the fixtures' light
 if (agJob) { const t0 = performance.now(), res = await agJob.done; performance.measure('load: ambient grids, waited', { start: t0 });
   agJob.ms = res.map(r => r.ms); agJob.patches = res.reduce((n, r) => n + r.grids.reduce((m, g) => m + g.patches, 0), 0); // for the probes: each worker's [rays and direct light, bounces and gather] ms
   for (const r of res) for (const g of r.grids) { const t = new THREE.DataTexture(g.out, AW, g.rows, THREE.RGBAFormat, THREE.HalfFloatType); renderer.copyTextureToTexture(t, fixRT.texture, null, new THREE.Vector2(0, fixH + g.y0)); t.dispose(); } } // the grids under the fixtures' maps
-bake({ probe: V(-200, 3, -12) }, [seaMat], 1);
+bake({ probe: V(-200, 3, -12) }, [seaMat], 1); bakingU.value = 1;
 for (let pass = 0; pass < 2; pass++) for (const z of Object.values(zones)) { // second pass picks up the first bounce, including through doorways
   if (z.mats.length) bake(z); // the dark passages have nothing to light
   if (pass && z.mats.length) for (const w of ponds) w.drawPlan(z); // each pool's plan, the part in this room
 }
-env0.dispose(); performance.mark('load: zones baked'); // every material has its bake's now
+bakingU.value = 0; env0.dispose(); performance.mark('load: zones baked'); // every material has its bake's now
 const zone0 = Object.values(zones).find(z => inR(camera.position.x, camera.position.z, ...z.box)) || zones.bA;
 setSky(zone0.sky || 'day'); relight(camera.position, zone0, 1); relight(camera.position, zone0, 1); // the zone you start in
 

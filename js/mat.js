@@ -297,20 +297,24 @@ const glow = S({ color: 0, emissive: 0xffedc0, emissiveIntensity: 14 }); // fros
 const seaMat = S({ color: 0x0f4652, roughness: .05, normalMap: wn0, normalScale: new THREE.Vector2(.5, .5) });
 seaMat.onBeforeCompile = envCompile; seaMat.userData.envU = envBoxU(); // no box (the open sea): the plain lookup, but the same program as P()'s water
 const noCast = new Set([glow, seaMat]); // materials whose meshes cast no shadow (library emitters add themselves)
+const bakingU = { value: 0 }; // 1 while lights.js bakes the rooms' light
 const lampOn = M(null, 'troffer'), lampOff = libMat('trofferOff', { roughness: .35 }); // the ceiling panel lit, and dead (bA bakes its light)
 
 // Tile shader extras: caustics under water, rippling reflected light on walls above it, a coloured tile band below a
 // given height (box-projected reflections come with the library shader underneath).
 function tileFX(m, z) {
-  const u = z.tileU = { uTime, uBand: { value: z.band }, uBandCol: { value: new THREE.Color(...z.bandCol) }, uShimmer: { value: z.shimmer },
+  const u = z.tileU = { uTime, uBaking: bakingU, uBand: { value: z.band }, uBandCol: { value: new THREE.Color(...z.bandCol) }, uShimmer: { value: z.shimmer },
               uLight: { value: null }, uPond: { value: new THREE.Vector4(0, 0, 1, 1) }, // this zone's pool's light picture, filled in when the pool is made
               uCaus: { value: z.caus || .45 }, uCausDir: { value: z.caus >= .9 ? sunDir : V(0, 1, 0) } }; // caustic strength: full only where the sun reaches
   const lib = m.onBeforeCompile; // a library material underneath: its shader first
   m.onBeforeCompile = function (s, r) {
     lib.call(this, s, r);
+    const LB = THREE.ShaderChunk.lights_fragment_begin, DM = '#if ( NUM_DIR_LIGHTS > 0 ) && defined( RE_Direct )', i = LB.indexOf(DM), j = LB.indexOf('#endif', LB.indexOf('#pragma unroll_loop_end', i)) + 6;
+    if (i < 0 || !s.fragmentShader.includes('#include <lights_fragment_begin>')) throw new Error("pool tiles: three's lights_fragment_begin changed"); // the sun's own share of direct light, taken round its loop
+    s.fragmentShader = s.fragmentShader.replace('#include <lights_fragment_begin>', LB.slice(0, i) + 'vec3 causSun0 = reflectedLight.directDiffuse;\n' + LB.slice(i, j) + '\ncausSun = reflectedLight.directDiffuse - causSun0;\n' + LB.slice(j));
     Object.assign(s.uniforms, u);
     s.vertexShader = 'varying vec3 vW;\n' + s.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\nvW = (modelMatrix * vec4(transformed, 1.)).xyz;');
-    s.fragmentShader = `varying vec3 vW; float causShare = 0.; uniform float uTime, uBand, uShimmer, uCaus; uniform vec3 uBandCol, uCausDir; uniform sampler2D uLight; uniform vec4 uPond;
+    s.fragmentShader = `varying vec3 vW; float causShare = 0.; vec3 causSun = vec3(0.); uniform float uTime, uBand, uShimmer, uCaus, uBaking; uniform vec3 uBandCol, uCausDir; uniform sampler2D uLight; uniform vec4 uPond;
       ${causticsGLSL}
     ` + s.fragmentShader
       .replace('#include <color_fragment>', `#include <color_fragment>
@@ -322,6 +326,7 @@ function tileFX(m, z) {
         if (vW.y < ${WY}) { // light focused by the surface: the film plus the real ripples, from the pool's light picture at the surface point it comes through
           vec3 path = causticPath(vW);
           float c = causMap(texture2D(uLight, (path.xy - uPond.xy) / (uPond.zw - uPond.xy), uCausDir.y > .999 ? .8 : 0.).r, path.z) * causStrength(); // lamp pools: fainter, and softer (a wider source); none while the plan is drawn
+          if (uCausDir.y < .999 && (uBaking == 0. || uCaus == 0.)) reflectedLight.directDiffuse -= 0.4845 * causSun; // the sun's own light reaches the floor at .5 in all (the art director's call: coloured tile between the lines, both references); other direct light as before. Not while the rooms' light is baked (the bounce off the floor stays as it was), but in the plan
           reflectedLight.directDiffuse *= (1. + c) * (uCausDir.y < .999 ? .97 * exp(-vec3(.42, .085, .06) * path.z) : vec3(1.)); // direct light only, so each light's own shadow cuts the net; sunlight also loses what the surface reflects and the water absorbs on its way down
           causShare = dot(reflectedLight.directDiffuse, vec3(.3, .6, .1)) / max(dot(reflectedLight.directDiffuse + reflectedLight.indirectDiffuse, vec3(.3, .6, .1)), 1e-6); }
         else if (uShimmer > 0.) reflectedLight.indirectDiffuse *= 1. + uShimmer * causMap(texture2D(uLight, clamp((vW.xz - uPond.xy) / (uPond.zw - uPond.xy), 0., 1.), 2.).r, .65) * smoothstep(.2, 1.2, vW.y - ${WY}) * exp((${WY} - vW.y) * .3); // the nearest water's light, blurred`);
@@ -354,4 +359,4 @@ function paintedBall(z, r, paint, o) {
 const beachBall = z => paintedBall(z, .25, (x, y, zc) => Math.abs(y) > .93 ? 0xf4f0e6 : [0xe8402e, 0xf4f0e6, 0xf6c22b, 0xf4f0e6, 0x2f7fd8, 0xf4f0e6][Math.floor((Math.atan2(zc, x) / Math.PI + 1) * 3) % 6], { roughness: .28 }); // six vinyl gores, white caps
 const wallMat = (z, color, o) => M(z, 'plaster', { color, ...o }); // painted plaster in any colour
 
-export { FT, FA, S, M, libMat, LIB, dirt, causticsGLSL, filmGLSL, filmU, FILM, bakeFilm, lampOn, lampOff, glow, seaMat, noCast, tileFX, poolMats, P, neon, voidMat, aisle, label, sign, wallMat, paintedBall, beachBall };
+export { FT, FA, S, M, libMat, LIB, dirt, causticsGLSL, filmGLSL, bakingU, filmU, FILM, bakeFilm, lampOn, lampOff, glow, seaMat, noCast, tileFX, poolMats, P, neon, voidMat, aisle, label, sign, wallMat, paintedBall, beachBall };
